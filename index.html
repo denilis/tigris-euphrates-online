@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tigris & Euphrates — Online</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --sand:#c4a76a;--river:#1a5d99;--dark:#0d0a06;--gold:#f0b429;
+  --red:#8b1a1a;--blue:#1a3a8a;--green:#145228;--black:#1a1a1a;
+  --p1:#fb923c;--p2:#f87171;--p3:#60a5fa;--p4:#4ade80;
+}
+body{background:var(--dark);color:#f5e6c8;font-family:Georgia,serif;user-select:none;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* LOBBY */
+#lobby{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,#1a1000,#0d0806);display:flex;align-items:center;justify-content:center;z-index:100}
+.lobby-inner{text-align:center;max-width:600px}
+.lobby-title{font-size:64px;color:var(--gold);letter-spacing:6px;line-height:1;text-shadow:0 0 60px rgba(240,180,41,.2)}
+.lobby-sub{font-size:16px;color:#8a6820;letter-spacing:5px;margin:8px 0 40px}
+.lobby-divider{display:flex;align-items:center;gap:12px;justify-content:center;margin:20px 0}
+.lobby-divider span{width:7px;height:7px;background:var(--gold);transform:rotate(45deg);display:inline-block}
+.lobby-divider hr{flex:1;border:none;border-top:1px solid #3a2808}
+.tile-preview{display:flex;gap:10px;justify-content:center;margin:30px 0}
+.tile-prev{width:70px;height:70px;border-radius:6px;overflow:hidden;border:2px solid rgba(255,255,255,.1);box-shadow:0 6px 20px rgba(0,0,0,.6)}
+.tile-prev img{width:100%;height:100%;object-fit:cover}
+.np-label{font-size:13px;color:#9a7040;margin-bottom:12px;letter-spacing:1px}
+.np-btns{display:flex;gap:12px;justify-content:center;margin-bottom:36px}
+.np-btn{width:58px;height:58px;border-radius:50%;cursor:pointer;background:transparent;border:2px solid #4a3010;color:#9a7a40;font-size:22px;font-weight:bold;font-family:Georgia,serif;transition:all .15s}
+.np-btn.active{background:#b8860b;border-color:var(--gold);color:#000}
+.start-btn{background:linear-gradient(135deg,#7a5800,var(--gold));border:none;color:#0d0806;font-size:16px;font-weight:bold;letter-spacing:2px;padding:14px 64px;border-radius:6px;cursor:pointer;font-family:Georgia,serif}
+
+/* HEADER */
+#header{background:#080500;border-bottom:2px solid #4a3010;padding:5px 10px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:10}
+.cur-badge{display:flex;align-items:center;gap:6px;border-radius:4px;padding:3px 9px;border:1px solid transparent}
+.cur-dot{width:10px;height:10px;border-radius:50%}
+.actions-count{font-size:11px;font-weight:bold}
+.bag-count{font-size:10px;color:#3a2808}
+.menu-btn{margin-left:auto;background:transparent;border:1px solid #3a2008;color:#6a4820;padding:2px 9px;border-radius:3px;cursor:pointer;font-size:10px;font-family:Georgia,serif}
+.mode-btn{background:#130900;border:1px solid #4a3010;color:#9a7040;padding:3px 9px;border-radius:3px;cursor:pointer;font-size:11px;font-family:Georgia,serif;transition:all .1s}
+.mode-btn.active-rm{background:#450a0a;border-color:#ef4444;color:#fca5a5}
+.mode-btn.active-sw{background:#0c1e3a;border-color:#3b82f6;color:#93c5fd}
+
+/* MAIN */
+#main{display:flex;flex:1;overflow:hidden;min-height:0}
+
+/* BOARD */
+#board-wrap{flex:1;overflow:auto;padding:8px;display:flex;align-items:flex-start}
+#board{display:inline-block;border:5px solid #3d2808;border-radius:4px;overflow:hidden;box-shadow:0 12px 48px rgba(0,0,0,.9);position:relative;flex-shrink:0}
+.board-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.85}
+.board-grid{position:relative;z-index:1}
+.board-row{display:flex}
+.cell{width:38px;height:38px;border:0.5px solid rgba(0,0,0,.18);box-sizing:border-box;display:flex;align-items:center;justify-content:center;position:relative;transition:filter .07s;cursor:default;overflow:hidden}
+.cell.river{background:rgba(26,93,153,.75)}
+.cell.land{background:rgba(196,167,106,.6)}
+.cell.clickable:hover{filter:brightness(1.5) saturate(1.3);cursor:pointer}
+.cell-tile{width:100%;height:100%;object-fit:cover;display:block}
+.cell-ldr{width:26px;height:26px;transform:rotate(45deg);display:flex;align-items:center;justify-content:center;border-width:2px;border-style:solid;box-shadow:0 2px 6px rgba(0,0,0,.7)}
+.cell-ldr span{transform:rotate(-45deg);font-size:8px;font-weight:bold}
+.cell-treasure{position:absolute;bottom:1px;right:2px;font-size:9px;color:#fbbf24;text-shadow:0 0 4px rgba(251,191,36,.9);line-height:1}
+.shedu-marker{width:14px;height:14px;border:1.5px dashed rgba(200,160,50,.35);border-radius:2px}
+
+/* SIDEBAR */
+#sidebar{width:210px;background:#0b0800;border-left:1px solid #201408;display:flex;flex-direction:column;flex-shrink:0}
+.cams{padding:8px;border-bottom:1px solid #201408}
+.cams-label{font-size:8px;color:#4a3010;letter-spacing:2px;margin-bottom:5px}
+.cam-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.cam{padding-top:75%;position:relative;background:#060403;border-radius:3px;overflow:hidden;border:2px solid transparent;transition:border-color .2s}
+.cam.active{border-color:var(--pc)}
+.cam-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.cam-num{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;font-family:Georgia,serif;box-shadow:0 0 10px rgba(0,0,0,.5)}
+.cam-name{font-size:9px;color:#4a3010}
+.cam-status{font-size:8px}
+.log-wrap{flex:1;overflow-y:auto;padding:7px}
+.log-label{font-size:8px;color:#4a3010;letter-spacing:2px;margin-bottom:4px}
+.log-entry{font-size:10px;line-height:1.5;margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid #160c02}
+.log-entry.fresh{color:#c8a87a}
+.log-entry.old{color:#3a2808}
+
+/* HAND */
+#hand{background:#0b0800;border-top:2px solid #4a3010;padding:6px 8px;flex-shrink:0}
+.hand-inner{display:flex;gap:5px;align-items:center;overflow-x:auto;padding-bottom:2px}
+.player-badge{flex-shrink:0;display:flex;flex-direction:column;align-items:center;background:rgba(255,255,255,.04);border-radius:4px;padding:4px 7px;min-width:52px;gap:2px;border:1px solid rgba(255,255,255,.07)}
+.player-dot{width:14px;height:14px;border-radius:50%}
+.player-name{font-size:9px;color:#c8a87a;white-space:nowrap}
+.player-acts{font-size:11px;font-weight:bold}
+.divider{width:1px;height:52px;background:#2a1a06;flex-shrink:0}
+.section-lbl{font-size:8px;color:#4a3010;writing-mode:vertical-rl;flex-shrink:0;letter-spacing:1px}
+
+/* TILE CARDS */
+.tile-card{width:46px;height:58px;border-radius:5px;cursor:pointer;flex-shrink:0;overflow:hidden;border:2px solid rgba(255,255,255,.1);box-shadow:0 3px 10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);transition:all .12s;display:flex;flex-direction:column;position:relative}
+.tile-card img{width:100%;flex:1;object-fit:cover;display:block}
+.tile-card-lbl{font-size:6px;color:rgba(255,255,255,.5);text-align:center;padding:2px 0;background:rgba(0,0,0,.4);flex-shrink:0}
+.tile-card.selected{transform:translateY(-10px) scale(1.07);border-color:#fff;box-shadow:0 0 16px rgba(255,255,255,.4)}
+.tile-card.swap-sel{transform:translateY(-4px);border-color:rgba(255,255,255,.6)}
+.tile-card.dimmed{opacity:.4}
+
+/* LEADER CARDS */
+.ldr-card{width:42px;height:56px;background:#130900;border-radius:5px;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:all .12s;position:relative;overflow:hidden}
+.ldr-card img{width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.2)}
+.ldr-card-lbl{font-size:7px;letter-spacing:.2px}
+.ldr-card.selected{transform:translateY(-8px) scale(1.07);border-color:#fff;box-shadow:0 0 14px rgba(255,255,255,.3)}
+.ldr-card.on-board{opacity:.35}
+
+/* CAT CARD */
+.cat-card{width:42px;height:56px;background:#1a0505;border:2px solid #5a0a0a;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex-shrink:0;cursor:pointer}
+.cat-x{color:rgba(239,68,68,.6);font-size:18px;font-weight:bold}
+.cat-lbl{font-size:7px;color:rgba(239,68,68,.5)}
+
+/* SWAP BAR */
+#swap-bar{display:none;background:#0c1428;border-bottom:1px solid #1e3a5f;padding:5px 10px;align-items:center;gap:8px;flex-shrink:0}
+#swap-bar.visible{display:flex}
+.swap-lbl{font-size:11px;color:#93c5fd}
+.swap-confirm{background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:11px;font-family:Georgia,serif}
+.swap-cancel{background:transparent;border:1px solid #4a3010;color:#6a5030;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;font-family:Georgia,serif}
+
+/* END TURN */
+.end-btn{flex-shrink:0;background:linear-gradient(135deg,#181e10,#22411a);border:1px solid #2a4020;color:#a8c898;padding:7px 14px;border-radius:3px;cursor:pointer;font-size:12px;font-family:Georgia,serif;white-space:nowrap;transition:all .15s;margin-left:auto}
+.end-btn.ready{background:linear-gradient(135deg,#14532d,#16a34a);border-color:#22c55e;color:#f0fdf4}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#100800}
+::-webkit-scrollbar-thumb{background:#3a2808;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="lobby-inner">
+    <div style="font-size:9px;color:#4a3010;letter-spacing:5px;margin-bottom:16px">НАСТОЛЬНАЯ ИГРА · REINER KNIZIA · 1997</div>
+    <div class="lobby-divider"><hr><span></span><hr></div>
+    <div class="lobby-title">TIGRIS</div>
+    <div style="font-size:18px;color:#8a6820;letter-spacing:6px;margin:5px 0">&amp; EUPHRATES</div>
+    <div class="lobby-divider"><hr><span></span><hr></div>
+    <div style="font-size:11px;color:#4a3010;letter-spacing:4px;margin:12px 0 30px">КУЛЬТУРА · КОНФЛИКТ · ЦИВИЛИЗАЦИЯ</div>
+
+    <div class="tile-preview">
+      <div class="tile-prev"><img src="assets/tiles/temple.jpg" alt="Храм"></div>
+      <div class="tile-prev"><img src="assets/tiles/farm.jpg" alt="Ферма"></div>
+      <div class="tile-prev"><img src="assets/tiles/market.jpg" alt="Рынок"></div>
+      <div class="tile-prev"><img src="assets/tiles/settlement.jpg" alt="Поселение"></div>
+    </div>
+
+    <div class="np-label">Количество игроков</div>
+    <div class="np-btns">
+      <button class="np-btn" onclick="setNP(2)">2</button>
+      <button class="np-btn active" onclick="setNP(3)">3</button>
+      <button class="np-btn" onclick="setNP(4)">4</button>
+    </div>
+    <button class="start-btn" onclick="startGame()">НАЧАТЬ ИГРУ</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div id="header" style="display:none">
+  <b style="color:var(--gold);font-size:13px;letter-spacing:3px">T &amp; E</b>
+  <div style="width:1px;height:18px;background:#3a2008"></div>
+  <div id="cur-badge" class="cur-badge">
+    <div id="cur-dot" class="cur-dot"></div>
+    <span id="cur-name" style="font-size:12px;font-weight:bold;color:#f0e8d0"></span>
+    <span id="cur-acts" class="actions-count"></span>
+  </div>
+  <span id="bag-info" class="bag-count"></span>
+  <div style="display:flex;gap:4px;margin-left:8px">
+    <button id="rm-btn" class="mode-btn" onclick="toggleMode('rm')">Убрать</button>
+    <button id="sw-btn" class="mode-btn" onclick="toggleMode('sw')">Обмен</button>
+  </div>
+  <button class="menu-btn" onclick="backToLobby()">← Меню</button>
+</div>
+
+<!-- SWAP BAR -->
+<div id="swap-bar">
+  <span class="swap-lbl" id="swap-lbl">Выберите тайлы для обмена:</span>
+  <button class="swap-confirm" onclick="doSwap()">Обменять</button>
+  <button class="swap-cancel" onclick="cancelMode()">Отмена</button>
+</div>
+
+<!-- MAIN -->
+<div id="main" style="display:none">
+  <div id="board-wrap">
+    <div id="board">
+      <div class="board-bg" style="background-image:url('assets/board/field.png')"></div>
+      <div class="board-grid" id="board-grid"></div>
+    </div>
+  </div>
+  <div id="sidebar">
+    <div class="cams">
+      <div class="cams-label">КАМЕРЫ · ВИДЕОЗВОНОК</div>
+      <div class="cam-grid" id="cam-grid"></div>
+    </div>
+    <div class="log-wrap">
+      <div class="log-label">ЖУРНАЛ</div>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HAND -->
+<div id="hand" style="display:none">
+  <div class="hand-inner" id="hand-inner"></div>
+</div>
+
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────
+const COLS=16,ROWS=11,CS=38;
+const RIVER=new Set("0,1 1,1 2,1 3,1 4,1 5,2 6,2 7,2 8,1 9,1 10,1 11,1 12,1 13,1 14,1 15,1 0,9 1,9 2,9 3,9 4,9 5,8 6,8 7,8 8,9 9,9 10,9 11,9 12,9 13,9 14,9 15,9".split(" "));
+const SHEDU=[[2,3],[6,3],[10,3],[14,3],[0,5],[4,6],[8,5],[12,6],[2,7],[13,7]];
+const SHEDU_S=new Set(SHEDU.map(([c,r])=>`${c},${r}`));
+
+const TILES={
+  TEMPLE:{img:'assets/tiles/temple.jpg',lbl:'Храм'},
+  FARM:{img:'assets/tiles/farm.jpg',lbl:'Ферма'},
+  MARKET:{img:'assets/tiles/market.jpg',lbl:'Рынок'},
+  SETTLEMENT:{img:'assets/tiles/settlement.jpg',lbl:'Посел.'}
+};
+
+const LDRS={
+  LION:{lbl:'Лев'},
+  BOW:{lbl:'Лук'},
+  POT:{lbl:'Кувшин'},
+  BULL:{lbl:'Бык'}
+};
+
+const PLAYERS=[
+  {name:'Игрок 1',c:'#fb923c',tc:'#000'},
+  {name:'Игрок 2',c:'#f87171',tc:'#fff'},
+  {name:'Игрок 3',c:'#60a5fa',tc:'#fff'},
+  {name:'Игрок 4',c:'#4ade80',tc:'#000'}
+];
+
+const TOKEN_COLORS=['blue','red','black','green'];
+const TOKEN_IMGS={
+  LION:{blue:'assets/tokens/lion_blue.jpg',red:'assets/tokens/lion_red.jpg',black:'assets/tokens/lion_black.jpg',green:'assets/tokens/lion_green.jpg'},
+  BOW: {blue:'assets/tokens/bow_blue.jpg', red:'assets/tokens/bow_red.jpg', black:'assets/tokens/bow_black.jpg', green:'assets/tokens/bow_green.jpg'},
+  POT: {blue:'assets/tokens/pot_blue.jpg', red:'assets/tokens/pot_red.jpg', black:'assets/tokens/pot_black.jpg', green:'assets/tokens/pot_green.jpg'},
+  BULL:{blue:'assets/tokens/bull_blue.jpg',red:'assets/tokens/bull_red.jpg',black:'assets/tokens/bull_black.jpg',green:'assets/tokens/bull_green.jpg'}
+};
+
+// ─── STATE ────────────────────────────────────────────────────
+let G=null, nP=3, sel=null, mode=null, swIdx=[];
+
+// ─── HELPERS ─────────────────────────────────────────────────
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function makeBag(){const t=[];[{t:'TEMPLE',n:22},{t:'FARM',n:14},{t:'MARKET',n:12},{t:'SETTLEMENT',n:12}].forEach(({t:tp,n})=>{for(let i=0;i<n;i++)t.push(tp);});return shuffle(t);}
+function initBoard(){const b={};SHEDU.forEach(([c,r])=>{b[`${c},${r}`]={t:'TEMPLE',tr:true,fx:true};});return b;}
+
+function setupGame(n){
+  let bag=makeBag();
+  const players=PLAYERS.slice(0,n).map((cfg,i)=>{
+    const hand=bag.splice(0,6);
+    return{...cfg,hand,ldrs:Object.keys(LDRS).map(k=>({k,ob:null})),cat:2,color:TOKEN_COLORS[i]};
+  });
+  return{players,bag,board:initBoard(),cur:0,acts:2,log:['Игра началась! Выберите тайл или лидера.']};
+}
+
+function addLog(msg){G.log.unshift(msg);if(G.log.length>30)G.log.pop();}
+function drawTiles(){
+  const p=G.players[G.cur],n=6-p.hand.length;
+  if(!n||!G.bag.length)return;
+  const d=G.bag.splice(0,Math.min(n,G.bag.length));
+  p.hand.push(...d);
+  addLog(`${p.name}: +${d.length} тайлов. Мешок: ${G.bag.length}`);
+}
+
+// ─── NP SELECTION ─────────────────────────────────────────────
+function setNP(n){
+  nP=n;
+  document.querySelectorAll('.np-btn').forEach((b,i)=>{
+    b.classList.toggle('active',i+2===n);
+  });
+}
+
+// ─── LOBBY ────────────────────────────────────────────────────
+function startGame(){
+  G=setupGame(nP);
+  sel=null;mode=null;swIdx=[];
+  document.getElementById('lobby').style.display='none';
+  document.getElementById('header').style.display='flex';
+  document.getElementById('main').style.display='flex';
+  document.getElementById('hand').style.display='flex';
+  renderAll();
+}
+
+function backToLobby(){
+  G=null;sel=null;mode=null;swIdx=[];
+  document.getElementById('lobby').style.display='flex';
+  document.getElementById('header').style.display='none';
+  document.getElementById('main').style.display='none';
+  document.getElementById('hand').style.display='none';
+  document.getElementById('swap-bar').classList.remove('visible');
+}
+
+// ─── RENDER ALL ───────────────────────────────────────────────
+function renderAll(){
+  renderHeader();
+  renderBoard();
+  renderCams();
+  renderLog();
+  renderHand();
+}
+
+// ─── HEADER ───────────────────────────────────────────────────
+function renderHeader(){
+  const p=G.players[G.cur],pc=PLAYERS[G.cur];
+  const badge=document.getElementById('cur-badge');
+  badge.style.background=pc.c+'18';
+  badge.style.borderColor=pc.c+'40';
+  document.getElementById('cur-dot').style.background=pc.c;
+  document.getElementById('cur-dot').style.boxShadow=`0 0 6px ${pc.c}`;
+  document.getElementById('cur-name').textContent=p.name;
+  const acts=document.getElementById('cur-acts');
+  acts.style.color=G.acts>0?'#4ade80':'#f87171';
+  acts.textContent=G.acts>0?` · ${G.acts} дейст.`:' · Завершите ход!';
+  document.getElementById('bag-info').textContent=`Мешок: ${G.bag.length}`;
+}
+
+// ─── BOARD ────────────────────────────────────────────────────
+function renderBoard(){
+  const grid=document.getElementById('board-grid');
+  grid.innerHTML='';
+  const canClick=(sel||mode==='rm')&&G.acts>0;
+  for(let row=0;row<ROWS;row++){
+    const rowEl=document.createElement('div');
+    rowEl.className='board-row';
+    for(let col=0;col<COLS;col++){
+      const key=`${col},${row}`,isRiv=RIVER.has(key),cell=G.board[key];
+      const div=document.createElement('div');
+      div.className=`cell ${isRiv?'river':'land'}`;
+      div.style.width=CS+'px';div.style.height=CS+'px';
+      if(canClick){div.classList.add('clickable');div.onclick=()=>handleCell(col,row);}
+      if(cell){
+        if(cell.t==='LDR'){
+          const pc=PLAYERS[cell.pi];
+          const lk=cell.lk,color=G.players[cell.pi].color;
+          const d=document.createElement('div');
+          d.className='cell-ldr';
+          d.style.background=pc.c;
+          d.style.borderColor=pc.c==='#fb923c'?'#c2410c':pc.c==='#f87171'?'#b91c1c':pc.c==='#60a5fa'?'#1d4ed8':'#15803d';
+          const img=document.createElement('img');
+          img.src=TOKEN_IMGS[lk]?TOKEN_IMGS[lk][color]:'';
+          img.style.cssText='width:22px;height:22px;border-radius:50%;object-fit:cover';
+          d.appendChild(img);
+          div.appendChild(d);
+        } else {
+          const img=document.createElement('img');
+          img.className='cell-tile';
+          img.src=TILES[cell.t]?TILES[cell.t].img:'';
+          img.alt=TILES[cell.t]?TILES[cell.t].lbl:cell.t;
+          div.appendChild(img);
+          if(cell.tr){const s=document.createElement('div');s.className='cell-treasure';s.textContent='★';div.appendChild(s);}
+        }
+      } else if(SHEDU_S.has(key)){
+        const m=document.createElement('div');m.className='shedu-marker';div.appendChild(m);
+      }
+      rowEl.appendChild(div);
+    }
+    grid.appendChild(rowEl);
+  }
+}
+
+// ─── CELL CLICK ───────────────────────────────────────────────
+function handleCell(col,row){
+  if(!G||G.acts<=0)return;
+  const key=`${col},${row}`,isRiv=RIVER.has(key),cell=G.board[key];
+  if(mode==='rm'){
+    if(!cell||cell.fx){addLog('Нельзя убрать');renderAll();mode=null;return;}
+    delete G.board[key];G.acts--;
+    addLog(`Тайл убран с (${col},${row})`);
+    mode=null;renderAll();return;
+  }
+  if(sel&&sel.k==='tile'){
+    const tp=G.players[G.cur].hand[sel.i];
+    if(cell){addLog('Клетка занята');sel=null;renderAll();return;}
+    if(tp==='FARM'&&!isRiv){addLog('Фермы — только на реку!');renderAll();return;}
+    if(tp!=='FARM'&&isRiv){addLog('Не-фермы нельзя на реку!');renderAll();return;}
+    G.board[key]={t:tp};
+    G.players[G.cur].hand.splice(sel.i,1);
+    G.acts--;
+    addLog(`${G.players[G.cur].name}: ${TILES[tp].lbl} → (${col},${row})`);
+    sel=null;renderAll();return;
+  }
+  if(sel&&sel.k==='ldr'){
+    if(isRiv||cell){addLog(isRiv?'Лидер — не на реку':'Клетка занята');sel=null;renderAll();return;}
+    const ld=G.players[G.cur].ldrs[sel.i];
+    G.board[key]={t:'LDR',lk:ld.k,pi:G.cur};
+    ld.ob=key;G.acts--;
+    addLog(`${G.players[G.cur].name}: ${LDRS[ld.k].lbl} → (${col},${row})`);
+    sel=null;renderAll();return;
+  }
+}
+
+// ─── CAMERAS ─────────────────────────────────────────────────
+function renderCams(){
+  const grid=document.getElementById('cam-grid');
+  grid.innerHTML='';
+  G.players.forEach((p,i)=>{
+    const cam=document.createElement('div');
+    cam.className='cam'+(i===G.cur?' active':'');
+    cam.style.setProperty('--pc',PLAYERS[i].c);
+    cam.innerHTML=`<div class="cam-inner">
+      <div class="cam-num" style="background:${PLAYERS[i].c};color:${PLAYERS[i].tc};box-shadow:0 0 10px ${PLAYERS[i].c}50">${i+1}</div>
+      <div class="cam-name">${p.name}</div>
+      <div class="cam-status" style="color:${i===G.cur?'#4ade80':'#201408'}">${i===G.cur?`● ход (${G.acts}д.)`:'○ ожидает'}</div>
+    </div>`;
+    grid.appendChild(cam);
+  });
+}
+
+// ─── LOG ─────────────────────────────────────────────────────
+function renderLog(){
+  const el=document.getElementById('log');
+  el.innerHTML=G.log.map((l,i)=>`<div class="log-entry ${i===0?'fresh':'old'}">${l}</div>`).join('');
+}
+
+// ─── HAND ─────────────────────────────────────────────────────
+function renderHand(){
+  const cp=G.players[G.cur],pc=PLAYERS[G.cur];
+  const inner=document.getElementById('hand-inner');
+  inner.innerHTML='';
+
+  // Player badge
+  const badge=document.createElement('div');
+  badge.className='player-badge';
+  badge.style.borderColor=pc.c+'25';
+  badge.innerHTML=`<div class="player-dot" style="background:${pc.c};box-shadow:0 0 6px ${pc.c}80"></div>
+    <div class="player-name">${cp.name}</div>
+    <div class="player-acts" style="color:${G.acts>0?'#4ade80':'#f87171'}">${G.acts} дейст.</div>`;
+  inner.appendChild(badge);
+
+  addDiv('ТАЙЛЫ');
+
+  cp.hand.forEach((tp,i)=>{
+    const card=document.createElement('div');
+    card.className='tile-card';
+    const isSel=sel?.k==='tile'&&sel.i===i;
+    const isSwSel=swIdx.includes(i);
+    if(isSel)card.classList.add('selected');
+    else if(isSwSel)card.classList.add('swap-sel');
+    else if(mode==='sw'&&!isSwSel)card.classList.add('dimmed');
+    card.innerHTML=`<img src="${TILES[tp].img}" alt="${TILES[tp].lbl}"><div class="tile-card-lbl">${TILES[tp].lbl}</div>`;
+    card.onclick=()=>{
+      if(mode==='sw'){swIdx=swIdx.includes(i)?swIdx.filter(x=>x!==i):[...swIdx,i];document.getElementById('swap-lbl').textContent=`Выбрано ${swIdx.length} тайлов:`;}
+      else if(!mode)sel=isSel?null:{k:'tile',i};
+      renderAll();
+    };
+    inner.appendChild(card);
+  });
+
+  addDivider();
+  addDiv('ЛИДЕРЫ');
+
+  cp.ldrs.forEach((ld,li)=>{
+    const color=cp.color;
+    const img=TOKEN_IMGS[ld.k]?TOKEN_IMGS[ld.k][color]:'';
+    const card=document.createElement('div');
+    card.className='ldr-card'+(ld.ob?' on-board':'');
+    card.style.borderColor=pc.c+(sel?.k==='ldr'&&sel.i===li?'ff':'18');
+    if(sel?.k==='ldr'&&sel.i===li)card.classList.add('selected');
+    card.innerHTML=`<img src="${img}" alt="${LDRS[ld.k].lbl}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid ${pc.c}40">
+      <div class="ldr-card-lbl" style="color:${pc.c}">${LDRS[ld.k].lbl}</div>`;
+    card.title=ld.ob?`${LDRS[ld.k].lbl} на доске — нажми чтобы вернуть`:LDRS[ld.k].lbl;
+    card.onclick=()=>{
+      if(mode)return;
+      if(ld.ob){recallLdr(li);return;}
+      sel=sel?.k==='ldr'&&sel.i===li?null:{k:'ldr',i:li};
+      renderAll();
+    };
+    inner.appendChild(card);
+  });
+
+  if(cp.cat>0){
+    addDivider();
+    addDiv('КАТ.');
+    for(let c=0;c<cp.cat;c++){
+      const card=document.createElement('div');
+      card.className='cat-card';
+      card.innerHTML=`<div class="cat-x">✕</div><div class="cat-lbl">Катастрофа</div>`;
+      inner.appendChild(card);
+    }
+  }
+
+  // End turn btn
+  const endBtn=document.createElement('button');
+  endBtn.className='end-btn'+(G.acts===0?' ready':'');
+  endBtn.textContent=G.acts===0?'▶ Завершить ход':'Завершить ход';
+  endBtn.onclick=endTurn;
+  inner.appendChild(endBtn);
+}
+
+function addDiv(lbl){
+  const l=document.createElement('span');l.className='section-lbl';l.textContent=lbl;
+  document.getElementById('hand-inner').appendChild(l);
+}
+function addDivider(){
+  const d=document.createElement('div');d.className='divider';
+  document.getElementById('hand-inner').appendChild(d);
+}
+
+// ─── ACTIONS ─────────────────────────────────────────────────
+function recallLdr(li){
+  if(!G||G.acts<=0)return;
+  const ld=G.players[G.cur].ldrs[li];
+  if(!ld.ob)return;
+  delete G.board[ld.ob];ld.ob=null;G.acts--;
+  addLog(`${G.players[G.cur].name}: вернул ${LDRS[ld.k].lbl}`);
+  renderAll();
+}
+
+function toggleMode(m){
+  if(mode===m){mode=null;document.getElementById('swap-bar').classList.remove('visible');}
+  else{mode=m;sel=null;swIdx=[];}
+  if(mode==='sw')document.getElementById('swap-bar').classList.add('visible');
+  else document.getElementById('swap-bar').classList.remove('visible');
+  document.getElementById('rm-btn').className='mode-btn'+(mode==='rm'?' active-rm':'');
+  document.getElementById('sw-btn').className='mode-btn'+(mode==='sw'?' active-sw':'');
+  renderAll();
+}
+
+function cancelMode(){mode=null;swIdx=[];document.getElementById('swap-bar').classList.remove('visible');document.getElementById('rm-btn').className='mode-btn';document.getElementById('sw-btn').className='mode-btn';renderAll();}
+
+function doSwap(){
+  if(!swIdx.length||G.acts<=0)return;
+  const p=G.players[G.cur];
+  const disc=swIdx.map(i=>p.hand[i]);
+  const keep=p.hand.filter((_,i)=>!swIdx.includes(i));
+  const drawn=G.bag.splice(0,Math.min(disc.length,G.bag.length));
+  G.bag.push(...shuffle(disc));
+  p.hand=[...keep,...drawn];
+  G.acts--;
+  addLog(`${p.name}: обменял ${disc.length} тайлов`);
+  cancelMode();
+}
+
+function endTurn(){
+  drawTiles();
+  const nxt=(G.cur+1)%nP;
+  G.cur=nxt;G.acts=2;
+  addLog(`━ Ход: ${G.players[nxt].name} ━`);
+  sel=null;mode=null;swIdx=[];
+  document.getElementById('swap-bar').classList.remove('visible');
+  document.getElementById('rm-btn').className='mode-btn';
+  document.getElementById('sw-btn').className='mode-btn';
+  renderAll();
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+setNP(4);
+</script>
+</body>
+</html>
