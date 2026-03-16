@@ -484,7 +484,15 @@ body{background:var(--dark);color:var(--text);font-family:'Cormorant Garamond',G
 <script>
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const COLS=16,ROWS=11;
-let CS=40;
+// Adaptive cell size: fill available space
+function calcCS(){
+ const sideW=Math.max(220,Math.min(window.innerWidth*.18,320));
+ const availW=window.innerWidth-sideW-30;
+ const availH=window.innerHeight-140; // header+hand
+ return Math.max(30,Math.min(Math.floor(availW/COLS),Math.floor(availH/ROWS)));
+}
+let CS=calcCS();
+window.addEventListener('resize',()=>{CS=calcCS();if(G)renderAll();});
 const PD=[
  {name:'Игрок 1',c:'#fb923c',tc:'#000',dk:'#c2410c'},
  {name:'Игрок 2',c:'#f87171',tc:'#fff',dk:'#b91c1c'},
