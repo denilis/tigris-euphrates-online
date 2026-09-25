@@ -587,12 +587,13 @@ function boardTargets(v) {
   return { set: new Set(TE.catastropheTargets(v.board)), danger: true };
 }
 
-function cellTitle(v, cell) {
+function cellTitle(v, cell, i) {
   if (!cell) return '';
   if (cell.k === 'leader') return `${LEADER[cell.c]} — ${v.players[cell.p].name}`;
   if (cell.k === 'cat') return 'Катастрофа';
-  if (cell.down) return 'Монумент' + (cell.tr ? ' · сокровище' : '');
-  return TILE_LABEL[cell.c] + (cell.tr ? ' · сокровище' : '');
+  const treasure = cell.tr ? (TE.SPECIAL_TREASURES.includes(i) ? ' · особое сокровище: торговец забирает его первым' : ' · сокровище') : '';
+  if (cell.down) return 'Монумент' + treasure;
+  return TILE_LABEL[cell.c] + treasure;
 }
 
 function renderBoard(v) {
@@ -619,6 +620,7 @@ function renderBoard(v) {
     if (TE.RIVER[i]) cls += ' river';
     if (targets.set.has(i)) cls += targets.danger ? ' target danger' : targets.pick ? ' target pick' : ' target';
     if (marks.has(i)) cls += marks.get(i);
+    if (cell && cell.tr && TE.SPECIAL_TREASURES.includes(i)) cls += ' special';
     let inner = '';
     if (cell) {
       if (cell.k === 'leader') {
@@ -630,7 +632,7 @@ function renderBoard(v) {
         inner = html`${cell.down ? html`<div class="down"></div>` : html`<img class="t" src="${IMG.tile(cell.c)}" alt="">`}${cell.tr ? html`<span class="tr"></span>` : ''}${i === v.unification ? html`<img class="unif" src="${IMG.unif}" alt="">` : ''}`;
       }
     }
-    cells.push(html`<div class="${cls}" data-cell="${i}" title="${cellTitle(v, cell)}">${inner}</div>`);
+    cells.push(html`<div class="${cls}" data-cell="${i}" title="${cellTitle(v, cell, i)}">${inner}</div>`);
   }
   setHtml($('grid'), cells);
   ui.hoverCells = [];

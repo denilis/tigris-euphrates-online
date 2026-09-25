@@ -18,24 +18,28 @@
 const COLS = 16, ROWS = 11, SIZE = COLS * ROWS;
 const cellIndex = (c, r) => r * COLS + c;
 
-// Squares the painted rivers of assets/board/field.png flow through (column, row).
+// The official standard board (41 river squares, 10 Shedu temples) in the orientation of
+// assets/board/field.png, which shows that board turned by 180° (column, row).
 const RIVER_COORDS = [
   [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2], [9, 2],
   [3, 3], [9, 3], [10, 3], [11, 3], [12, 3],
   [1, 4], [2, 4], [3, 4], [12, 4], [13, 4], [14, 4], [15, 4],
-  [1, 5], [15, 5],
+  [1, 5],
   [0, 6], [1, 6],
   [0, 7], [1, 7], [2, 7], [12, 7], [13, 7], [14, 7], [15, 7],
-  [0, 8], [1, 8], [2, 8], [3, 8], [11, 8], [12, 8],
+  [2, 8], [3, 8], [11, 8], [12, 8],
   [3, 9], [11, 9],
   [3, 10], [7, 10], [8, 10], [9, 10], [10, 10], [11, 10]
 ];
 // Shedu squares: each starts with a temple carrying a treasure.
 const TEMPLE_COORDS = [[5, 0], [10, 1], [1, 2], [14, 3], [7, 4], [2, 6], [10, 8], [0, 9], [14, 9], [5, 10]];
+// Treasures on the four special-border squares must be taken before any other in a kingdom.
+const SPECIAL_COORDS = [[1, 2], [14, 3], [0, 9], [14, 9]];
 
 const RIVER = new Array(SIZE).fill(false);
 RIVER_COORDS.forEach(([c, r]) => { RIVER[cellIndex(c, r)] = true; });
 const START_TEMPLES = TEMPLE_COORDS.map(([c, r]) => cellIndex(c, r));
+const SPECIAL_TREASURES = SPECIAL_COORDS.map(([c, r]) => cellIndex(c, r));
 
 const NEIGHBORS = [];
 for (let i = 0; i < SIZE; i++) {
@@ -715,15 +719,21 @@ function doMonument(s, p, a) {
 
 // ─── TREASURES ─────────────────────────────────────────────────────────────────
 
+// Treasures on special-border squares go first; after them the trader picks freely.
+function treasureChoices(pool) {
+  const special = pool.filter(c => SPECIAL_TREASURES.includes(c));
+  return special.length ? special : pool;
+}
+
 function stepTreasure(s) {
   for (const g of allGroups(s.board)) {
     if (!g.leaders.length) continue;
-    const cells = g.cells.filter(c => s.board[c].tr);
-    if (cells.length < 2) continue;
+    const pool = g.cells.filter(c => s.board[c].tr);
+    if (pool.length < 2) continue;
     const trader = g.leaders.find(c => s.board[c].c === 'green');
     if (trader === undefined) continue;
-    cells.sort((x, y) => x - y);
-    s.pending = { type: 'treasure', player: s.board[trader].p, cells, need: cells.length - 1 };
+    pool.sort((x, y) => x - y);
+    s.pending = { type: 'treasure', player: s.board[trader].p, pool, cells: treasureChoices(pool), need: pool.length - 1 };
     return;
   }
   s.ctx.stage = 'done';
@@ -733,10 +743,12 @@ function doTreasure(s, p, a) {
   requirePending(s, p, 'treasure');
   const pd = s.pending;
   const i = checkCell(a.cell);
-  if (!pd.cells.includes(i) || !s.board[i] || !s.board[i].tr) fail('Выберите сокровище в этом царстве');
+  if (!pd.pool.includes(i) || !s.board[i] || !s.board[i].tr) fail('Выберите сокровище в этом царстве');
+  if (!pd.cells.includes(i)) fail('Сначала забираются сокровища с особых клеток (в золотой рамке)');
   s.board[i].tr = false;
   s.players[p].treasures++;
-  pd.cells = pd.cells.filter(c => c !== i);
+  pd.pool = pd.pool.filter(c => c !== i);
+  pd.cells = treasureChoices(pd.pool);
   pd.need--;
   log(s, p, `${nameOf(s, p)} (торговец) забирает сокровище`, 'vp');
   if (pd.need <= 0) s.pending = null;
@@ -867,7 +879,7 @@ function defaultAction(s) {
 
 return {
   VERSION, COLS, ROWS, SIZE, COLORS, DYNASTIES, MONUMENTS, BAG, HAND_SIZE, ACTIONS_PER_TURN,
-  CATASTROPHES, MIN_PLAYERS, MAX_PLAYERS, RIVER, START_TEMPLES, NEIGHBORS,
+  CATASTROPHES, MIN_PLAYERS, MAX_PLAYERS, RIVER, START_TEMPLES, SPECIAL_TREASURES, NEIGHBORS,
   LEADER_NOM, LEADER_ACC, TILE_WORDS,
   RuleError, mulberry32, cellIndex, plural, vpText, tilesText,
   createGame, applyAction, getView, awaiting, defaultAction, computeResult,

@@ -64,7 +64,8 @@ test('setup: board, bag, hands and pieces follow the rulebook', () => {
 });
 
 test('setup: rivers and temples are consistent', () => {
-  assert.equal(TE.RIVER.filter(Boolean).length, 44);
+  assert.equal(TE.RIVER.filter(Boolean).length, 41, 'official standard board');
+  TE.SPECIAL_TREASURES.forEach(i => assert.ok(TE.START_TEMPLES.includes(i), 'special squares are Shedu temples'));
   TE.START_TEMPLES.forEach(i => assert.equal(TE.RIVER[i], false));
   // Every river square touches another river square (rivers are continuous).
   TE.RIVER.forEach((r, i) => { if (r) assert.ok(TE.NEIGHBORS[i].some(n => TE.RIVER[n]), `isolated river ${i}`); });
@@ -430,6 +431,25 @@ test('treasure: the trader of a kingdom with two treasures takes one (even off-t
   assert.equal(s.pending, null);
   assert.equal(s.current, 0);
   assert.equal(s.players[0].vp.red, 0, 'no priest and no king: nobody scores');
+});
+
+test('treasure: special-border treasures must be taken first', () => {
+  let s = setup({ hands: [['red', 'red', 'red', 'red', 'red', 'red'], ['red']] });
+  place(s, at(1, 2), T('red', { tr: true }));   // special-border square
+  place(s, at(0, 2), T('red', { tr: true }));
+  place(s, at(2, 3), T('red', { tr: true }));
+  leader(s, 1, 'green', at(1, 3));
+  s = ok(s, 0, { type: 'tile', color: 'red', cell: at(8, 8) });
+  assert.equal(s.pending.type, 'treasure');
+  assert.equal(s.pending.need, 2);
+  assert.deepEqual(s.pending.cells, [at(1, 2)], 'only the special treasure may be taken first');
+  bad(s, 1, { type: 'treasure', cell: at(2, 3) }, 'особых');
+  s = ok(s, 1, { type: 'treasure', cell: at(1, 2) });
+  assert.deepEqual(s.pending.cells.slice().sort((a, b) => a - b), [at(0, 2), at(2, 3)], 'then any treasure');
+  s = ok(s, 1, { type: 'treasure', cell: at(2, 3) });
+  assert.equal(s.pending, null);
+  assert.equal(s.players[1].treasures, 2);
+  assert.equal(s.board[at(0, 2)].tr, true);
 });
 
 // ─── TURN FLOW AND GAME END ────────────────────────────────────────────────────
