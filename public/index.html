@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tigris &amp; Euphrates — Online</title>
+<meta name="description" content="Тигр и Евфрат — онлайн-версия настольной игры Райнера Книции для 2–4 игроков с полными правилами.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+
+<!-- ═══ LOBBY ═══ -->
+<div id="lobby">
+ <div class="lobby-card">
+  <div class="lobby-eyebrow">Настольная игра · Reiner Knizia · 1997</div>
+  <div class="lrule"><hr><span></span><hr></div>
+  <div class="lobby-title">TIGRIS</div>
+  <div class="lobby-amp">&amp; Euphrates</div>
+  <div class="lrule"><hr><span></span><hr></div>
+  <div class="lobby-sub">Культура · Конфликт · Цивилизация</div>
+
+  <div class="tile-row">
+   <div class="tile-thumb"><img src="assets/game/tiles/temple.jpg" alt="Храм"></div>
+   <div class="tile-thumb"><img src="assets/game/tiles/farm.jpg" alt="Ферма"></div>
+   <div class="tile-thumb"><img src="assets/game/tiles/market.jpg" alt="Рынок"></div>
+   <div class="tile-thumb"><img src="assets/game/tiles/settlement.jpg" alt="Поселение"></div>
+  </div>
+
+  <div id="resume-box" class="resume-box" hidden></div>
+
+  <div class="mode-tabs">
+   <button class="mode-tab active" id="tab-online" data-act="mode" data-mode="online">🌐 Онлайн</button>
+   <button class="mode-tab" id="tab-local" data-act="mode" data-mode="local">🎭 На одном устройстве</button>
+  </div>
+
+  <div id="err-msg" class="err-msg" role="alert"></div>
+
+  <!-- ONLINE -->
+  <div id="panel-online" class="show">
+   <div class="online-btns">
+    <button class="btn-create" data-act="sub" data-sub="create">+ Создать комнату</button>
+    <button class="btn-join" data-act="sub" data-sub="join">→ Войти по коду</button>
+   </div>
+
+   <div id="sub-create" class="sub">
+    <div class="field-label">Ваше имя</div>
+    <input id="name-create" class="field-input" type="text" placeholder="Введите имя" maxlength="20" autocomplete="nickname">
+    <div class="field-label">Мест в комнате</div>
+    <div class="np-row">
+     <div class="np-btns" id="np-online">
+      <button class="np-btn" data-act="np-online" data-n="2">2</button>
+      <button class="np-btn" data-act="np-online" data-n="3">3</button>
+      <button class="np-btn active" data-act="np-online" data-n="4">4</button>
+     </div>
+    </div>
+    <div class="btn-row"><button class="btn-gold" data-act="create">Создать комнату</button></div>
+   </div>
+
+   <div id="sub-join" class="sub">
+    <div class="field-label">Ваше имя</div>
+    <input id="name-join" class="field-input" type="text" placeholder="Введите имя" maxlength="20" autocomplete="nickname">
+    <div class="field-label">Код комнаты</div>
+    <input id="code-join" class="field-input code-input" type="text" placeholder="XXXXXX" maxlength="6" autocomplete="off" spellcheck="false">
+    <div class="btn-row"><button class="btn-join btn-wide" data-act="join">Войти</button></div>
+   </div>
+
+   <div id="panel-waiting">
+    <div class="small-caps">Код комнаты</div>
+    <div class="room-code-display" id="room-code">——</div>
+    <div><button class="btn-link" data-act="copy-link">Скопировать ссылку-приглашение</button></div>
+    <div class="waiting-players" id="waiting-players"></div>
+    <div class="dyn-pick-label">Ваша династия</div>
+    <div class="dyn-pick" id="dyn-pick"></div>
+    <div class="waiting-hint" id="waiting-hint">Ожидаем игроков…</div>
+    <div class="btn-row">
+     <button class="btn-gold" id="start-btn" data-act="start" hidden>▶ Начать игру</button>
+     <button class="btn-create btn-small" data-act="leave-room">Покинуть</button>
+    </div>
+   </div>
+  </div>
+
+  <!-- LOCAL -->
+  <div id="panel-local">
+   <div class="small-caps">Количество игроков</div>
+   <div class="np-row">
+    <div class="np-btns" id="np-local">
+     <button class="np-btn" data-act="np-local" data-n="2">2</button>
+     <button class="np-btn active" data-act="np-local" data-n="3">3</button>
+     <button class="np-btn" data-act="np-local" data-n="4">4</button>
+    </div>
+   </div>
+   <div class="name-grid" id="name-inputs"></div>
+   <label class="training-row"><input type="checkbox" id="training"> Тренировка: без экрана передачи хода</label>
+   <div class="btn-row">
+    <button class="btn-gold" data-act="local-start">Начать игру</button>
+    <button class="btn-blue" id="local-continue" data-act="local-continue" hidden>Продолжить</button>
+   </div>
+  </div>
+
+  <div class="lobby-foot"><button class="btn-link" data-act="rules">Правила игры</button></div>
+ </div>
+</div>
+
+<!-- ═══ GAME ═══ -->
+<div id="game" hidden>
+ <header id="hdr">
+  <span class="hlogo">T &amp; E</span>
+  <div class="hdivider"></div>
+  <div id="cur-badge" class="cur-badge"></div>
+  <div class="hdivider hide-sm"></div>
+  <div class="hstat hide-sm" title="Номер хода"><span class="hstat-l">Ход</span><span id="turn-no">1</span></div>
+  <div class="hstat" title="Сокровищ на поле. Игра закончится, когда их останется 2 или меньше"><span class="gem"></span><span id="treasures-left">10</span></div>
+  <div id="timer-box" title="Время текущего хода">0:00</div>
+  <div class="hspacer"></div>
+  <button class="hbtn" data-act="rules">Правила</button>
+  <button class="hbtn" data-act="menu">Меню</button>
+ </header>
+ <div id="netbar" hidden>Связь с сервером потеряна — переподключаемся…</div>
+
+ <main id="main">
+  <section id="board-area">
+   <div id="board-scroll">
+    <div id="board">
+     <div id="grid"></div>
+     <div id="board-marks"></div>
+    </div>
+   </div>
+   <div id="decision" hidden></div>
+  </section>
+  <aside id="side">
+   <div class="side-block">
+    <div class="slabel">Игроки</div>
+    <div id="players"></div>
+   </div>
+   <div class="side-block">
+    <div class="slabel">Монументы</div>
+    <div id="monuments"></div>
+   </div>
+   <div class="side-block log-block">
+    <div class="slabel">Журнал</div>
+    <div id="log" aria-live="polite"></div>
+   </div>
+  </aside>
+ </main>
+
+ <div id="dock">
+  <div id="prompt"></div>
+  <footer id="hand"></footer>
+ </div>
+</div>
+
+<!-- ═══ OVERLAYS ═══ -->
+<div id="lock" class="overlay" hidden>
+ <div class="modal lock-box">
+  <div class="lock-t" id="lock-t"></div>
+  <div class="lock-s" id="lock-s"></div>
+  <button class="btn-gold" data-act="unlock" id="lock-btn">Показать</button>
+ </div>
+</div>
+
+<div id="results" class="overlay" hidden>
+ <div class="modal res-box">
+  <div class="res-title">Итоги игры</div>
+  <div id="res-content"></div>
+  <div class="btn-row" id="res-actions"></div>
+ </div>
+</div>
+
+<div id="rules" class="overlay" hidden>
+ <div class="modal rules-box">
+  <button class="modal-x" data-act="close-rules" aria-label="Закрыть">×</button>
+  <div class="res-title">Правила</div>
+  <div class="rules-text">
+   <p><b>Цель.</b> Развивать все четыре сферы цивилизации: храмы (красные очки), фермы (синие), рынки (зелёные) и поселения (чёрные). В конце у каждого считается <b>самая слабая сфера</b> — побеждает тот, у кого она сильнее. Сокровища — это «любые» очки: они добавляются к самым слабым сферам.</p>
+   <p><b>Ход — два действия</b> (можно одинаковые): поставить, переместить или убрать своего лидера; положить тайл; сыграть катастрофу; сбросить до 6 тайлов и добрать столько же. Ход можно закончить раньше. В конце хода рука добирается до 6 тайлов.</p>
+   <p><b>Царство</b> — связанная группа тайлов, где стоит хотя бы один лидер. Без лидеров это просто область.</p>
+   <p><b>Лидеры</b> (жрец, земледелец, торговец, царь) ставятся только на сушу рядом с храмом и не могут объединять царства. Лидер, у которого не осталось соседнего храма, уходит с поля.</p>
+   <p><b>Тайлы.</b> Фермы кладутся только на реку, всё остальное — только на сушу. Если тайл попал в царство, очко его цвета получает владелец лидера того же цвета, а если такого нет — владелец царя. Тайл, объединивший два царства, очков не даёт.</p>
+   <p><b>Восстание</b> — лидер поставлен в царство, где уже есть лидер того же цвета. Сила: храмы рядом с лидером плюс храмы из руки (сначала добавляет атакующий, потом защитник). Ничья — в пользу защитника. Проигравший лидер уходит, победитель получает 1 красное очко.</p>
+   <p><b>Война</b> — тайл объединил два царства, в которых есть одноцветные лидеры. Сила: тайлы этого цвета в своей части царства плюс такие же тайлы из руки. Проигравший теряет лидера и эти тайлы (кроме храмов с сокровищами и храмов рядом с другими лидерами), победитель получает очко за лидера и за каждый снятый тайл. Если войн несколько, порядок выбирает активный игрок.</p>
+   <p><b>Катастрофа</b> (две на игру) навсегда занимает клетку и уничтожает тайл под собой. Нельзя класть на лидера, сокровище или монумент.</p>
+   <p><b>Монумент.</b> Сложили квадрат 2×2 из тайлов одного цвета — можно возвести монумент, у которого есть этот цвет. В конце своего хода игрок получает по очку за каждого своего лидера цвета монумента в том же царстве.</p>
+   <p><b>Сокровища.</b> Если в царстве два сокровища или больше и там есть торговец, его владелец забирает все, кроме одного.</p>
+   <p><b>Конец игры</b> — в конце хода на поле осталось не больше двух сокровищ, или из мешка нечего добрать.</p>
+   <p class="muted">Очки и тайлы в руке соперников скрыты до конца игры, как за ширмами в настольной версии.</p>
+  </div>
+ </div>
+</div>
+
+<div id="confirm" class="overlay" hidden>
+ <div class="modal confirm-box">
+  <div class="confirm-t" id="confirm-t"></div>
+  <div class="btn-row">
+   <button class="btn-gold" data-act="confirm-yes">Да</button>
+   <button class="btn-create btn-small" data-act="confirm-no">Отмена</button>
+  </div>
+ </div>
+</div>
+
+<div id="toast" role="status" aria-live="assertive"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
