@@ -1,4 +1,4 @@
-/* Tigris & Euphrates — client: lobby, online play (Socket.io) and games on one device. */
+/* Tigris & Euphrates — client: lobby, online play (HTTP API + Supabase Realtime) and games on one device. */
 (function () {
 'use strict';
 const TE = window.TE;
@@ -212,45 +212,125 @@ function renderLock() {
 }
 
 // ─── ONLINE GAMES ──────────────────────────────────────────────────────────────
+// The server keeps the game; each page asks only for its own view of it. When the room changes,
+// a Supabase Realtime message (carrying just the new revision number) makes the pages fetch right
+// away. Without Realtime — no config, a blocked network, a local server — pages simply poll.
 
-const Online = {
-  socket: null,
-  session: store.get(SESSION_KEY),
+const API_URL = '/api/game';
+const REQUEST_TIMEOUT_MS = 10000;
 
-  ensure() {
-    if (this.socket) return this.socket;
-    if (typeof window.io !== 'function') {
-      showErr('Нет связи с сервером игры. Онлайн-режим работает, когда страница открыта с игрового сервера.');
-      return null;
+const Net = {
+  failures: 0,
+
+  async post(body) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+        signal: ctrl.signal
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* not JSON: a proxy or platform error page */ }
+      this.reachable(res.status < 500);
+      return data && typeof data === 'object' ? data : { ok: false, error: `Сервер ответил ошибкой ${res.status}` };
+    } catch (e) {
+      this.reachable(false);
+      return { ok: false, network: true, error: 'Нет связи с сервером' };
+    } finally {
+      clearTimeout(timer);
     }
-    const s = window.io({ transports: ['websocket', 'polling'] });
-    s.on('connect', () => {
-      $('netbar').hidden = true;
-      if (this.session && !this.session.left) this.rejoin();
-    });
-    s.on('disconnect', reason => {
-      // The client reconnects by itself except when the server closed the connection on purpose.
-      if (reason === 'io server disconnect') { if (this.socket === s) this.socket = null; return; }
-      if (ui.mode === 'online' && ui.screen === 'game') $('netbar').hidden = false;
-    });
-    s.on('state', st => this.onState(st));
-    s.on('kicked', ({ msg }) => {
-      this.session = Object.assign({}, this.session, { left: true });
-      store.set(SESSION_KEY, this.session);
-      backToLobby();
-      showErr(msg || 'Подключение закрыто');
-    });
-    this.socket = s;
-    return s;
   },
 
-  emit(event, payload) {
-    const s = this.ensure();
-    if (!s) return Promise.resolve({ ok: false, error: 'Нет связи с сервером' });
-    return new Promise(resolve => {
-      const timer = setTimeout(() => resolve({ ok: false, error: 'Сервер не ответил, попробуйте ещё раз' }), 8000);
-      s.emit(event, payload, res => { clearTimeout(timer); resolve(res || { ok: false, error: 'Пустой ответ сервера' }); });
-    });
+  reachable(ok) {
+    this.failures = ok ? 0 : this.failures + 1;
+    $('netbar').hidden = !(this.failures >= 2 && ui.mode === 'online' && ui.screen === 'game');
+  }
+};
+
+// Supabase Realtime subscription for "the room changed" messages.
+const Live = {
+  config: null,    // answer of /api/config once it succeeded
+  lib: null,       // promise of the lazily loaded supabase-js
+  client: null,
+  channel: null,
+  code: null,
+  ok: false,       // subscribed: changes arrive by push, so polling can be rare
+
+  async loadConfig() {
+    if (this.config) return this.config;
+    try {
+      const res = await fetch('/api/config', { cache: 'no-store' });
+      if (res.ok) this.config = await res.json();
+    } catch (e) { /* offline: try again on the next watch() */ }
+    return this.config;
+  },
+
+  loadLib() {
+    if (window.supabase && window.supabase.createClient) return Promise.resolve(true);
+    if (!this.lib) {
+      this.lib = new Promise(resolve => {
+        const s = document.createElement('script');
+        s.src = '/vendor/supabase.js';
+        s.onload = () => resolve(!!(window.supabase && window.supabase.createClient));
+        s.onerror = () => { this.lib = null; resolve(false); };
+        document.head.appendChild(s);
+      });
+    }
+    return this.lib;
+  },
+
+  async watch(code, onPoke, onStatus) {
+    if (this.code === code) return;
+    this.stop();
+    this.code = code;
+    const cfg = await this.loadConfig();
+    if (!cfg || !cfg.realtime || this.code !== code) return;
+    if (!(await this.loadLib()) || this.code !== code) return;
+    try {
+      if (!this.client) {
+        this.client = window.supabase.createClient(cfg.realtime.url, cfg.realtime.key, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        });
+      }
+      const ch = this.client.channel(`te:${code}`);
+      ch.on('broadcast', { event: 'update' }, msg => onPoke(msg && msg.payload));
+      ch.subscribe(status => {
+        if (this.channel !== ch) return;
+        const ok = status === 'SUBSCRIBED';
+        if (ok !== this.ok) { this.ok = ok; onStatus(ok); }
+      });
+      this.channel = ch;
+    } catch (e) {
+      console.warn('Realtime is unavailable, polling instead', e);
+    }
+  },
+
+  stop() {
+    this.code = null;
+    this.ok = false;
+    if (this.channel && this.client) this.client.removeChannel(this.channel);
+    this.channel = null;
+  }
+};
+
+const Online = {
+  session: store.get(SESSION_KEY), // { code, token, left? }
+  rev: 0,            // room revision on screen
+  timer: null,
+  busy: false,       // a sync request is in flight
+  again: false,      // another sync was asked for meanwhile
+  pokeTimer: null,
+  lastPoke: 0,
+
+  active() { return !!(this.session && !this.session.left); },
+
+  call(op, payload) {
+    const s = this.session || {};
+    return Net.post(Object.assign({ op, code: s.code, token: s.token }, payload));
   },
 
   keep(res) {
@@ -259,60 +339,141 @@ const Online = {
   },
 
   forget() {
+    this.stop();
     this.session = null;
+    this.rev = 0;
     store.del(SESSION_KEY);
     refreshResume();
   },
 
-  async create(name, maxPlayers) {
-    const res = await this.emit('room:create', { name, maxPlayers });
-    if (!res.ok) return showErr(res.error);
+  // Follows the saved session's room: Realtime pushes plus a steady heartbeat that keeps the seat online.
+  watch() {
+    if (!this.active()) return;
+    Live.watch(this.session.code, p => this.onPoke(p), ok => (ok ? this.sync() : this.schedule()));
+  },
+
+  begin() {
+    this.watch();
+    this.sync();
+  },
+
+  stop() {
+    clearTimeout(this.timer);
+    clearTimeout(this.pokeTimer);
+    this.timer = this.pokeTimer = null;
+    Live.stop();
+  },
+
+  schedule() {
+    clearTimeout(this.timer);
+    if (!this.active()) return;
+    const cfg = Live.config || {};
+    const ms = document.hidden || Live.ok ? cfg.heartbeatMs || 15000 : cfg.pollMs || 2500;
+    this.timer = setTimeout(() => this.sync(), ms);
+  },
+
+  onPoke(payload) {
+    if (!payload || !(payload.rev > this.rev) || document.hidden || this.pokeTimer) return;
+    // Bursts of messages (or junk ones — the channel is public) become at most one request per 600 ms.
+    const wait = Math.max(0, this.lastPoke + 600 - Date.now());
+    this.pokeTimer = setTimeout(() => {
+      this.pokeTimer = null;
+      this.lastPoke = Date.now();
+      this.sync();
+    }, wait);
+  },
+
+  async sync() {
+    if (!this.active()) return;
+    if (this.busy) { this.again = true; return; }
+    this.busy = true;
+    const session = this.session;
+    const res = await this.call('sync', { since: this.rev });
+    this.busy = false;
+    if (session !== this.session) return; // left or switched rooms meanwhile
+    if (res.gone) return this.lost();
+    if (res.ok) this.apply(res);
+    if (this.again) { this.again = false; return this.sync(); }
+    this.schedule();
+  },
+
+  lost() {
+    const code = this.session ? this.session.code : '';
+    this.forget();
+    ui.room = null;
+    if (ui.mode === 'local' && ui.screen === 'game') return; // a local game is on screen: leave it be
+    backToLobby();
+    showErr(`Партия ${code} больше недоступна.`);
+  },
+
+  apply(res) {
+    if (ui.mode === 'local' && ui.screen === 'game') return; // a local game is on screen
+    if (res.rev < this.rev) return; // overtaken by a newer answer
+    this.rev = res.rev;
+    ui.mode = 'online';
+    ui.room = res.room;
+    ui.skew = res.now - Date.now();
+    ui.skipAfterMs = res.skipAfterMs;
+    if (res.unchanged) {
+      // Only who is online may have changed.
+      if (ui.screen === 'game' && ui.view) { renderSide(ui.view); renderPrompt(ui.view); }
+      return;
+    }
+    if (res.view) {
+      ui.view = res.view;
+      if (ui.screen !== 'game') enterGame('online');
+      renderGame();
+    } else {
+      ui.view = null;
+      if (ui.screen === 'game') backToLobby();
+      renderWaiting(res.room);
+    }
+  },
+
+  // Answer to a request that changes the room.
+  after(res) {
+    if (res.ok) return this.apply(res);
+    if (res.gone) return this.lost();
+    toast(res.error, res.stale ? 'info' : undefined);
+    if (ui.view && ui.screen === 'game') renderGame();
+    if (res.stale || res.network) this.sync();
+  },
+
+  enter(res) {
+    this.stop();
     this.keep(res);
+    this.rev = 0;
+    this.apply(res);
+    this.watch();
+    this.schedule();
+  },
+
+  async create(name, maxPlayers) {
+    const res = await Net.post({ op: 'create', name, maxPlayers });
+    if (!res.ok) return showErr(res.error);
+    this.enter(res);
   },
 
   async join(code, name) {
-    const res = await this.emit('room:join', { code, name });
+    const res = await Net.post({ op: 'join', code, name });
     if (!res.ok) return showErr(res.error);
-    this.keep(res);
-  },
-
-  async rejoin() {
-    if (!this.session) return;
-    const code = this.session.code;
-    const res = await this.emit('room:rejoin', { code, token: this.session.token });
-    if (res.ok) return;
-    this.forget();
-    if (ui.mode === 'online' && ui.screen === 'game') backToLobby();
-    showErr(`Партия ${code} больше недоступна — возможно, сервер перезапускался.`);
+    this.enter(res);
   },
 
   resume() {
     if (!this.session) return;
     this.session = { code: this.session.code, token: this.session.token };
     store.set(SESSION_KEY, this.session);
-    if (this.socket && this.socket.connected) this.rejoin();
-    else this.ensure();
-  },
-
-  onState(st) {
-    if (ui.mode === 'local' && ui.screen === 'game') return; // a local game is on screen
-    ui.mode = 'online';
-    ui.room = st.room;
-    ui.skew = st.now - Date.now();
-    ui.skipAfterMs = st.skipAfterMs;
-    if (st.view) {
-      ui.view = st.view;
-      if (ui.screen !== 'game') enterGame('online');
-      renderGame();
-    } else {
-      ui.view = null;
-      if (ui.screen === 'game') backToLobby();
-      renderWaiting(st.room);
-    }
+    this.rev = 0;
+    this.begin();
   },
 
   send(action) {
-    this.emit('game:action', action).then(res => { if (!res.ok) { toast(res.error); renderGame(); } });
+    this.call('action', { action, rev: this.rev }).then(res => this.after(res));
+  },
+
+  async simple(op, payload) {
+    this.after(await this.call(op, Object.assign({ rev: this.rev }, payload)));
   },
 
   canAct() {
@@ -320,20 +481,26 @@ const Online = {
     return !!v && v.phase === 'play' && TE.awaiting(v) === v.you;
   },
 
-  async leaveRoom() {
-    await this.emit('room:leave', {});
-    this.forget();
+  closeWaiting() {
     ui.room = null;
     $('panel-waiting').classList.remove('show');
     $('panel-online').classList.remove('in-room');
-    showSub(null);
   },
 
-  async leaveGame() {
+  async leaveRoom() {
+    const done = this.call('leave');
+    this.forget();
+    this.closeWaiting();
+    showSub(null);
+    await done;
+  },
+
+  leaveGame() {
     const over = ui.view && ui.view.phase === 'over';
-    await this.emit('room:leave', {});
+    this.call('leave'); // shows this seat offline to the others right away
     if (over) this.forget();
     else {
+      this.stop();
       this.session = Object.assign({}, this.session, { left: true });
       store.set(SESSION_KEY, this.session);
     }
@@ -342,19 +509,10 @@ const Online = {
 
   // Drops a lobby seat before a game on this device starts (a running online game stays resumable).
   detach() {
-    if (!this.session || this.session.left || !this.socket) return;
-    if (ui.room && !ui.room.started) {
-      this.emit('room:leave', {});
-      this.forget();
-      ui.room = null;
-      $('panel-waiting').classList.remove('show');
-      $('panel-online').classList.remove('in-room');
-    }
-  },
-
-  async simple(event, payload) {
-    const res = await this.emit(event, payload || {});
-    if (!res.ok) toast(res.error);
+    if (!this.active() || !ui.room || ui.room.started) return;
+    this.call('leave');
+    this.forget();
+    this.closeWaiting();
   }
 };
 
@@ -1043,11 +1201,11 @@ const ACTIONS = {
     if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => prompt('Скопируйте ссылку:', url));
     else prompt('Скопируйте ссылку:', url);
   },
-  dyn: t => Online.simple('room:dynasty', { dynasty: t.dataset.dyn }),
-  start: () => Online.simple('room:start'),
+  dyn: t => Online.simple('dynasty', { dynasty: t.dataset.dyn }),
+  start: () => Online.simple('start'),
   'leave-room': () => Online.leaveRoom(),
   'resume-online': () => Online.resume(),
-  'forget-online': () => { Online.emit('room:leave', {}); Online.forget(); },
+  'forget-online': () => { Online.call('leave'); Online.forget(); },
   'local-start': () => { Online.detach(); Local.start(localNames(), $('training').checked); },
   'local-continue': () => { Online.detach(); Local.resume(); },
   rules: () => { $('rules').hidden = false; },
@@ -1083,8 +1241,8 @@ const ACTIONS = {
   war: t => send({ type: 'war', color: t.dataset.color }),
   monument: t => send({ type: 'monument', at: ui.monAt, monument: Number(t.dataset.id) }),
   'monument-no': () => send({ type: 'monument', decline: true }),
-  skip: () => Online.simple('game:skip'),
-  rematch: () => Online.simple('game:rematch'),
+  skip: () => Online.simple('skip'),
+  rematch: () => Online.simple('rematch'),
   'new-local': () => { backToLobby(); switchMode('local'); },
   'to-lobby': () => { if (ui.mode === 'online') Online.leaveGame(); else backToLobby(); },
   'show-results': () => { $('results').hidden = false; },
@@ -1125,6 +1283,8 @@ document.addEventListener('keydown', e => {
 });
 
 window.addEventListener('resize', () => { layoutBoard(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Online.active()) Online.sync(); });
+window.addEventListener('online', () => { if (Online.active()) Online.sync(); });
 
 // ─── INIT ──────────────────────────────────────────────────────────────────────
 
@@ -1140,6 +1300,6 @@ window.addEventListener('resize', () => { layoutBoard(); });
     showSub('join');
     $('code-join').value = code;
   }
-  if (Online.session && !Online.session.left) Online.ensure(); // reconnects to a running game after a reload
+  if (Online.active()) Online.begin(); // back into the room or game after a reload
 })();
 })();
