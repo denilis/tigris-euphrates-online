@@ -59,7 +59,7 @@
 ### 1. Supabase
 
 1. Создайте проект в [дашборде Supabase](https://supabase.com/dashboard). Регион — **Central EU (Frankfurt), `eu-central-1`**: функции Vercel настроены на соседний `fra1`, в `vercel.json` → `regions`. Если выберете другой регион Supabase, поменяйте и `regions` на ближайший регион Vercel.
-2. **SQL Editor** → вставьте и выполните [`supabase/migrations/20260926060000_te_rooms.sql`](supabase/migrations/20260926060000_te_rooms.sql). Повторный запуск безопасен. Вместо этого можно выполнить `supabase db push` из Supabase CLI.
+2. **SQL Editor** → вставьте и выполните [`supabase/migrations/20260926075126_te_rooms.sql`](supabase/migrations/20260926075126_te_rooms.sql). Повторный запуск безопасен. Вместо этого можно выполнить `supabase db push` из Supabase CLI.
 3. **Project Settings → API Keys**: вам понадобятся Project URL, **publishable key** (`sb_publishable_…`) и **secret key** (`sb_secret_…`). Секретный ключ никогда не должен попадать в браузер или в репозиторий.
 
 ### 2. Vercel

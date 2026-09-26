@@ -57,7 +57,7 @@ test('http: static files come from public/ only', async () => {
       assert.equal((await fetch(`${url}${path}`)).status, 200, path);
     }
     const secrets = ['/dev-server.js', '/server.js', '/package.json', '/lib/api.js', '/api/../lib/runtime.js', '/.git/config',
-      '/supabase/migrations/20260926060000_te_rooms.sql', '/node_modules/express/package.json', '/.env'];
+      '/supabase/migrations/20260926075126_te_rooms.sql', '/node_modules/express/package.json', '/.env'];
     for (const path of secrets) assert.equal((await fetch(`${url}${path}`)).status, 404, path);
   } finally { server.close(); }
 });
