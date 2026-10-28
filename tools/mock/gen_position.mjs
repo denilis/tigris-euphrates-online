@@ -69,6 +69,7 @@ for (let k = 0; k < 40; k++, seed++) {
   console.log(`seed ${seed}: ${r ? 'найдено, ход ' + r.war.turn + ', решает ' + r.me : 'нет'} (${Date.now() - t0} мс)`);
   if (r) {
     r.layout = BOARDS.advanced;
+    r.cfgEnglish = true;
     writeFileSync(outFile, JSON.stringify(r));
     break;
   }
