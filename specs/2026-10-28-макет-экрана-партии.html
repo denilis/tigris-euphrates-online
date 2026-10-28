@@ -874,7 +874,7 @@ function renderModal(st, mode) {
       ${rule ? `<div class="rule${ok ? '' : ' bad'}">${ok ? rule : `Так нельзя. ${rule}`}</div>` : ''}
     </div>
     <div class="facts">
-      <div><span>Мешок</span><b>${bagLeft}</b><small>из ${bagStart}, вышло ${out}%</small></div>
+      <div><span>Мешок</span><b>${100 - out}%</b><small>тайлов осталось</small></div>
       <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при 2</small></div>
       <div class="ms"><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
     </div>
@@ -1022,7 +1022,8 @@ function render() {
   if (gal) { renderGallery(); return; }
   const st = state.mode === 'war' ? POS.war : POS.turnSnap;
   const sel = state.mode === 'turn' ? state.sel : null;
-  document.getElementById('bag').textContent = st.bag.reduce((a, b) => a + b, 0);
+  // мешок показываем только процентом оставшегося (решение 28.10), точное число не выводим
+  document.getElementById('bag').textContent = Math.round(st.bag.reduce((a, b) => a + b, 0) / (153 - POS.layout.temples.length) * 100) + '%';
   document.getElementById('turnNo').textContent = st.turn;
   renderBoard(st, state.mode, sel);
   renderPlayers(st, state.mode);
