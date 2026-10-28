@@ -1,0 +1,7 @@
+# На Vercel уходит только нужное для сайта
+/*
+!api
+!game
+!public
+!vercel.json
+!package.json

@@ -1,0 +1,28 @@
+{
+  "source": "tigris-bot",
+  "branch": "feat/train-eval",
+  "commit": "4c58fde9523c831704a8b18b8b662086ffbd3c93",
+  "dirty": false,
+  "syncedAt": "2026-10-28T10:52:17.698Z",
+  "files": {
+    "bot/belief.js": "ea519c324ffb1ca495719ac496058f3c554d47d5e8f3b781b9554bc08b22f96f",
+    "bot/bot.js": "5beeea45a4071a0618b253e85b9e5b8093f8e430cf9979be67edaf0587309ce8",
+    "bot/catastrophe.js": "8264bb3c022fb9dcb4c6a7926f1501dea643c6e6a6da14210d277a90544c8fda",
+    "bot/evaluate.js": "69babac77ef5944c4a618f6d3bfbd02b7d907841207d264cb3bc6e72eca54e06",
+    "bot/explain.js": "e9113d51a3a53a628a2c76d6372b32e46dcb9401afbca798fe6bea1ba329c6f3",
+    "bot/ismcts.js": "2b87359d8e3ab58c204da727107918eb3b40384b4b0bd120c83cc4be2cf5b370",
+    "bot/policy.js": "6e55267c307e6a0601906d805edc0f85409d62150280a17e2cda9294d092caac",
+    "bot/styles.js": "cfe4cec9752541e55163a0fe0fe50fafd7146f9563547d61f94eeb45dcd3c34d",
+    "bot/styles_data.js": "2ce4bd17e497c51f0a746e7de9f955bc7e2db2263d43fff0533ea33f71f0dcb8",
+    "engine/boards.js": "b5552fce2f986eef123ecfd7a2686aa777e8e12d30cbd90caecce27c5c2e67a4",
+    "engine/constants.js": "40ad4a5dcab42502f9dcf28b32bdbcbed60f3f0e663d3d6ac23010d7c99114f4",
+    "engine/engine.js": "b2b35d57336d531bce636059662d42d1f7f0b1568b77351aedba4412c4a0fe1d",
+    "engine/rng.js": "c7254a58e8951f4dd8f8551f1c321a20114f0bc065e2f85db5bd7f60cd6d8d44",
+    "test/fixes.test.js": "29f5581632686ba00639efa7d0fc98eb385a84e17ee8022cb87cde887230e76f",
+    "test/fixtures/935700491_early_catastrophes.json": "93c3e5d55efa8883d8823664a04da98965aedfc3000dbb16aecd395a6aa9006f",
+    "test/helpers.js": "eab616f7593e1cb28e0fe0e360dbad6a7a37ad162731bafc54355c3d3fbb650c",
+    "test/random.test.js": "328f46bc8dc6da9de5c5d5ada8c6b798b09d6d85b449557b9defe0f14a250284",
+    "test/rules.test.js": "96f5d0e3a8bb3aa1095c9d2a57350bf3128d1d3aff46bb9ae96bcd1b45bbbbcd",
+    "test/time.test.js": "d090971379fca65a13b099c032ca76bace1cb28014b00f31772f51deb817a45f"
+  }
+}

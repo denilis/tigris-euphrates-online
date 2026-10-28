@@ -1,17 +1,14 @@
 {
   "name": "tigris-euphrates-online",
-  "version": "2.0.0",
-  "description": "Tigris & Euphrates — онлайн мультиплеер",
-  "main": "server.js",
+  "version": "3.0.0-dev",
+  "private": true,
+  "description": "Тигр и Евфрат: свой стол на движке правил (Vercel)",
+  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "test": "node --test",
+    "sync-engine": "node tools/sync-engine.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20"
   }
 }
