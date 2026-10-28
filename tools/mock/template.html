@@ -179,39 +179,78 @@ button{font:inherit;color:inherit;cursor:pointer}
 .gsmall{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
 .gsmall svg{background:#2a2119;border-radius:6px}
 @media (max-width:700px){.ghead{flex-direction:column}.mockbar .monsel span{display:none}.mockbar{height:auto;min-height:var(--mockbar);flex-wrap:wrap;padding:4px 8px;row-gap:4px}.mockbar .tabs{margin-left:0}}
-.modal{position:fixed;left:0;right:0;bottom:0;top:var(--mockbar);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,7,4,.78);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:background .15s}
-.modal.peek{background:rgba(10,7,4,.05);backdrop-filter:none;-webkit-backdrop-filter:none}
-.modal.peek .mcard{opacity:.06}
-.mcard{width:min(580px,100%);max-height:100%;overflow:auto;background:linear-gradient(180deg,#2e2419,#1c1712);border:1px solid var(--gold2);border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.7),0 0 0 1px rgba(224,182,90,.15) inset;padding:20px 22px 16px;animation:pop .18s ease-out;transition:opacity .15s}
-@keyframes pop{from{transform:scale(.96);opacity:0}}
-.mcard h2{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:23px;display:flex;align-items:center;gap:10px;letter-spacing:.03em}
-.mcard h2 i{width:18px;height:18px;border-radius:4px;box-shadow:0 0 0 2px #e8dcc4}
-.msub{margin:0;color:var(--muted);font-size:13.5px}
-.sides{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;margin:16px 0 12px}
-.sbox{background:var(--card);border-radius:14px;padding:10px 12px 12px;text-align:center;border:2px solid}
-.sbox.att{border-color:rgba(255,138,92,.55)}.sbox.def{border-color:rgba(124,196,255,.55)}
-.sbox .role{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+:root{--dock:430px}
+/* окно конфликта: справа вместо боковой панели, поле остается видно, но не кликается */
+.app.conflict{grid-template-columns:minmax(0,1fr) var(--dock)}
+.app.conflict .side{visibility:hidden}
+.app.conflict .top,.app.conflict .hand{filter:brightness(.4) saturate(.6)}
+.app.locked .top,.app.locked .boardwrap,.app.locked .hand{pointer-events:none}
+.modal.dock{position:fixed;right:0;bottom:0;top:var(--mockbar);width:var(--dock);z-index:50;display:flex;flex-direction:column;background:linear-gradient(180deg,#2e2419,#1c1712);border-left:1px solid var(--gold2);box-shadow:-20px 0 60px rgba(0,0,0,.55);animation:dockin .2s ease-out}
+@keyframes dockin{from{transform:translateX(30px);opacity:0}}
+.modal.pill{position:fixed;left:50%;bottom:calc(var(--hand) + 10px);transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:12px;padding:8px 10px 8px 16px;background:#2e2419;border:1px solid var(--gold);border-radius:40px;box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 0 4px rgba(224,182,90,.15);animation:pillpulse 1.6s ease-in-out infinite;white-space:nowrap}
+@keyframes pillpulse{50%{box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 0 8px rgba(224,182,90,.25)}}
+.modal.pill b{font-family:Cinzel,Georgia,serif;color:var(--gold)}
+.modal.pill span{color:var(--muted);font-size:13px}
+.modal.pill .dotc{width:14px;height:14px;border-radius:3px;box-shadow:0 0 0 2px #e8dcc4}
+.modal.pill .btn{min-height:38px}
+.mcard{overflow:auto;padding:14px 16px 12px;height:100%}
+.mtop{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mcard h2{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0;font-size:21px;display:flex;align-items:center;gap:10px;letter-spacing:.03em}
+.mcard h2 i{width:16px;height:16px;border-radius:4px;box-shadow:0 0 0 2px #e8dcc4}
+.peekbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12.5px;color:var(--text);white-space:nowrap}
+.peekbtn:hover{border-color:var(--gold2)}
+.msub{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+.sides{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.sbox{background:var(--card);border-radius:12px;padding:8px 10px;border:2px solid;min-width:0}
+.sbox.att{border-color:rgba(255,138,92,.6)}.sbox.def{border-color:rgba(124,196,255,.6)}
+.sbox.mine{box-shadow:0 0 0 1px rgba(224,182,90,.35) inset}
+.shead{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-bottom:4px}
+.stok{width:38px;height:38px;border-radius:50%;background-size:cover;border:3px solid;box-shadow:0 3px 8px rgba(0,0,0,.6)}
+.sname .role{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .sbox.att .role{color:var(--att)}.sbox.def .role{color:var(--def)}
-.stok{width:58px;height:58px;border-radius:50%;margin:6px auto;background-size:cover;border:3px solid;box-shadow:0 3px 8px rgba(0,0,0,.6)}
-.sbox .who{font-weight:600;margin-bottom:6px}
-.nums{display:grid;grid-template-columns:1fr auto;gap:2px 8px;text-align:left;font-size:13px;color:var(--muted)}
-.nums b{color:var(--text);text-align:right;font-size:15px}
-.nums b.tot{font-size:22px;color:var(--gold)}
-.vsmark{align-self:center;font-family:Cinzel,Georgia,serif;color:var(--gold);font-size:14px;letter-spacing:.08em}
-.hand-line{text-align:center;font-size:14px}
-.hand-line b{color:var(--gold);font-size:16px}
-.pick{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:10px 0 6px}
-.pick button{width:64px;height:64px;border-radius:14px;border:1px solid var(--gold2);background:var(--card2);font-size:26px;font-weight:700;color:var(--text)}
-.pick button:hover:not([disabled]){background:#3d3024}
-.pick button.on{background:var(--gold);color:#1b1713;border-color:var(--gold);box-shadow:0 0 18px rgba(224,182,90,.45)}
-.pick button[disabled]{opacity:.28;cursor:not-allowed}
-.rule{text-align:center;font-size:12px;color:var(--muted)}
-.outcome{text-align:center;margin:12px 0 14px;font-size:14px;min-height:40px;color:var(--text)}
-.mfoot{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap}
-.mfoot .btn[disabled]{opacity:.5;cursor:not-allowed}
-.peekbtn{user-select:none;-webkit-user-select:none;touch-action:none}
-.mnote{text-align:center;margin-top:10px;font-size:11.5px;color:var(--muted)}
-@media (max-width:520px){.sides{grid-template-columns:1fr 1fr}.vsmark{display:none}.mfoot .btn{flex:1}}
+.sname b{font-size:14px}
+.stot{font-family:Cinzel,Georgia,serif;font-size:30px;font-weight:700;color:var(--gold);line-height:1}
+.stot small{font-size:15px;color:var(--muted);margin-left:2px}
+.trow{display:grid;grid-template-columns:54px 1fr;gap:6px;align-items:center;padding:4px 0;border-top:1px dashed #3a2e22}
+.trow>span{font-size:11.5px;color:var(--muted)}
+.tiles{display:flex;flex-wrap:wrap;gap:3px;min-height:26px;align-items:center}
+.tiles em{font-style:normal;font-size:11.5px;color:var(--muted)}
+.mt{width:25px;height:25px;border-radius:4px;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.mt.sent{box-shadow:0 0 0 2px var(--gold),0 0 10px rgba(224,182,90,.55);animation:slidein .2s ease-out}
+@keyframes slidein{from{transform:translateY(14px);opacity:0}}
+.myhand{background:rgba(0,0,0,.25);border-radius:12px;padding:8px 10px 10px}
+.hl2{font-size:12.5px;margin-bottom:8px}
+.htiles{display:flex;gap:6px;flex-wrap:wrap}
+.ht2{position:relative;width:52px;height:52px;border-radius:7px;border:0;padding:0;background-size:cover;box-shadow:0 2px 6px rgba(0,0,0,.6);transition:transform .15s,box-shadow .15s}
+.ht2:hover:not(.off){transform:translateY(-3px)}
+.ht2.on{transform:translateY(-6px);box-shadow:0 0 0 3px var(--gold),0 0 16px rgba(224,182,90,.6),0 8px 14px rgba(0,0,0,.6)}
+.ht2.on span{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);background:var(--gold);color:#1b1713;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.ht2.off{filter:grayscale(.9) brightness(.4);cursor:not-allowed}
+.rule{font-size:11.5px;color:var(--muted);margin-top:10px}
+.rule.bad{color:#ff9b7a}
+.facts{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:6px;margin:10px 0}
+.facts>div{background:var(--card);border-radius:10px;padding:6px 9px;display:flex;flex-direction:column}
+.facts span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.facts b{font-size:20px;color:var(--text);line-height:1.2}
+.facts small{font-size:11px;color:var(--muted)}
+.facts .ms{grid-column:auto}
+.sc2{display:flex;gap:4px;align-items:center;margin:3px 0}
+.sc2 span{min-width:24px;text-align:center;border-radius:4px;color:#fff;font-weight:700;font-size:13px;padding:1px 4px;letter-spacing:0;text-transform:none}
+.sc2 span.weak{outline:2px solid var(--gold);outline-offset:1px}
+.sc2 em{font-style:normal;color:var(--gold);font-weight:700;margin-left:4px}
+.orows{display:flex;flex-direction:column;gap:6px}
+.orow{border:1px solid var(--line);border-radius:10px;padding:6px 9px;display:grid;gap:1px;font-size:12.5px;opacity:.75}
+.orow b{font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.orow.win b{color:#8fd19b}.orow.lose b{color:#ff9b7a}
+.orow small{color:var(--muted);font-size:11.5px}
+.orow.on{opacity:1;border-color:var(--gold);background:rgba(224,182,90,.08)}
+.mfoot{display:flex;gap:8px;justify-content:flex-end;margin:10px -16px -12px;padding:10px 16px 12px;position:sticky;bottom:-12px;background:linear-gradient(180deg,rgba(28,23,18,.85),#1c1712 35%);border-top:1px solid var(--line);flex-wrap:wrap}
+.mfoot .mnote{flex-basis:100%;margin:0}
+.mfoot .btn{flex:1}
+.mfoot .btn[disabled]{opacity:.45;cursor:not-allowed}
+.mnote{text-align:center;margin-top:6px;font-size:11px;color:var(--muted)}
+@media (max-width:1200px){:root{--dock:390px}}
+@media (max-width:900px){.app.conflict{grid-template-columns:minmax(0,1fr)}.modal.dock{top:auto;width:100%;max-height:72vh;border-left:0;border-top:1px solid var(--gold2);border-radius:16px 16px 0 0}.modal.pill{bottom:12px;white-space:normal;flex-wrap:wrap;justify-content:center}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -639,7 +678,9 @@ function renderBoard(st, mode, sel) {
           <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${c === 3 ? '#cfc6b4' : HEX[c]}" stroke-width="3"/>`;
     if (inWar) {
       const att = i === war.attPos, col = att ? '#ff8a5c' : '#7cc4ff';
-      const val = att ? war.attBoard + war.attN : war.defBoard;
+      // сила над лидером учитывает тайлы, которые вы сейчас выбрали в поддержку
+      const mine = state.chosen.size;
+      const val = att ? war.attBoard + (war.attN ?? (me === war.att ? mine : 0)) : war.defBoard + (me === war.def && war.attN !== null ? mine : 0);
       s += `<circle class="pulse" cx="${x}" cy="${y}" r="27" fill="none" stroke="${col}" stroke-width="3.5"/>
             <g transform="translate(${x + 18},${y - 22})"><circle r="13" fill="${col}" stroke="#1b1713" stroke-width="2"/><text y="5" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1713">${val}</text></g>`;
     }
@@ -693,7 +734,7 @@ function renderNow(st, mode, sel) {
       <p>${A} атакует ваше царство. ${state.sent == null ? 'Решаете вы: открыто окно выбора поддержки, партия ждет вашего решения.' : ''}</p>
       ${state.sent != null ? `<p>Вы добавили ${state.sent}. В игре ход уходит на сервер, в макете ничего не отправляется.</p><div class="choices"><button class="choice" id="reopen"><b>Еще раз</b><small>открыть окно войны</small></button></div>` : ''}`;
     const ro = document.getElementById('reopen');
-    if (ro) ro.addEventListener('click', () => { state.sent = null; state.pick = null; render(); });
+    if (ro) ro.addEventListener('click', () => { state.sent = null; state.chosen = new Set(); state.collapsed = false; render(); });
   } else {
     const n = st.tileTargets[sel].length;
     el.innerHTML = `<h3>Сейчас</h3>
@@ -704,7 +745,7 @@ function renderNow(st, mode, sel) {
   }
 }
 
-// ---------- окно конфликта (война, восстание): перекрывает экран, пока не выбрано ----------
+// ---------- окно конфликта: встает справа, поле видно, партия ждет решения ----------
 function supportOptions(c, color, seat, st) {
   // как в движке: при английской поддержке атакующий выкладывает, только если превысит
   // силу защитника на поле, защитник выкладывает ровно до ничьей
@@ -715,66 +756,144 @@ function supportOptions(c, color, seat, st) {
   return out;
 }
 
+const TILEDAT = ['храмам', 'фермам', 'рынкам', 'поселениям'];
+const PLURAL = [['храм', 'храма', 'храмов'], ['ферма', 'фермы', 'ферм'], ['рынок', 'рынка', 'рынков'], ['поселение', 'поселения', 'поселений']];
+function plural(n, c) {
+  const f = PLURAL[c], m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? f[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? f[1] : f[2];
+}
+const POINTS = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'очко' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'очка' : 'очков');
+const LEADERACC = ['жреца', 'фермера', 'торговца', 'царя'];
+const COLADJPL = ['красных', 'синих', 'зеленых', 'черных'];
+
+// итог по слабейшему цвету: сокровища добавляются к слабейшим цветам
+function finalScore(score, treasures) {
+  const v = score.slice();
+  for (let t = 0; t < treasures; t++) v[v.indexOf(Math.min(...v))]++;
+  return Math.min(...v);
+}
+
+function conflictActive(st, mode) {
+  return mode === 'war' && st.toMove === me && st.phase === 'warSupport' && state.sent == null;
+}
+
 function renderModal(st, mode) {
   const box = document.getElementById('modal');
-  const show = mode === 'war' && st.toMove === me && st.phase === 'warSupport' && state.sent == null;
-  box.hidden = !show;
-  if (!show) return;
+  const game = document.getElementById('game');
+  const active = conflictActive(st, mode);
+  game.classList.toggle('conflict', active && !state.collapsed);
+  game.classList.toggle('locked', active);
+  box.hidden = !active;
+  if (!active) return;
   const w = st.ctx.war, color = w.color, isAtt = w.attN === null;
-  const have = st.players[me].hand[color];
+  if (state.collapsed) {
+    box.className = 'modal pill';
+    box.innerHTML = `<span class="dotc" style="background:${HEX[color]}"></span><b>Война за ${COLNAME[color]}</b><span>Партия ждет вашего решения</span><button class="btn primary" id="expand">Развернуть</button>`;
+    box.querySelector('#expand').addEventListener('click', () => { state.collapsed = false; render(); });
+    return;
+  }
+  box.className = 'modal dock';
+  const pl = st.players[me];
   const legal = supportOptions(w, color, me, st);
-  const attTot = w.attBoard + (w.attN ?? 0);
-  const pick = state.pick;
-  const myTot = (isAtt ? w.attBoard : w.defBoard) + (pick ?? 0);
+  const chosen = state.chosen;
+  const n = chosen.size;
+  const ok = legal.includes(n);
+  const attAdd = isAtt ? n : w.attN, defAdd = isAtt ? null : n;
+  const attTot = w.attBoard + attAdd, defTot = w.defBoard + (defAdd ?? 0);
   const opp = isAtt ? w.def : w.att;
-  const sideBox = (p, role, board, add, total, cls, mine) => `
-    <div class="sbox ${cls}">
-      <div class="role">${role}</div>
-      <div class="stok" style="border-color:${HEX[color]};background-image:url(${tok(p, color)})"></div>
-      <div class="who">${mine ? 'Вы' : SEATS[p].name}</div>
-      <div class="nums"><span>на поле</span><b>${board}</b><span>из руки</span><b>${add}</b><span>итого</span><b class="tot">${total}</b></div>
+  const img = IMG[TILEIMG[color]];
+  const tiles = (k, cls = '') => Array.from({ length: k }, () => `<i class="mt ${cls}" style="background-image:url(${img})"></i>`).join('');
+
+  const side = (p, role, cls, board, add, total, mine, waiting) => `
+    <div class="sbox ${cls}${mine ? ' mine' : ''}">
+      <div class="shead">
+        <div class="stok" style="border-color:${HEX[color]};background-image:url(${tok(p, color)})"></div>
+        <div class="sname"><span class="role">${role}</span><b>${mine ? 'Вы' : SEATS[p].name}</b></div>
+        <div class="stot">${waiting ? `${board}<small>+?</small>` : total}</div>
+      </div>
+      <div class="trow"><span>на поле</span><div class="tiles">${tiles(board)}</div></div>
+      <div class="trow"><span>из руки</span><div class="tiles add">${
+        waiting ? '<em>ответит после вас</em>'
+        : add > 0 ? tiles(add, 'sent')
+        : mine ? '<em>нажмите тайлы в руке ниже</em>' : '<em>ничего</em>'}</div></div>
     </div>`;
-  let outcome = 'Выберите, сколько добавить.';
-  if (pick != null) {
-    if (isAtt) {
-      outcome = `Будет ${myTot} против ${w.defBoard} на поле у защитника, он еще ответит из руки.`;
-    } else {
-      const defWins = myTot >= attTot, tie = myTot === attTot;
-      outcome = `Будет ${attTot} против ${myTot}: `
-        + (defWins ? `${tie ? 'ничья, а при ничьей побеждает защитник, ' : ''}побеждаете вы.` : `побеждает ${SEATS[opp].name}. Ваш ${LEADER[color]} уходит с поля, ${SEATS[opp].name} получает очки.`);
-    }
+
+  let hand = '', k = 0;
+  for (let c = 0; c < 4; c++) for (let j = 0; j < pl.hand[c]; j++, k++) {
+    const on = chosen.has(k), usable = c === color;
+    hand += `<button class="ht2${on ? ' on' : ''}${usable ? '' : ' off'}" data-k="${k}" ${usable ? '' : 'disabled'} title="${TILE[c]}" style="background-image:url(${IMG[TILEIMG[c]]})">${on ? '<span>в бой</span>' : ''}</button>`;
   }
-  const btns = [];
-  for (let n = 0; n <= have; n++) {
-    const ok = legal.includes(n);
-    btns.push(`<button class="${pick === n ? 'on' : ''}" data-n="${n}"${ok ? '' : ' disabled title="при английской поддержке недоступно"'}>${n}</button>`);
-  }
-  const cause = st.ctx.kind === 'tile' && st.ctx.unite ? `${SEATS[st.cur].name} объединил два царства тайлом на ${cellName(st.ctx.pos)}.` : '';
+
+  // что важно для решения: мешок, сокровища до конца, свои очки и итог по слабейшему
+  const bagLeft = st.bag.reduce((a, b) => a + b, 0);
+  const bagStart = 153 - POS.layout.temples.length;
+  const out = Math.round((1 - bagLeft / bagStart) * 100);
+  const treasuresLeft = st.treasure.reduce((a, b) => a + b, 0);
+  const myFinal = finalScore(pl.score, pl.treasures);
+  const minC = Math.min(...pl.score);
+  const chips = pl.score.map((v, c) => `<span class="${v === minC ? 'weak' : ''}" style="background:${HEX[c]}" title="${COLNAME[c]}">${v}</span>`).join('');
+
+  // точный исход каждого варианта (считает движок; в игре это делает сервер)
+  const rows = legal.map((opt) => {
+    const P = POS.warPreview && POS.warPreview[opt];
+    if (!P) return '';
+    const iWin = P.winner === me;
+    const gain = P.warScore.filter((x) => x.p === me).reduce((a, x) => a + x.n, 0);
+    const oppGain = P.warScore.filter((x) => x.p !== me).reduce((a, x) => a + x.n, 0);
+    const after = pl.score.slice(); after[color] += gain;
+    const fin = finalScore(after, pl.treasures);
+    const lost = P.removedTiles;
+    const label = opt === 0 ? 'Не добавлять' : `Добавить ${opt}`;
+    const text = iWin
+      ? `побеждаете вы: +${gain} ${COLADJPL[color]}, ваш ${COLNAME[color]} ${pl.score[color]} → ${after[color]}. ${SEATS[opp].name} теряет ${LEADERACC[color]} и ${lost} ${plural(lost, color)}.`
+      : `побеждает ${SEATS[opp].name}, ему +${oppGain} ${COLADJPL[color]}. Вы теряете ${LEADERACC[color]} и ${lost} ${plural(lost, color)}.`;
+    const finText = fin === myFinal ? `итог по слабейшему не меняется: ${fin}` : `итог по слабейшему: ${myFinal} → ${fin}`;
+    return `<div class="orow${n === opt ? ' on' : ''}${iWin ? ' win' : ' lose'}"><b>${label}</b><span>${text}</span><small>${finText}</small></div>`;
+  }).join('');
+
+  const allowed = legal.filter((x) => x > 0);
+  const rule = POS.cfgEnglish
+    ? `Английская поддержка: ${isAtt ? 'атакующий добавляет, только если превысит защитника' : 'защитник добавляет ровно столько, чтобы сравнять'}${allowed.length ? `, сейчас можно ${allowed.join(' или ')}` : ', сейчас добавить нельзя'}.`
+    : '';
+  const cause = st.ctx.kind === 'tile' && st.ctx.unite ? `${SEATS[st.cur].name} объединил два царства тайлом на ${cellName(st.ctx.pos)}. ` : '';
   const who = isAtt ? `Вы атакуете ${GEN[SEATS[opp].name] || SEATS[opp].name}.` : `${SEATS[opp].name} атакует, вы защищаетесь.`;
-  box.innerHTML = `<div class="mcard" role="dialog" aria-modal="true" aria-label="Война">
-    <h2><i style="background:${HEX[color]}"></i>Война за ${COLNAME[color]}</h2>
-    <p class="msub">${cause} ${who} Считаются ${TILEPL[color]}.</p>
+
+  box.innerHTML = `<div class="mcard" role="dialog" aria-label="Война">
+    <div class="mtop">
+      <h2><i style="background:${HEX[color]}"></i>Война за ${COLNAME[color]}</h2>
+      <button class="peekbtn" id="collapse">Свернуть</button>
+    </div>
+    <p class="msub">${cause}${who} Сила по ${TILEDAT[color]}, стороны подсвечены на поле.</p>
     <div class="sides">
-      ${sideBox(w.att, 'атака', w.attBoard, isAtt ? (pick ?? '?') : '+' + w.attN, isAtt ? myTot : attTot, 'att', isAtt)}
-      <div class="vsmark">против</div>
-      ${sideBox(w.def, 'защита', w.defBoard, isAtt ? 'ждет' : (pick ?? '?'), isAtt ? w.defBoard + ' +?' : myTot, 'def', !isAtt)}
+      ${side(w.att, 'атака', 'att', w.attBoard, attAdd, attTot, isAtt, false)}
+      ${side(w.def, 'защита', 'def', w.defBoard, defAdd, defTot, !isAtt, isAtt)}
     </div>
-    <div class="hand-line">У вас в руке ${TILEPL[color]}: <b>${have}</b>. Сколько добавить?</div>
-    <div class="pick">${btns.join('')}</div>
-    ${POS.cfgEnglish ? `<div class="rule">Английская поддержка: ${isAtt ? 'атакующий добавляет, только если превысит защитника' : 'защитник добавляет ровно столько, чтобы сравнять'}. Остальные числа недоступны.</div>` : ''}
-    <div class="outcome">${outcome}</div>
+    <div class="myhand">
+      <div class="hl2">Ваша рука, ${pl.hand.reduce((a, b) => a + b, 0)} тайлов. Нажмите ${TILEPL[color]}, которые отправляете в поддержку:</div>
+      <div class="htiles">${hand}</div>
+      ${rule ? `<div class="rule${ok ? '' : ' bad'}">${ok ? rule : `Так нельзя. ${rule}`}</div>` : ''}
+    </div>
+    <div class="facts">
+      <div><span>Мешок</span><b>${bagLeft}</b><small>из ${bagStart}, вышло ${out}%</small></div>
+      <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при 2</small></div>
+      <div class="ms"><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
+    </div>
+    <div class="orows">${rows}</div>
     <div class="mfoot">
-      <button class="btn peekbtn" id="peek">Удерживайте, чтобы посмотреть поле</button>
-      <button class="btn primary" id="send"${pick == null ? ' disabled' : ''}>${pick == null ? 'Выберите число' : `Отправить: добавить ${pick}`}</button>
+      <button class="btn" id="zero">Не добавлять</button>
+      <button class="btn primary" id="send"${n > 0 && ok ? '' : ' disabled'}>${n > 0 ? `Отправить ${n} ${plural(n, color)}` : 'Выберите тайлы в руке'}</button>
+      <div class="mnote">Пока вы не решите, партия стоит.</div>
     </div>
-    <div class="mnote">Пока вы не решите, партия стоит.</div>
   </div>`;
-  box.querySelectorAll('.pick button').forEach((b) => b.addEventListener('click', () => { state.pick = +b.dataset.n; renderModal(st, mode); }));
-  const peek = box.querySelector('#peek');
-  const on = () => box.classList.add('peek'), off = () => box.classList.remove('peek');
-  peek.addEventListener('pointerdown', on);
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach((e) => peek.addEventListener(e, off));
-  box.querySelector('#send').addEventListener('click', () => { if (state.pick == null) return; state.sent = state.pick; render(); });
+
+  box.querySelectorAll('.ht2:not(.off)').forEach((b) => b.addEventListener('click', () => {
+    const key = +b.dataset.k;
+    if (chosen.has(key)) chosen.delete(key); else chosen.add(key);
+    render();
+  }));
+  box.querySelector('#collapse').addEventListener('click', () => { state.collapsed = true; render(); });
+  box.querySelector('#zero').addEventListener('click', () => { state.sent = 0; render(); });
+  box.querySelector('#send').addEventListener('click', () => { if (n > 0 && ok) { state.sent = n; render(); } });
 }
 
 // ---------- журнал ----------
@@ -889,7 +1008,7 @@ function renderLobby() {
 }
 
 // ---------- режимы ----------
-const state = { mode: 'war', sel: 1, order: 'loser', mon: 2, pick: null, sent: null };
+const state = { mode: 'war', sel: 1, order: 'loser', mon: 2, chosen: new Set(), sent: null, collapsed: false };
 function render() {
   document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
   document.querySelectorAll('#monsel button').forEach((b) => b.classList.toggle('on', +b.dataset.v === state.mon));
@@ -914,7 +1033,7 @@ function render() {
   document.getElementById('log').innerHTML = journal(state.mode === 'war' ? POS.events.length : POS.turnEventsAt);
   renderHand(st, state.mode, sel ?? -1);
 }
-document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; state.pick = null; state.sent = null; render(); }));
+document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; state.chosen = new Set(); state.sent = null; state.collapsed = false; render(); }));
 document.querySelectorAll('#monsel button').forEach((b) => b.addEventListener('click', () => { state.mon = +b.dataset.v; render(); }));
 document.getElementById('camT').addEventListener('click', (e) => { const g = document.getElementById('cams'); g.hidden = !g.hidden; e.target.textContent = g.hidden ? 'Развернуть' : 'Свернуть'; });
 document.getElementById('log').addEventListener('click', (e) => {
