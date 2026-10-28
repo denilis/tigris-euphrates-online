@@ -1,8 +1,9 @@
 // Единственная функция Vercel: все запросы /api/* приходят сюда (rewrite в vercel.json,
-// путь в параметре route). Фаза 0: только проверочный маршрут ping.
-import { createGame, legalMoves, applyMove, validate } from '../game/vendor/engine/engine.js';
-import { BOARDS } from '../game/vendor/engine/boards.js';
-import { ENGINE } from '../game/vendor/version.js';
+// путь в параметре route) и уходят в server/routes.js. Без Upstash работает только
+// локально (хранилище в памяти): на Vercel память функции не переживает вызовы.
+import { createApp } from '../server/routes.js';
+import { memoryStore } from '../server/store-memory.js';
+import { redisStore, upstashFromEnv } from '../server/store-redis.js';
 
 function send(res, status, body) {
   res.statusCode = status;
@@ -10,33 +11,47 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-// Одна случайная партия движком: проверяет, что копия движка попала в сборку функции,
-// и сколько времени у функции занимает работа движка.
-function smokeGame() {
-  const t0 = performance.now();
-  const s = createGame({ layout: BOARDS.advanced, numPlayers: 4, cfg: { englishSupport: true, buildings: true, wonder: true } }, Math.random);
-  let steps = 0;
-  while (!s.over && steps < 5000) {
-    const moves = legalMoves(s);
-    applyMove(s, moves[Math.floor(Math.random() * moves.length)], Math.random);
-    steps++;
-  }
-  return { steps, valid: validate(s).length === 0, over: s.over, ms: Math.round(performance.now() - t0) };
+async function readBody(req) {
+  // Vercel сам разбирает JSON в req.body; локальный сервер отдаёт поток
+  if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  return raw ? JSON.parse(raw) : {};
 }
 
-export default function handler(req, res) {
-  const url = new URL(req.url, 'http://localhost');
-  const route = (url.searchParams.get('route') || url.pathname.replace(/^\/api\/?/, '')).replace(/^\/+|\/+$/g, '');
-  if (route === 'ping') {
-    return send(res, 200, {
-      ok: true,
-      env: process.env.VERCEL_ENV || 'local',
-      region: process.env.VERCEL_REGION || null,
-      node: process.version,
-      engine: ENGINE.commit.slice(0, 7),
-      route,
-      smoke: smokeGame(),
-    });
-  }
-  return send(res, 404, { ok: false, error: `Нет такого адреса: /api/${route}` });
+/** Обработчик с заданным окружением (тесты подставляют своё). */
+export function makeHandler(env, store) {
+  const exec = upstashFromEnv(env);
+  const onVercel = Boolean(env.VERCEL_ENV);
+  const app = createApp({
+    store: store || (exec ? redisStore({ exec, prefix: `${env.VERCEL_ENV || 'local'}:` }) : memoryStore()),
+    env,
+  });
+  return async function handler(req, res) {
+    const url = new URL(req.url, 'http://localhost');
+    const route = url.searchParams.get('route') ?? url.pathname.replace(/^\/api\/?/, '');
+    url.searchParams.delete('route');
+    if (onVercel && !exec && !store && route !== 'ping') {
+      return send(res, 503, { error: 'no-db', message: 'База не подключена: добавьте Upstash Redis в проект Vercel' });
+    }
+    let body = {};
+    if (req.method === 'POST') {
+      try {
+        body = await readBody(req);
+      } catch {
+        return send(res, 400, { error: 'bad-json', message: 'Неверный запрос' });
+      }
+    }
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token });
+    send(res, r.status, r.body);
+  };
+}
+
+let handler = null;
+export default function vercelHandler(req, res) {
+  handler ??= makeHandler(process.env);
+  return handler(req, res);
 }

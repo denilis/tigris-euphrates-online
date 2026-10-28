@@ -47,10 +47,10 @@ async function check() {
     const r = await fetch('/api/ping', { cache: 'no-store' });
     const d = await r.json();
     const ms = Math.round(performance.now() - t0);
-    if (!r.ok || !d.ok || !d.smoke.valid) throw new Error('ответ ' + r.status);
+    if (!r.ok || !d.ok) throw new Error('ответ ' + r.status);
     row.className = 'row ok';
     text.textContent = 'Сервер отвечает, ответ за ' + ms + ' мс';
-    tech.textContent = 'регион ' + (d.region || 'локально') + ', движок ' + d.engine + ', тестовая партия движком за ' + d.smoke.ms + ' мс';
+    tech.textContent = 'регион ' + (d.region || 'локально') + ', движок ' + d.engine + ', база ' + (d.store === 'redis' ? 'подключена' : 'не подключена');
   } catch (e) {
     row.className = 'row bad';
     text.textContent = 'Сервер не ответил. Напишите Денису';
