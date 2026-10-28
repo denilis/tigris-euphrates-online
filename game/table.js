@@ -1,0 +1,317 @@
+// Стол: лобби, старт, приём хода, конец партии, реванш. Чистые функции над JSON-документом
+// стола (без сети и базы): серверный слой читает документ, вызывает функцию и пишет его
+// обратно, если версия не изменилась. Каждая успешная правка увеличивает version.
+import { createGame, legalMoves, applyMove, validate, finalVector } from './vendor/engine/engine.js';
+import { BOARDS } from './vendor/engine/boards.js';
+import { STYLE_LABELS } from './vendor/bot/styles.js';
+import { stateFromJSON, stateToJSON } from './serialize.js';
+import { cryptoRng } from './random.js';
+import { playOrder, companyKey, placesFromVectors } from './order.js';
+import { journalEntries } from './journal.js';
+
+export class TableError extends Error {
+  constructor(code, message, status = 400) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+const fail = (code, message, status) => {
+  throw new TableError(code, message, status);
+};
+
+export const HEROES = ['lion', 'bull', 'bow', 'pot'];
+const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётся герой с конца, людям остаётся лев
+export const DEFAULT_OPTIONS = { board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser' };
+// стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
+export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
+
+const OPTION_CHECKS = {
+  board: (v) => v in BOARDS,
+  englishSupport: (v) => typeof v === 'boolean',
+  buildings: (v) => typeof v === 'boolean',
+  wonder: (v) => typeof v === 'boolean',
+  openScore: (v) => typeof v === 'boolean',
+  order: (v) => ['loser', 'random', 'custom'].includes(v),
+};
+const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
+const BOT_CHECKS = {
+  style: (v) => v in STYLE_LABELS && v !== 'mix',
+  strength: intIn(0, 100),
+  counting: (v) => ['none', 'approx', 'exact'].includes(v),
+  risk: intIn(0, 100),
+  errors: intIn(0, 30),
+};
+
+function touch(t, now) {
+  t.version++;
+  t.updatedAt = now;
+}
+
+export function seatOfUser(t, userId) {
+  return t.seats.find((s) => s.kind === 'human' && s.userId === userId) || null;
+}
+const seatById = (t, id) => t.seats.find((s) => s.id === id) || fail('no-seat', 'Нет такого места', 404);
+const needLobby = (t) => t.status === 'lobby' || fail('not-lobby', 'Партия уже началась', 409);
+const needHost = (t, userId) => userId === t.hostUserId || fail('not-host', 'Это может сделать только хозяин стола', 403);
+const needSeated = (t, userId) => seatOfUser(t, userId) || fail('not-seated', 'Вы не сидите за этим столом', 403);
+
+function botHero(t) {
+  return BOT_HEROES.find((h) => !t.seats.some((s) => s.hero === h)) || null;
+}
+function botName(t) {
+  const n = t.seats.filter((s) => s.kind === 'bot').length;
+  return n ? `Бот ${n + 1}` : 'Бот';
+}
+const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, hero: null });
+function makeBot(t, id) {
+  return { id, kind: 'bot', userId: null, name: botName(t), hero: botHero(t), bot: { ...DEFAULT_BOT } };
+}
+
+// --- Лобби
+
+/** Новый стол: хост на первом месте, ещё два места для людей и бот. */
+export function createTable({ code, host, now }) {
+  const t = {
+    code, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
+    hostUserId: host.userId, options: { ...DEFAULT_OPTIONS }, seats: [], game: null, next: null,
+  };
+  t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, hero: null }, emptyHuman(1), emptyHuman(2));
+  t.seats.push(makeBot(t, 3));
+  return t;
+}
+
+export function sit(t, user, seatId, now) {
+  needLobby(t);
+  const seat = seatById(t, seatId);
+  if (seat.kind === 'bot') fail('seat-is-bot', 'Это место бота', 409);
+  if (seatOfUser(t, user.userId)) fail('already-seated', 'Вы уже сидите за этим столом', 409);
+  if (seat.userId) fail('seat-taken', 'Место занято', 409);
+  seat.userId = user.userId;
+  seat.name = user.name;
+  touch(t, now);
+}
+
+export function leave(t, userId, now) {
+  needLobby(t);
+  const seat = needSeated(t, userId);
+  Object.assign(seat, emptyHuman(seat.id));
+  // ушёл хост: стол переходит к следующему сидящему человеку
+  if (userId === t.hostUserId) {
+    const next = t.seats.find((s) => s.kind === 'human' && s.userId);
+    if (next) t.hostUserId = next.userId;
+  }
+  touch(t, now);
+}
+
+export function setHero(t, userId, seatId, hero, now) {
+  needLobby(t);
+  if (!HEROES.includes(hero)) fail('bad-hero', 'Нет такого героя');
+  const seat = seatById(t, seatId);
+  if (seat.kind === 'bot') needHost(t, userId);
+  else if (seat.userId !== userId) fail('not-your-seat', 'Героя выбирает тот, кто сидит на месте', 403);
+  if (t.seats.some((s) => s !== seat && s.hero === hero)) fail('hero-taken', 'Этот герой уже занят', 409);
+  seat.hero = hero;
+  touch(t, now);
+}
+
+export function setOptions(t, userId, patch, now) {
+  needLobby(t);
+  needHost(t, userId);
+  for (const [k, v] of Object.entries(patch)) {
+    if (!(k in OPTION_CHECKS) || !OPTION_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка ${k}`);
+  }
+  Object.assign(t.options, patch);
+  touch(t, now);
+}
+
+export function setSeatCount(t, userId, n, now) {
+  needLobby(t);
+  needHost(t, userId);
+  if (!Number.isInteger(n) || n < 2 || n > 4) fail('bad-seat-count', 'За столом от 2 до 4 мест');
+  if (n < t.seats.length) {
+    if (t.seats.slice(n).some((s) => s.kind === 'human' && s.userId)) fail('seat-occupied', 'Убрать можно только свободные места', 409);
+    t.seats = t.seats.slice(0, n);
+  }
+  while (t.seats.length < n) {
+    let id = 0;
+    while (t.seats.some((s) => s.id === id)) id++;
+    t.seats.push(emptyHuman(id));
+  }
+  touch(t, now);
+}
+
+export function setSeatKind(t, userId, seatId, kind, now) {
+  needLobby(t);
+  needHost(t, userId);
+  if (kind !== 'human' && kind !== 'bot') fail('bad-option', 'Место бывает «человек» или «бот»');
+  const seat = seatById(t, seatId);
+  if (seat.kind === kind) return;
+  if (seat.kind === 'human' && seat.userId) fail('seat-occupied', 'Место занято человеком', 409);
+  const i = t.seats.indexOf(seat);
+  t.seats[i] = kind === 'bot' ? makeBot(t, seat.id) : emptyHuman(seat.id);
+  touch(t, now);
+}
+
+export function setBot(t, userId, seatId, settings, now) {
+  needLobby(t);
+  needHost(t, userId);
+  const seat = seatById(t, seatId);
+  if (seat.kind !== 'bot') fail('not-bot', 'Это место не бота');
+  for (const [k, v] of Object.entries(settings)) {
+    if (!(k in BOT_CHECKS) || !BOT_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка бота ${k}`);
+  }
+  Object.assign(seat.bot, settings);
+  touch(t, now);
+}
+
+/** Ручная очерёдность: хост переставляет места, порядок сверху вниз = порядок хода. */
+export function moveSeat(t, userId, seatId, toIndex, now) {
+  needLobby(t);
+  needHost(t, userId);
+  const seat = seatById(t, seatId);
+  if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex >= t.seats.length) fail('bad-option', 'Нет такой позиции');
+  t.seats.splice(t.seats.indexOf(seat), 1);
+  t.seats.splice(toIndex, 0, seat);
+  touch(t, now);
+}
+
+// --- Партия
+
+/**
+ * Начать партию. last — запись истории прошлой партии этой компании (или null),
+ * orderMode — переопределить очерёдность (реванш всегда «проигравший первым»).
+ */
+export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMode } = {}) {
+  needLobby(t);
+  needSeated(t, userId);
+  const ready = t.seats.length >= 2 && t.seats.length <= 4
+    && t.seats.every((s) => s.hero && (s.kind === 'bot' || s.userId));
+  if (!ready) fail('seats-not-ready', 'Не все места заняты или не у всех выбран герой', 409);
+  const ord = playOrder(t.seats, orderMode || t.options.order, { last, rng });
+  const cfg = { englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder };
+  const s = createGame({ layout: BOARDS[t.options.board], numPlayers: t.seats.length, cfg }, rng);
+  t.game = {
+    id: `${t.code}-${now}`,
+    order: ord.order,
+    orderReason: ord.reason,
+    state: stateToJSON(s),
+    toMove: ord.order[s.toMove],
+    log: [],
+    startedAt: now,
+    result: null,
+  };
+  t.status = 'playing';
+  touch(t, now);
+}
+
+const canon = (m) => JSON.stringify(m, Object.keys(m).sort());
+
+function needTurn(t, seatId) {
+  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  const s = stateFromJSON(t.game.state);
+  if (s.toMove !== t.game.order.indexOf(seatId)) fail('not-your-move', 'Сейчас решает другой игрок', 409);
+  return s;
+}
+
+/** Ход человека: номер хода из списка допустимых и версия стола, которую он видел. */
+export function submit(t, userId, { version, index } = {}, { rng = cryptoRng(), now } = {}) {
+  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  const seat = needSeated(t, userId);
+  if (version !== t.version) fail('stale', 'Стол уже изменился, обновите', 409);
+  const s = needTurn(t, seat.id);
+  const legal = legalMoves(s);
+  if (!Number.isInteger(index) || index < 0 || index >= legal.length) fail('bad-move', 'Такого хода нет');
+  return applyLegal(t, s, legal[index], rng, now);
+}
+
+/** Ход за место (бот): объект хода должен совпасть с одним из допустимых. */
+export function submitSeat(t, seatId, move, { rng = cryptoRng(), now } = {}) {
+  const s = needTurn(t, seatId);
+  const legal = legalMoves(s);
+  const key = move && typeof move === 'object' ? canon(move) : null;
+  const i = key ? legal.findIndex((m) => canon(m) === key) : -1;
+  if (i < 0) fail('bad-move', 'Такого хода нет');
+  return applyLegal(t, s, legal[i], rng, now);
+}
+
+function applyLegal(t, s, move, rng, now) {
+  const g = t.game;
+  const meta = { turn: s.turn, cur: s.cur, action: s.actionNo };
+  s.log = [];
+  applyMove(s, move, rng);
+  const errs = validate(s);
+  if (errs.length) fail('engine', 'Нарушена целостность партии: ' + errs.join('; '), 500);
+  const entries = journalEntries(s.log, g.order, meta);
+  g.log.push(...entries);
+  g.state = stateToJSON(s);
+  g.toMove = s.over ? null : g.order[s.toMove];
+  if (s.over) finish(t, s, now);
+  touch(t, now);
+  return { entries };
+}
+
+function finish(t, s, now) {
+  const vectors = s.players.map(finalVector);
+  const places = placesFromVectors(vectors);
+  t.game.result = {
+    endReason: s.endReason,
+    finishedAt: now,
+    seats: s.players.map((pl, p) => ({
+      seatId: t.game.order[p], place: places[p], vector: vectors[p], score: [...pl.score], treasures: pl.treasures,
+    })),
+  };
+  t.status = 'over';
+}
+
+/** Место бота, если сейчас решает бот; иначе null. */
+export function botDue(t) {
+  if (t.status !== 'playing' || t.game.toMove == null) return null;
+  const seat = t.seats.find((s) => s.id === t.game.toMove);
+  return seat && seat.kind === 'bot' ? seat.id : null;
+}
+
+/** Запись истории законченной партии (для «проигравший первым» и разборов). */
+export function historyEntry(t) {
+  if (t.status !== 'over' || !t.game.result) fail('not-over', 'Партия не закончена', 409);
+  const r = t.game.result;
+  return {
+    id: t.game.id,
+    finishedAt: r.finishedAt,
+    company: companyKey(t.seats.filter((s) => s.kind === 'human').map((s) => s.userId)),
+    board: t.options.board,
+    seats: r.seats.map((x) => {
+      const seat = seatById(t, x.seatId);
+      return {
+        seatId: x.seatId, kind: seat.kind, userId: seat.kind === 'human' ? seat.userId : null,
+        name: seat.name, hero: seat.hero, place: x.place, vector: x.vector,
+      };
+    }),
+  };
+}
+
+/**
+ * «Ещё партию»: тот же состав, герои и правила, первым ходит последнее место.
+ * Если реванш уже создан (нажали двое), возвращает его код и created = null.
+ */
+export function rematch(t, userId, { code, rng = cryptoRng(), now }) {
+  if (t.status !== 'over') fail('not-over', 'Партия ещё не закончена', 409);
+  needSeated(t, userId);
+  if (t.next) return { code: t.next, created: null };
+  const n = {
+    code, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
+    hostUserId: t.hostUserId, options: { ...t.options }, seats: structuredClone(t.seats), game: null, next: null,
+  };
+  start(n, userId, { last: historyEntry(t), rng, now, orderMode: 'loser' });
+  t.next = code;
+  touch(t, now);
+  return { code, created: n };
+}
+
+/** Закрыть стол без итога (игрок пропал, передумали): в историю не идёт. */
+export function close(t, userId, now) {
+  needHost(t, userId);
+  if (t.status === 'over' || t.status === 'closed') fail('not-playing', 'Стол уже закрыт или партия окончена', 409);
+  t.status = 'closed';
+  touch(t, now);
+}
