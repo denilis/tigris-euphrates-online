@@ -184,7 +184,8 @@ export function moveSeat(t, userId, seatId, toIndex, now) {
  */
 export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMode } = {}) {
   needLobby(t);
-  needSeated(t, userId);
+  // начать может любой сидящий человек или хост (хост может посадить одних ботов и смотреть)
+  if (userId !== t.hostUserId) needSeated(t, userId);
   const ready = t.seats.length >= 2 && t.seats.length <= 4
     && t.seats.every((s) => s.hero && (s.kind === 'bot' || s.userId));
   if (!ready) fail('seats-not-ready', 'Не все места заняты или не у всех выбран герой', 409);
