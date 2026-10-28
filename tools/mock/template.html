@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет экрана партии</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#1b1713; --frame:#14110e; --card:#2a2119; --card2:#33281e; --line:#4a3b2b;
+  --text:#e8dcc4; --muted:#a8987c; --gold:#e0b65a; --gold2:#b8903e;
+  --red:#b8432f; --blue:#2d6a93; --green:#3d7a46; --black:#1f1f1f;
+  --att:#ff8a5c; --def:#7cc4ff;
+  --mockbar:28px; --top:52px; --hand:118px; --side:300px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+.mockbar{height:var(--mockbar);display:flex;align-items:center;gap:10px;padding:0 12px;background:#3b2a12;color:#f3d99a;font-size:12.5px;border-bottom:1px solid #6b4f1f}
+.mockbar b{letter-spacing:.06em}
+.mockbar .tabs{margin-left:auto;display:flex;gap:4px}
+.mockbar .tabs button{background:transparent;border:1px solid #8a6a2c;border-radius:4px;padding:1px 10px;font-size:12.5px}
+.mockbar .tabs button.on{background:var(--gold);color:#1b1713;border-color:var(--gold);font-weight:600}
+.mockbar .note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+/* ---------- экран партии ---------- */
+.app{height:calc(100dvh - var(--mockbar));display:grid;grid-template-columns:minmax(0,1fr) var(--side);grid-template-rows:var(--top) minmax(0,1fr) var(--hand);grid-template-areas:"top top" "board side" "hand hand"}
+.top{grid-area:top;display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--frame);border-bottom:1px solid var(--line);min-width:0}
+.brand{font-family:Cinzel,Georgia,serif;font-weight:700;font-size:18px;color:var(--gold);letter-spacing:.05em;white-space:nowrap}
+.code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12.5px;white-space:nowrap}
+.code b{color:var(--gold);letter-spacing:.1em}
+.badges{display:flex;gap:6px;flex-wrap:wrap;min-width:0;overflow:hidden;max-height:24px}
+.badge{font-size:11.5px;border:1px solid var(--gold2);color:var(--gold);border-radius:20px;padding:1px 9px;white-space:nowrap}
+.meta{margin-left:auto;display:flex;gap:14px;white-space:nowrap;color:var(--muted)}
+.meta b{color:var(--text)}
+.nav{display:flex;gap:6px}
+.nav button{background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 11px;min-height:34px}
+.nav button:hover{border-color:var(--gold2)}
+
+.boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
+#board{width:100%;height:100%;display:block}
+.cell-hit{fill:transparent;cursor:pointer}
+.cell-hit:hover{fill:rgba(255,236,190,.18)}
+.target{fill:rgba(255,228,150,.20);stroke:rgba(240,200,110,.95);stroke-width:1.6;stroke-dasharray:5 4;animation:breathe 1.8s ease-in-out infinite}
+@keyframes breathe{50%{fill:rgba(255,228,150,.34)}}
+.pulse{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{50%{stroke-width:7;stroke-opacity:.35}}
+
+.side{grid-area:side;min-height:0;overflow-y:auto;display:flex;flex-direction:column;background:var(--frame);border-left:1px solid var(--line)}
+.side section{border-bottom:1px solid var(--line);padding:10px 12px}
+.side h3{margin:0 0 7px;font:600 11px/1 "Segoe UI",sans-serif;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between}
+.side h3 button{background:none;border:0;color:var(--muted);font-size:11px;letter-spacing:0;text-transform:none;padding:0}
+.cams .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cams .cam{aspect-ratio:16/10;background:repeating-linear-gradient(135deg,#221b14 0 8px,#261e16 8px 16px);border:1px solid var(--line);border-radius:6px;display:flex;align-items:flex-end;padding:4px 6px;font-size:11px;color:var(--muted)}
+.players{display:flex;flex-direction:column;gap:6px}
+.pc{background:var(--card);border:1px solid transparent;border-radius:8px;padding:7px 9px;display:grid;grid-template-columns:34px 1fr auto;gap:2px 8px;align-items:center}
+.pc.active{border-color:var(--gold2)}
+.pc.deciding{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 0 14px rgba(224,182,90,.25)}
+.pc .av{grid-row:span 2;width:34px;height:34px;border-radius:50%;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.pc .nm{font-weight:600;display:flex;gap:6px;align-items:center;min-width:0}
+.pc .nm small{font-weight:400;color:var(--muted)}
+.tag{font-size:10.5px;border-radius:4px;padding:0 5px;background:#4a3b2b;color:var(--text);font-weight:500}
+.tag.gold{background:var(--gold);color:#1b1713}
+.pc .tm{font-variant-numeric:tabular-nums;color:var(--gold);font-size:13px}
+.pc .row{grid-column:2 / 4;display:flex;gap:7px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap}
+.cnt{display:inline-flex;align-items:center;gap:3px;font-weight:600;color:var(--text)}
+.cnt .coin{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff2b8,#e8b84a 45%,#8a5f17);box-shadow:0 0 0 1px #6b4a12}
+.cnt .cat{width:13px;height:13px;border-radius:2px;background-size:cover}
+.dots{display:flex;gap:3px}
+.dot{width:11px;height:11px;border-radius:50%;border:2px solid}
+.sc{display:flex;gap:3px;margin-left:auto}
+.sc span{min-width:19px;text-align:center;border-radius:4px;color:#fff;font-weight:600;font-size:12px;padding:0 3px}
+.now{background:linear-gradient(180deg,#2c2218,#1f1913)}
+.now .title{font-family:Cinzel,Georgia,serif;font-weight:700;color:var(--gold);font-size:15px;margin-bottom:4px}
+.now p{margin:0 0 6px;font-size:13px}
+.now .vs{display:flex;gap:8px;margin:6px 0 8px}
+.now .vs div{flex:1;background:var(--card);border-radius:6px;padding:5px 8px;font-size:12px}
+.now .vs b{font-size:20px;display:block;line-height:1.1}
+.now .vs .a b{color:var(--att)} .now .vs .d b{color:var(--def)}
+.choices{display:flex;gap:6px;flex-wrap:wrap}
+.choice{flex:1 1 0;min-width:0;min-height:52px;border-radius:8px;border:1px solid var(--gold2);background:var(--card2);padding:4px 10px;text-align:left}
+.choice b{display:block;font-size:20px;color:var(--gold);line-height:1.1}
+.choice small{color:var(--muted);font-size:11px}
+.choice:hover{background:#3d3024}
+.choice[disabled]{opacity:.35;cursor:not-allowed}
+.small{font-size:11.5px;color:var(--muted);margin-top:6px}
+.log{flex:1;min-height:140px;overflow:auto}
+.log ol{list-style:none;margin:0;padding:0;font-size:12.5px}
+.log li{padding:3px 0;border-bottom:1px dashed #3a2e22;display:grid;grid-template-columns:24px 1fr;gap:4px;cursor:pointer}
+.log li:hover{color:#fff}
+.log li i{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
+.log li u{text-decoration:none;font-weight:600}
+
+.hand{grid-area:hand;background:var(--frame);border-top:1px solid var(--line);display:flex;flex-direction:column;padding:6px 14px 8px;gap:6px;min-width:0}
+.hint{font-size:13px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow{display:flex;align-items:flex-end;gap:18px;min-width:0}
+.grp{display:flex;flex-direction:column;gap:3px}
+.grp>span{font-size:10.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.grp .items{display:flex;gap:6px}
+.ht{width:58px;height:58px;border-radius:6px;background-size:cover;border:0;padding:0;box-shadow:0 2px 5px rgba(0,0,0,.6);transition:transform .15s}
+.ht:hover{transform:translateY(-3px)}
+.ht.sel{transform:translateY(-8px);box-shadow:0 0 0 3px var(--gold),0 8px 14px rgba(0,0,0,.6)}
+.hl{width:52px;height:52px;border-radius:50%;background-size:cover;border:3px solid;padding:0;position:relative;box-shadow:0 2px 5px rgba(0,0,0,.6)}
+.hl.onb{filter:grayscale(.85) brightness(.6)}
+.hl.onb::after{content:"на поле";position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);font-size:9.5px;background:#000c;color:#ddd;padding:0 4px;border-radius:3px;white-space:nowrap}
+.ht.used{filter:grayscale(1) brightness(.45)}
+.hand.locked .grp .items{opacity:.55;pointer-events:none}
+.acts{margin-left:auto;display:flex;gap:8px;align-items:flex-end}
+.btn{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--gold2);background:var(--card2)}
+.btn:hover{background:#3d3024}
+.btn.primary{background:var(--gold);color:#1b1713;border-color:var(--gold);font-weight:600}
+
+@media (max-width:1200px){:root{--side:250px}.cams{display:none}.badges{display:none}}
+@media (max-width:900px){
+  .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;grid-template-areas:"top" "board" "hand" "side"}
+  .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
+  .meta{margin-left:0}
+  .boardwrap{padding:6px}
+  #board{height:auto}
+  .hrow{flex-wrap:wrap;gap:10px}
+  .acts{margin-left:0}
+  .side{border-left:0}
+  .log{max-height:260px}
+  .ht{width:44px;height:44px}.hl{width:44px;height:44px}
+  .hint{white-space:normal}
+}
+
+/* ---------- лобби ---------- */
+.lobby{min-height:calc(100dvh - var(--mockbar));background:radial-gradient(ellipse at 50% 0%,#3a2a17 0%,#1b1713 60%);padding:24px 16px 40px;display:flex;justify-content:center}
+.lcard{width:100%;max-width:880px;background:rgba(20,17,14,.92);border:1px solid var(--line);border-radius:14px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lcard h1{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:26px;letter-spacing:.05em}
+.lcard .sub{color:var(--muted);margin:0 0 18px}
+.lcard h2{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:20px 0 10px}
+.seat{display:grid;grid-template-columns:90px 150px 1fr;gap:12px;align-items:center;background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.seat .num{font-weight:600}
+.seat .num small{display:block;color:var(--muted);font-weight:400;font-size:11.5px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:6px 12px;min-height:36px}
+.seg button.on{background:var(--gold);color:#1b1713;font-weight:600}
+.who input{width:100%;background:#1b1713;border:1px solid var(--line);border-radius:6px;color:var(--text);padding:7px 9px;font:inherit}
+.heroes{display:flex;gap:10px;flex-wrap:wrap}
+.hero{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:0;font-size:11.5px;color:var(--muted)}
+.hero i{width:46px;height:46px;border-radius:50%;background-size:cover;border:3px solid transparent;box-shadow:0 2px 5px rgba(0,0,0,.6)}
+.hero.on i{border-color:var(--gold);box-shadow:0 0 0 2px #1b1713,0 0 14px rgba(224,182,90,.5)}
+.hero.on{color:var(--gold);font-weight:600}
+.hero.taken{opacity:.3;cursor:not-allowed}
+.botset{grid-column:1 / 4;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.botset select{background:#1b1713;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
+.botset input[type=range]{width:110px;accent-color:var(--gold)}
+.order{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid transparent;border-radius:10px;padding:10px 12px;cursor:pointer}
+.opt.on{border-color:var(--gold)}
+.opt input{accent-color:var(--gold);margin-top:3px}
+.opt b{display:block}
+.opt span{color:var(--muted);font-size:12.5px}
+.opt .ex{display:block;margin-top:4px;color:var(--gold);font-size:12.5px}
+.opts{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.opts label{display:flex;gap:6px;align-items:center}
+.opts input{accent-color:var(--gold);width:16px;height:16px}
+.lfoot{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+@media (max-width:700px){.seat{grid-template-columns:1fr}.botset{grid-column:auto}.lcard{padding:16px}.mockbar .note{display:none}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="mockbar">
+  <b>МАКЕТ</b>
+  <span class="note">на согласование. Позиция настоящая, из партии ботов на продвинутом поле (тестовые данные)</span>
+  <div class="tabs">
+    <button data-mode="lobby">Лобби</button>
+    <button data-mode="turn">Ваш ход</button>
+    <button data-mode="war" class="on">Война</button>
+  </div>
+</div>
+
+<div class="app" id="game">
+  <header class="top">
+    <div class="brand">Тигр и Евфрат</div>
+    <button class="code" title="Скопировать ссылку-приглашение">стол <b>K7P2QX</b></button>
+    <div class="badges">
+      <span class="badge">Продвинутое поле</span><span class="badge">Английская поддержка</span><span class="badge">Здания</span><span class="badge">Чудо</span><span class="badge">Открытый счет</span>
+    </div>
+    <div class="meta"><span>мешок <b id="bag">0</b></span><span>ход <b id="turnNo">0</b></span></div>
+    <nav class="nav"><button>Правила</button><button>Журнал</button><button>Выйти</button></nav>
+  </header>
+  <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
+  <aside class="side">
+    <section class="cams"><h3>Камеры, этап 3 <button id="camT">Развернуть</button></h3><div class="grid" id="cams" hidden></div></section>
+    <section><h3>Игроки</h3><div class="players" id="players"></div></section>
+    <section class="now" id="now"></section>
+    <section class="log"><h3>Журнал <button>Весь журнал</button></h3><ol id="log"></ol></section>
+  </aside>
+  <footer class="hand" id="hand"></footer>
+</div>
+
+<div class="lobby" id="lobby" hidden>
+  <div class="lcard">
+    <h1>Новый стол</h1>
+    <p class="sub">Хост настраивает стол и раздает ссылку. Каждый, кто заходит по ссылке, садится на свободное место «Человек» и выбирает героя.</p>
+
+    <h2>Места и герои</h2>
+    <div id="seats"></div>
+
+    <h2>Кто ходит первым</h2>
+    <div class="order" id="order"></div>
+
+    <h2>Правила стола</h2>
+    <div class="opts">
+      <span class="seg"><button>Обычное поле</button><button class="on">Продвинутое поле</button></span>
+      <label><input type="checkbox" checked> Английская поддержка</label>
+      <label><input type="checkbox" checked> Здания</label>
+      <label><input type="checkbox" checked> Чудо</label>
+      <label><input type="checkbox" checked> Открытый счет</label>
+    </div>
+
+    <div class="lfoot"><button class="btn">Отмена</button><button class="btn primary">Создать стол</button></div>
+  </div>
+</div>
+
+<script>
+const IMG = /*IMAGES*/;
+const POS = /*POSITION*/;
+
+const W = 16, H = 11, C = 60, G = 24, PAD = 6;
+const COL = ['red', 'blue', 'green', 'black'];
+const HEX = ['#b8432f', '#2d6a93', '#3d7a46', '#1f1f1f'];
+const COLNAME = ['красный', 'синий', 'зеленый', 'черный'];
+const COLGEN = ['красного', 'синего', 'зеленого', 'черного'];
+const TILE = ['храм', 'ферма', 'рынок', 'поселение'];
+const TILEPL = ['храмов', 'ферм', 'рынков', 'поселений'];
+const TILEIMG = ['tile_temple', 'tile_farm', 'tile_market', 'tile_settlement'];
+const LEADER = ['жрец', 'фермер', 'торговец', 'царь'];
+const GEN = { 'Денис': 'Дениса', 'Андрей': 'Андрея', 'Влад': 'Влада', 'Бот': 'бота' };
+const SYMNAME = { lion: 'лев', bull: 'бык', bow: 'лук', pot: 'кувшин' };
+const FACEDOWN = 4, WONDER = 5, CATASTROPHE = 6;
+const MONKEY = { '0,1': 'red_blue', '0,2': 'red_green', '0,3': 'red_black', '1,2': 'green_blue', '1,3': 'blue_black', '2,3': 'green_black' };
+
+// места: seat -> игрок. Денис = место, которое решает в войне.
+const me = POS.me;
+const others = [{ name: 'Андрей', sym: 'bull' }, { name: 'Влад', sym: 'bow' }, { name: 'Бот', sym: 'pot', bot: 'Универсальный, сила 70' }];
+const SEATS = [];
+for (let p = 0, k = 0; p < 4; p++) SEATS[p] = p === me ? { name: 'Денис', sym: 'lion', you: true } : others[k++];
+
+const cellName = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
+const cx = (i) => G + (i % W) * C, cy = (i) => G + (i / W | 0) * C;
+const tok = (p, c) => IMG['tok_' + SEATS[p].sym + '_' + COL[c]];
+
+function nb(i) {
+  const x = i % W, y = i / W | 0, o = [];
+  if (x > 0) o.push(i - 1); if (x < W - 1) o.push(i + 1);
+  if (y > 0) o.push(i - W); if (y < H - 1) o.push(i + W);
+  return o;
+}
+function occupied(st, i) { const t = st.tile[i]; return (t >= 0 && t <= WONDER) || st.leader[i] >= 0; }
+function groups(st, blocked) {
+  const lab = new Array(W * H).fill(-1); let n = 0;
+  for (let i = 0; i < W * H; i++) {
+    if (lab[i] !== -1 || i === blocked || !occupied(st, i)) continue;
+    const stack = [i]; lab[i] = n;
+    while (stack.length) { const c = stack.pop(); for (const j of nb(c)) if (lab[j] === -1 && j !== blocked && occupied(st, j)) { lab[j] = n; stack.push(j); } }
+    n++;
+  }
+  return lab;
+}
+
+// ---------- поле ----------
+function renderBoard(st, mode, sel) {
+  const VW = G + W * C + PAD, VH = G + H * C + PAD;
+  const river = new Set(POS.layout.river);
+  let s = `<defs>
+    <filter id="goo" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -13"/></filter>
+    <filter id="goo2" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -6"/></filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4"/><feColorMatrix type="matrix" values="0 0 0 0 0.32 0 0 0 0 0.22 0 0 0 0 0.10 1.6 0 0 0 -0.62"/></filter>
+    <filter id="mottle" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="3" seed="9"/><feColorMatrix type="matrix" values="0 0 0 0 0.55 0 0 0 0 0.40 0 0 0 0 0.18 1.4 0 0 0 -0.55"/></filter>
+    <filter id="ripple" x="0" y="0" width="100%" height="100%"><feTurbulence type="turbulence" baseFrequency="0.012 0.09" numOctaves="2" seed="2"/><feColorMatrix type="matrix" values="0 0 0 0 0.85 0 0 0 0 0.93 0 0 0 0 1 0 0 2.2 0 -0.95"/></filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/></filter>
+    <filter id="shadow2" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a8db5"/><stop offset="1" stop-color="#2c6488"/></linearGradient>
+    <radialGradient id="gold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
+    <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
+    <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
+    <clipPath id="circ" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath>`;
+  for (const k of [...TILEIMG, 'tile_catastrophe']) s += `<image id="i_${k}" width="${C - 6}" height="${C - 6}" href="${IMG[k]}" preserveAspectRatio="xMidYMid slice"/>`;
+  // маска реки: клетки реки, у края поля вытянуты наружу, чтобы край не скруглялся
+  let rects = '';
+  for (const i of river) {
+    const x = cx(i), y = cy(i), gx = i % W, gy = i / W | 0;
+    const x0 = gx === 0 ? x - 30 : x - 0.5, y0 = gy === 0 ? y - 30 : y - 0.5;
+    const x1 = gx === W - 1 ? x + C + 30 : x + C + 0.5, y1 = gy === H - 1 ? y + C + 30 : y + C + 0.5;
+    rects += `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="#fff"/>`;
+  }
+  s += `<mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo)">${rects}</g></mask>
+        <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo2)">${rects}</g></mask></defs>`;
+
+  // рамка, подписи
+  s += `<rect x="1" y="1" width="${VW - 2}" height="${VH - 2}" rx="8" fill="#14110e" stroke="#4a3b2b"/>`;
+  for (let x = 0; x < W; x++) s += `<text x="${G + x * C + C / 2}" y="${G - 7}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${String.fromCharCode(65 + x)}</text>`;
+  for (let y = 0; y < H; y++) s += `<text x="${G / 2}" y="${G + y * C + C / 2 + 5}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${y + 1}</text>`;
+
+  // земля, берег, вода
+  s += `<g clip-path="url(#boardClip)">
+    <rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" fill="#d6bd88"/>
+    <rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" filter="url(#mottle)" opacity=".55"/>
+    <rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" filter="url(#grain)" opacity=".5"/>
+    <rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" fill="#a88a55" mask="url(#bankM)"/>
+    <rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" fill="url(#water)" mask="url(#riverM)"/>
+    <g mask="url(#riverM)"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" filter="url(#ripple)" opacity=".55"/></g>
+  </g>`;
+  // сетка
+  let grid = '';
+  for (let x = 1; x < W; x++) grid += `M${G + x * C} ${G}V${G + H * C}`;
+  for (let y = 1; y < H; y++) grid += `M${G} ${G + y * C}H${G + W * C}`;
+  s += `<path d="${grid}" stroke="#4b3418" stroke-opacity=".2" stroke-width="1" fill="none"/>`;
+  s += `<rect x="${G}" y="${G}" width="${W * C}" height="${H * C}" fill="none" stroke="#e0b65a" stroke-opacity=".55" stroke-width="1.5"/>`;
+
+  // стороны войны: подкраска
+  const war = mode === 'war' ? st.ctx.war : null;
+  if (war) {
+    const lab = groups(st, st.ctx.pos);
+    const la = lab[war.attPos], ld = lab[war.defPos];
+    for (let i = 0; i < W * H; i++) {
+      if (lab[i] === la) s += `<rect x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}" fill="#ff7a45" fill-opacity=".30"/>`;
+      else if (lab[i] === ld) s += `<rect x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}" fill="#5fb4ff" fill-opacity=".30"/>`;
+    }
+  }
+
+  // тайлы
+  let tiles = '';
+  for (let i = 0; i < W * H; i++) {
+    const t = st.tile[i];
+    if (t < 0) continue;
+    const x = cx(i) + 3, y = cy(i) + 3;
+    if (t <= 3) tiles += `<use href="#i_${TILEIMG[t]}" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
+    else if (t === CATASTROPHE) tiles += `<use href="#i_tile_catastrophe" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
+    else tiles += `<rect x="${x}" y="${y}" width="${C - 6}" height="${C - 6}" rx="5" fill="#857a69" stroke="#5f564a"/>`;
+  }
+  s += `<g filter="url(#shadow)">${tiles}</g>`;
+
+  // здания: рамка цвета
+  for (let i = 0; i < W * H; i++) {
+    const b = st.building[i];
+    if (b >= 0) s += `<rect x="${cx(i) + 2}" y="${cy(i) + 2}" width="${C - 4}" height="${C - 4}" rx="6" fill="none" stroke="${HEX[b]}" stroke-width="4"/><rect x="${cx(i) + C - 22}" y="${cy(i) + C - 16}" width="18" height="12" rx="2" fill="${HEX[b]}" stroke="#e8dcc4" stroke-width=".8"/>`;
+  }
+  // сокровища
+  for (let i = 0; i < W * H; i++) {
+    if (!st.treasure[i]) continue;
+    const x = cx(i) + C - 15, y = cy(i) + 15;
+    s += `<g filter="url(#shadow)"><circle cx="${x}" cy="${y}" r="9.5" fill="url(#gold)" stroke="#6b4a12" stroke-width="1.2"/><path d="M${x} ${y - 5}l4 5-4 5-4-5z" fill="#fff6d0" fill-opacity=".75"/></g>`;
+  }
+  // монументы
+  for (const m of st.monuments) {
+    if (m.pos < 0) continue;
+    const key = MONKEY[[m.c1, m.c2].sort().join(',')];
+    const x = cx(m.pos), y = cy(m.pos);
+    s += `<rect x="${x + 6}" y="${y + 6}" width="${2 * C - 12}" height="${2 * C - 12}" rx="10" fill="#2a2119" fill-opacity=".35"/>
+          <image href="${IMG['mon_' + key]}" x="${x + 4}" y="${y + 2}" width="${2 * C - 8}" height="${2 * C - 8}" filter="url(#shadow2)"/>`;
+  }
+  // контуры царств
+  const lab = st.lab;
+  const hasLeader = new Set();
+  for (let i = 0; i < W * H; i++) if (st.leader[i] >= 0) hasLeader.add(lab[i]);
+  let edges = '';
+  for (let i = 0; i < W * H; i++) {
+    const l = lab[i];
+    if (l < 0 || !hasLeader.has(l)) continue;
+    const x = cx(i), y = cy(i), gx = i % W, gy = i / W | 0;
+    if (gx === 0 || lab[i - 1] !== l) edges += `M${x} ${y}v${C}`;
+    if (gx === W - 1 || lab[i + 1] !== l) edges += `M${x + C} ${y}v${C}`;
+    if (gy === 0 || lab[i - W] !== l) edges += `M${x} ${y}h${C}`;
+    if (gy === H - 1 || lab[i + W] !== l) edges += `M${x} ${y + C}h${C}`;
+  }
+  s += `<path d="${edges}" stroke="#fff3cf" stroke-opacity=".85" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+
+  // лидеры
+  for (let i = 0; i < W * H; i++) {
+    const v = st.leader[i];
+    if (v < 0) continue;
+    const p = v >> 2, c = v & 3, x = cx(i) + C / 2, y = cy(i) + C / 2;
+    const inWar = war && (i === war.attPos || i === war.defPos);
+    s += `<g filter="url(#shadow2)"><circle cx="${x}" cy="${y}" r="24.5" fill="${HEX[c]}"/>
+          <image href="${tok(p, c)}" x="${x - 22}" y="${y - 22}" width="44" height="44"/></g>
+          <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${c === 3 ? '#cfc6b4' : HEX[c]}" stroke-width="3"/>`;
+    if (inWar) {
+      const att = i === war.attPos, col = att ? '#ff8a5c' : '#7cc4ff';
+      const val = att ? war.attBoard + war.attN : war.defBoard;
+      s += `<circle class="pulse" cx="${x}" cy="${y}" r="27" fill="none" stroke="${col}" stroke-width="3.5"/>
+            <g transform="translate(${x + 18},${y - 22})"><circle r="13" fill="${col}" stroke="#1b1713" stroke-width="2"/><text y="5" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1713">${val}</text></g>`;
+    }
+  }
+  if (war) {
+    const u = st.ctx.pos;
+    s += `<rect class="pulse" x="${cx(u) + 1.5}" y="${cy(u) + 1.5}" width="${C - 3}" height="${C - 3}" rx="6" fill="none" stroke="#ffe08a" stroke-width="3.5"/>`;
+  }
+  // допустимые клетки для выбранного тайла
+  if (mode === 'turn' && sel != null) {
+    for (const i of st.tileTargets[sel]) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
+  }
+  // зоны клика
+  for (let i = 0; i < W * H; i++) s += `<rect class="cell-hit" data-i="${i}" x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}"><title>${cellName(i)}</title></rect>`;
+
+  const svg = document.getElementById('board');
+  svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+  svg.innerHTML = s;
+}
+
+// ---------- игроки ----------
+function renderPlayers(st, mode) {
+  const deciding = st.toMove, active = st.cur;
+  let h = '';
+  for (let p = 0; p < 4; p++) {
+    const S = SEATS[p], pl = st.players[p];
+    const cls = p === deciding && mode === 'war' && p !== active ? 'deciding' : p === active ? (mode === 'war' ? 'active' : 'deciding') : '';
+    const role = mode === 'war' && p === deciding ? '<span class="tag gold">решает</span>' : p === active ? `<span class="tag gold">${st.actionNo}/2</span>` : '';
+    const timer = (mode === 'war' && p === deciding) || (mode === 'turn' && p === active) ? '<span class="tm">1:42</span>' : '<span></span>';
+    let dots = '';
+    for (let c = 0; c < 4; c++) { const on = pl.leaders[c] >= 0; dots += `<i class="dot" title="${LEADER[c]}${on ? ' на поле' : ' в руке'}" style="border-color:${c === 3 ? '#cfc6b4' : HEX[c]};background:${on ? HEX[c] : 'transparent'}"></i>`; }
+    const sc = pl.score.map((v, c) => `<span style="background:${HEX[c]};${c === 3 ? 'outline:1px solid #cfc6b4' : ''}">${v}</span>`).join('');
+    h += `<div class="pc ${cls}">
+      <div class="av" style="background-image:url(${IMG['tok_' + S.sym + '_' + (p === me ? 'red' : 'black')]})"></div>
+      <div class="nm">${S.name}${S.you ? ' <small>(вы)</small>' : ''} <small>${SYMNAME[S.sym]}</small> ${S.bot ? `<span class="tag" title="${S.bot}">бот</span>` : ''} ${role}</div>
+      ${timer}
+      <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы в руке"><i class="cat" style="background-image:url(${IMG.tile_catastrophe})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span><span class="sc" title="очки: красный, синий, зеленый, черный">${sc}</span></div>
+    </div>`;
+  }
+  document.getElementById('players').innerHTML = h;
+  document.getElementById('cams').innerHTML = SEATS.map((S) => `<div class="cam">${S.name}</div>`).join('');
+}
+
+// ---------- панель «Сейчас» ----------
+function renderNow(st, mode, sel) {
+  const el = document.getElementById('now');
+  if (mode === 'war') {
+    const w = st.ctx.war, A = SEATS[w.att].name, cur = SEATS[st.cur].name;
+    const opts = [0];
+    const need = w.attBoard + w.attN - w.defBoard;
+    const have = st.players[me].hand[w.color];
+    el.innerHTML = `<h3>Сейчас</h3>
+      <div class="title">Война за ${COLNAME[w.color]}</div>
+      <p>${cur} положил тайл на ${cellName(st.ctx.pos)} и объединил два царства. ${A} атакует ваше царство.</p>
+      <div class="vs"><div class="a">${A}<b>${w.attBoard} + ${w.attN} = ${w.attBoard + w.attN}</b>на поле и из руки</div><div class="d">Вы<b>${w.defBoard}</b>${TILEPL[w.color]} на поле</div></div>
+      <p>Сколько ${TILEPL[w.color]} добавить из руки? У вас ${have}.</p>
+      <div class="choices">
+        <button class="choice"><b>0</b><small>проиграть войну</small></button>
+        <button class="choice"${need >= 1 && need <= have ? '' : ' disabled'}><b>${need}</b><small>${w.defBoard + need} на ${w.attBoard + w.attN}, ничья: побеждает защитник</small></button>
+      </div>
+      <div class="small">Английская поддержка: защитник выставляет ровно столько, чтобы сравнять силу. Другие числа недоступны.</div>`;
+  } else {
+    const n = st.tileTargets[sel].length;
+    el.innerHTML = `<h3>Сейчас</h3>
+      <div class="title">Ваш ход</div>
+      <p>Действие ${st.actionNo} из 2. Выбран тайл «${TILE[sel]}»: подсвечены ${n} клеток, куда его можно положить${sel === 1 ? ' (ферма только на реку)' : ''}.</p>
+      <div class="choices"><button class="choice"><b>Отмена</b><small>снять выбор</small></button></div>
+      <div class="small">Нажмите подсвеченную клетку. Ход уходит на сервер, до ответа рука заблокирована.</div>`;
+  }
+}
+
+// ---------- журнал ----------
+function journal(upto) {
+  const evs = POS.events.slice(0, upto);
+  const lines = [];
+  let curKey = null, line = null;
+  for (const e of evs) {
+    const key = e.turn + ':' + e.cur + ':' + e.actionNo;
+    if (key !== curKey) { curKey = key; line = { turn: e.turn, p: e.cur, parts: [], pts: [], cell: null }; lines.push(line); }
+    const who = (p) => SEATS[p].name;
+    switch (e.ev) {
+      case 'tile': line.parts.push(`${TILE[e.c]} ${cellName(e.pos)}`); if (line.unite) { line.parts.push('объединение'); line.unite = false; } line.cell = line.cell ?? e.pos; break;
+      case 'unite': line.unite = true; break;
+      case 'leader': line.parts.push(`${LEADER[e.c]} ${e.from >= 0 ? 'переставлен на' : 'на'} ${cellName(e.pos)}`); line.cell = line.cell ?? e.pos; break;
+      case 'withdraw': line.parts.push(`${LEADER[e.c]} в руку`); break;
+      case 'catastrophe': line.parts.push(`катастрофа ${cellName(e.pos)}`); line.cell = e.pos; break;
+      case 'discard': line.parts.push(`сброс ${e.n}`); break;
+      case 'warStart': line.parts.push(`война за ${COLNAME[e.color]}: ${who(e.att)} против ${GEN[SEATS[e.def].name] || SEATS[e.def].name}`); break;
+      case 'war': line.parts.push(`победил ${who(e.winner)}`); break;
+      case 'revolt': line.parts.push(`восстание, победил ${who(e.winner)} ${e.attTotal}:${e.defTotal}`); break;
+      case 'monument': line.parts.push('монумент'); break;
+      case 'treasure': line.parts.push(`${who(e.p)} берет сокровище`); break;
+      case 'building': line.parts.push('здание'); break;
+      case 'leaderReturned': line.parts.push(`${LEADER[e.c]} ${who(e.p)} уходит с поля`); break;
+      case 'score': {
+        const t = `+${e.n} ${COLNAME[e.c]}`;
+        line.pts.push(e.p === e.cur ? t : `${who(e.p)} ${t}`);
+        break;
+      }
+    }
+  }
+  return lines.reverse().slice(0, 16).map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><span><u>${SEATS[l.p].name}:</u> ${[...l.parts, ...l.pts].join(', ')}</span></li>`).join('');
+}
+
+// ---------- рука ----------
+function renderHand(st, mode, sel) {
+  const pl = st.players[me];
+  let tiles = '';
+  for (let c = 0; c < 4; c++) for (let k = 0; k < pl.hand[c]; k++) {
+    const isSel = mode === 'turn' && c === sel && k === 0;
+    tiles += `<button class="ht${isSel ? ' sel' : ''}" data-c="${c}" title="${TILE[c]}" style="background-image:url(${IMG[TILEIMG[c]]})"></button>`;
+  }
+  let leaders = '';
+  for (let c = 0; c < 4; c++) leaders += `<button class="hl${pl.leaders[c] >= 0 ? ' onb' : ''}" title="${LEADER[c]}" style="border-color:${c === 3 ? '#cfc6b4' : HEX[c]};background-image:url(${tok(me, c)})"></button>`;
+  let cats = '';
+  for (let k = 0; k < 2; k++) cats += `<button class="ht${k >= pl.cats ? ' used' : ''}" title="катастрофа" style="background-image:url(${IMG.tile_catastrophe})"></button>`;
+  const hint = mode === 'war'
+    ? 'Идет война. Выберите поддержку в панели справа. Рука сейчас не кликается.'
+    : sel < 0 ? `Действие ${st.actionNo} из 2. Выберите тайл, лидера или катастрофу.`
+    : `Действие ${st.actionNo} из 2. Выбран тайл «${TILE[sel]}», нажмите подсвеченную клетку. Повторный клик по тайлу снимает выбор.`;
+  const hand = document.getElementById('hand');
+  hand.className = 'hand' + (mode === 'war' ? ' locked' : '');
+  hand.innerHTML = `<div class="hint">${hint}</div>
+    <div class="hrow">
+      <div class="grp"><span>Рука</span><div class="items">${tiles}</div></div>
+      <div class="grp"><span>Лидеры</span><div class="items">${leaders}</div></div>
+      <div class="grp"><span>Катастрофы</span><div class="items">${cats}</div></div>
+      <div class="acts"><button class="btn">Сбросить тайлы</button><button class="btn">Пас</button></div>
+    </div>`;
+  hand.querySelectorAll('.ht[data-c]').forEach((b) => b.addEventListener('click', () => {
+    if (mode !== 'turn') return;
+    const c = +b.dataset.c;
+    state.sel = state.sel === c ? null : c;
+    render();
+  }));
+}
+
+// ---------- лобби ----------
+const LSEATS = [
+  { kind: 'Человек', name: 'Денис', sym: 'lion', host: true },
+  { kind: 'Человек', name: 'Андрей', sym: 'bull' },
+  { kind: 'Человек', name: 'Влад', sym: 'bow' },
+  { kind: 'Бот', name: 'Бот', sym: 'pot' },
+];
+function renderLobby() {
+  let h = '';
+  LSEATS.forEach((S, k) => {
+    const heroes = ['lion', 'bull', 'bow', 'pot'].map((sym) => {
+      const owner = LSEATS.find((o) => o.sym === sym);
+      const on = S.sym === sym, taken = owner && !on;
+      return `<button class="hero${on ? ' on' : ''}${taken ? ' taken' : ''}" data-k="${k}" data-sym="${sym}" ${taken ? `title="занят: ${owner.name}"` : ''}><i style="background-image:url(${IMG['tok_' + sym + '_' + (on ? 'red' : 'black')]})"></i>${SYMNAME[sym]}</button>`;
+    }).join('');
+    h += `<div class="seat">
+      <div class="num">Место ${k + 1}<small>${S.host ? 'хост' : S.kind === 'Бот' ? 'бот' : 'по ссылке'}</small></div>
+      <div class="who">${S.kind === 'Бот' ? '<span class="seg"><button>Человек</button><button class="on">Бот</button></span>' : `<input value="${S.name}" aria-label="Имя">`}</div>
+      <div class="heroes">${heroes}</div>
+      ${S.kind === 'Бот' ? `<div class="botset">
+        <label>Стиль <select><option>Универсальный</option><option>Базовый</option><option>Денис</option><option>Андрей</option><option>Влад</option><option>Топ</option></select></label>
+        <label>Сила <input type="range" value="70"> 70</label>
+        <label>Подсчет тайлов <select><option>не считает</option><option>примерно</option><option>точно</option></select></label>
+        <label>Риск <input type="range" value="50"></label>
+        <label>Ошибки <input type="range" value="5" max="30"> 5%</label>
+        <button class="btn" style="min-height:32px">Максимум</button>
+      </div>` : ''}
+    </div>`;
+  });
+  document.getElementById('seats').innerHTML = h;
+  document.querySelectorAll('.hero').forEach((b) => b.addEventListener('click', () => {
+    if (b.classList.contains('taken')) return;
+    LSEATS[+b.dataset.k].sym = b.dataset.sym;
+    renderLobby();
+  }));
+  const ORD = [
+    { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'По умолчанию, если эта компания уже играла: и для реванша сразу, и для новой партии после перерыва.', ex: 'Пример: прошлая партия 23.10, последнее место у Влада, Влад ходит первым.' },
+    { id: 'random', t: 'Случайно', d: 'Сервер перемешивает порядок мест при старте.' },
+    { id: 'custom', t: 'Вручную', d: 'Хост перетаскивает места, порядок сверху вниз.' },
+  ];
+  document.getElementById('order').innerHTML = ORD.map((o) => `<label class="opt${state.order === o.id ? ' on' : ''}"><input type="radio" name="ord" value="${o.id}"${state.order === o.id ? ' checked' : ''}><div><b>${o.t}</b><span>${o.d}</span>${o.ex ? `<span class="ex">${o.ex}</span>` : ''}</div></label>`).join('');
+  document.querySelectorAll('input[name=ord]').forEach((r) => r.addEventListener('change', () => { state.order = r.value; renderLobby(); }));
+}
+
+// ---------- режимы ----------
+const state = { mode: 'war', sel: 1, order: 'loser' };
+function render() {
+  document.querySelectorAll('.mockbar .tabs button').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
+  const lobby = state.mode === 'lobby';
+  document.getElementById('lobby').hidden = !lobby;
+  document.getElementById('game').hidden = lobby;
+  if (lobby) { renderLobby(); return; }
+  const st = state.mode === 'war' ? POS.war : POS.turnSnap;
+  const sel = state.mode === 'turn' ? state.sel : null;
+  document.getElementById('bag').textContent = st.bag.reduce((a, b) => a + b, 0);
+  document.getElementById('turnNo').textContent = st.turn;
+  renderBoard(st, state.mode, sel);
+  renderPlayers(st, state.mode);
+  if (state.mode === 'turn' && sel == null) {
+    document.getElementById('now').innerHTML = `<h3>Сейчас</h3><div class="title">Ваш ход</div><p>Действие ${st.actionNo} из 2. Выберите тайл, лидера или катастрофу внизу.</p>`;
+  } else renderNow(st, state.mode, sel);
+  document.getElementById('log').innerHTML = journal(state.mode === 'war' ? POS.events.length : POS.turnEventsAt);
+  renderHand(st, state.mode, sel ?? -1);
+}
+document.querySelectorAll('.mockbar .tabs button').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; render(); }));
+document.getElementById('camT').addEventListener('click', (e) => { const g = document.getElementById('cams'); g.hidden = !g.hidden; e.target.textContent = g.hidden ? 'Развернуть' : 'Свернуть'; });
+document.getElementById('log').addEventListener('click', (e) => {
+  const li = e.target.closest('li'); if (!li || li.dataset.cell === '') return;
+  const r = document.querySelector(`.cell-hit[data-i="${li.dataset.cell}"]`);
+  if (r) { r.style.fill = 'rgba(255,224,138,.55)'; setTimeout(() => (r.style.fill = ''), 1200); }
+});
+render();
+</script>
+</body>
+</html>
