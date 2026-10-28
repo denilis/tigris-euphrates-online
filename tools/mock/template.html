@@ -482,9 +482,9 @@ function journal(upto) {
       case 'building': line.parts.push('здание'); break;
       case 'leaderReturned': line.parts.push(`${LEADER[e.c]} ${who(e.p)} уходит с поля`); break;
       case 'score': {
-        if (e.p !== me) break; // закрытый счет: очки соперников не видны
+        // закрытый счет прячет итоги в карточках, а записи о полученных очках видны всем, как за столом
         const t = `+${e.n} ${COLNAME[e.c]}`;
-        line.pts.push(e.p === e.cur ? t : `вам ${t}`);
+        line.pts.push(e.p === e.cur ? t : `${who(e.p)} ${t}`);
         break;
       }
     }
