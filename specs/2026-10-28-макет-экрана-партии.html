@@ -218,6 +218,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 <div class="gallery" id="gallery" hidden>
   <div class="gwrap">
     <h1>Монументы: 5 вариантов</h1>
+    <p class="sub" style="color:var(--gold);margin-bottom:6px">Выбран вариант 3, «Печать» (решение 28.10). Остальные оставлены для сравнения.</p>
     <p class="sub">Каждый вариант во всех шести парах цветов, на поле 2 на 2 поверх перевернутых тайлов, и в малом размере, как в панели выбора. Кнопка показывает вариант на поле в текущей партии.</p>
     <div id="gcards"></div>
   </div>
@@ -787,7 +788,7 @@ function renderLobby() {
 }
 
 // ---------- режимы ----------
-const state = { mode: 'war', sel: 1, order: 'loser', mon: 0 };
+const state = { mode: 'war', sel: 1, order: 'loser', mon: 2 };
 function render() {
   document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
   document.querySelectorAll('#monsel button').forEach((b) => b.classList.toggle('on', +b.dataset.v === state.mon));
