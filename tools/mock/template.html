@@ -72,6 +72,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .dots{display:flex;gap:3px}
 .dot{width:11px;height:11px;border-radius:50%;border:2px solid}
 .sc{display:flex;gap:3px;margin-left:auto}
+.sc.hid{font-size:11.5px;color:var(--muted);font-style:italic}
 .sc span{min-width:19px;text-align:center;border-radius:4px;color:#fff;font-weight:600;font-size:12px;padding:0 3px}
 .now{background:linear-gradient(180deg,#2c2218,#1f1913)}
 .now .title{font-family:Cinzel,Georgia,serif;font-weight:700;color:var(--gold);font-size:15px;margin-bottom:4px}
@@ -181,7 +182,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     <div class="brand">Тигр и Евфрат</div>
     <button class="code" title="Скопировать ссылку-приглашение">стол <b>K7P2QX</b></button>
     <div class="badges">
-      <span class="badge">Продвинутое поле</span><span class="badge">Английская поддержка</span><span class="badge">Здания</span><span class="badge">Чудо</span><span class="badge">Открытый счет</span>
+      <span class="badge">Продвинутое поле</span><span class="badge">Английская поддержка</span><span class="badge">Здания</span><span class="badge">Чудо</span><span class="badge">Закрытый счет</span>
     </div>
     <div class="meta"><span>мешок <b id="bag">0</b></span><span>ход <b id="turnNo">0</b></span></div>
     <nav class="nav"><button>Правила</button><button>Журнал</button><button>Выйти</button></nav>
@@ -213,7 +214,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       <label><input type="checkbox" checked> Английская поддержка</label>
       <label><input type="checkbox" checked> Здания</label>
       <label><input type="checkbox" checked> Чудо</label>
-      <label><input type="checkbox" checked> Открытый счет</label>
+      <label><input type="checkbox"> Открытый счет (видны очки соперников)</label>
     </div>
 
     <div class="lfoot"><button class="btn">Отмена</button><button class="btn primary">Создать стол</button></div>
@@ -422,7 +423,7 @@ function renderPlayers(st, mode) {
       <div class="av" style="background-image:url(${IMG['tok_' + S.sym + '_' + (p === me ? 'red' : 'black')]})"></div>
       <div class="nm">${S.name}${S.you ? ' <small>(вы)</small>' : ''} <small>${SYMNAME[S.sym]}</small> ${S.bot ? `<span class="tag" title="${S.bot}">бот</span>` : ''} ${role}</div>
       ${timer}
-      <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы в руке"><i class="cat" style="background-image:url(${IMG.tile_catastrophe})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span><span class="sc" title="очки: красный, синий, зеленый, черный">${sc}</span></div>
+      <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы в руке"><i class="cat" style="background-image:url(${IMG.tile_catastrophe})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span>${p === me ? `<span class="sc" title="ваши очки: красный, синий, зеленый, черный">${sc}</span>` : '<span class="sc hid" title="закрытый счет: очки соперников не видны">счет скрыт</span>'}</div>
     </div>`;
   }
   document.getElementById('players').innerHTML = h;
@@ -481,8 +482,9 @@ function journal(upto) {
       case 'building': line.parts.push('здание'); break;
       case 'leaderReturned': line.parts.push(`${LEADER[e.c]} ${who(e.p)} уходит с поля`); break;
       case 'score': {
+        if (e.p !== me) break; // закрытый счет: очки соперников не видны
         const t = `+${e.n} ${COLNAME[e.c]}`;
-        line.pts.push(e.p === e.cur ? t : `${who(e.p)} ${t}`);
+        line.pts.push(e.p === e.cur ? t : `вам ${t}`);
         break;
       }
     }
