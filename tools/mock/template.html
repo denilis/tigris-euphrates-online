@@ -163,6 +163,22 @@ button{font:inherit;color:inherit;cursor:pointer}
 .opts input{accent-color:var(--gold);width:16px;height:16px}
 .lfoot{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
 @media (max-width:700px){.seat{grid-template-columns:1fr}.botset{grid-column:auto}.lcard{padding:16px}.mockbar .note{display:none}}
+.mockbar .monsel{margin-left:6px;align-items:center}
+.mockbar .monsel span{margin-right:2px}
+.gallery{min-height:calc(100dvh - var(--mockbar));background:radial-gradient(ellipse at 50% 0%,#3a2a17 0%,#1b1713 60%);padding:24px 16px 40px}
+.gwrap{max-width:960px;margin:0 auto}
+.gwrap h1{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:26px;letter-spacing:.05em}
+.gwrap .sub{color:var(--muted);margin:0 0 18px;max-width:760px}
+.gcard{background:rgba(20,17,14,.92);border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;margin-bottom:14px}
+.gcard.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.ghead{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.ghead b{font-family:Cinzel,Georgia,serif;font-size:17px;color:var(--gold);display:block;margin-bottom:2px}
+.ghead span{color:var(--muted);font-size:13px}
+.ghead .btn{white-space:nowrap;flex:none}
+.gsvg{width:100%;height:auto;display:block;background:#14110e;border-radius:10px}
+.gsmall{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+.gsmall svg{background:#2a2119;border-radius:6px}
+@media (max-width:700px){.ghead{flex-direction:column}.mockbar .monsel span{display:none}.mockbar{height:auto;min-height:var(--mockbar);flex-wrap:wrap;padding:4px 8px;row-gap:4px}.mockbar .tabs{margin-left:0}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -174,7 +190,9 @@ button{font:inherit;color:inherit;cursor:pointer}
     <button data-mode="lobby">Лобби</button>
     <button data-mode="turn">Ваш ход</button>
     <button data-mode="war" class="on">Война</button>
+    <button data-mode="gallery">Монументы</button>
   </div>
+  <div class="tabs monsel" id="monsel"><span>Монумент</span><button data-v="0">1</button><button data-v="1">2</button><button data-v="2">3</button><button data-v="3">4</button><button data-v="4">5</button></div>
 </div>
 
 <div class="app" id="game">
@@ -195,6 +213,14 @@ button{font:inherit;color:inherit;cursor:pointer}
     <section class="log"><h3>Журнал <button>Весь журнал</button></h3><ol id="log"></ol></section>
   </aside>
   <footer class="hand" id="hand"></footer>
+</div>
+
+<div class="gallery" id="gallery" hidden>
+  <div class="gwrap">
+    <h1>Монументы: 5 вариантов</h1>
+    <p class="sub">Каждый вариант во всех шести парах цветов, на поле 2 на 2 поверх перевернутых тайлов, и в малом размере, как в панели выбора. Кнопка показывает вариант на поле в текущей партии.</p>
+    <div id="gcards"></div>
+  </div>
 </div>
 
 <div class="lobby" id="lobby" hidden>
@@ -237,7 +263,6 @@ const LEADER = ['жрец', 'фермер', 'торговец', 'царь'];
 const GEN = { 'Денис': 'Дениса', 'Андрей': 'Андрея', 'Влад': 'Влада', 'Бот': 'бота' };
 const SYMNAME = { lion: 'лев', bull: 'бык', bow: 'лук', pot: 'кувшин' };
 const FACEDOWN = 4, WONDER = 5, CATASTROPHE = 6;
-const MONKEY = { '0,1': 'red_blue', '0,2': 'red_green', '0,3': 'red_black', '1,2': 'green_blue', '1,3': 'blue_black', '2,3': 'green_black' };
 
 // места: seat -> игрок. Денис = место, которое решает в войне.
 const me = POS.me;
@@ -267,6 +292,201 @@ function groups(st, blocked) {
   return lab;
 }
 
+// ---------- монументы: 5 вариантов в векторе ----------
+// Рисуются в квадрате 120x120 (2x2 клетки), цвета как у лидеров и тайлов.
+const MP = [
+  { b: '#b8432f', l: '#dc6c50', d: '#7a2819' }, // красный
+  { b: '#2d6a93', l: '#5293c0', d: '#1a4461' }, // синий
+  { b: '#3d7a46', l: '#62a268', d: '#24502b' }, // зеленый
+  { b: '#34302c', l: '#5c564f', d: '#161412' }, // черный
+];
+const GD = { b: '#e0b65a', l: '#f7e1a0', d: '#94691f' };
+const MON_VARIANTS = [
+  { name: 'Зиккурат сверху', d: 'Ступенчатая пирамида, вид сверху, как тайлы. Нижние ярусы первого цвета, верхние второго, золотое святилище на вершине.' },
+  { name: 'Зиккурат фасадом', d: 'Та же пирамида спереди, в духе рисунка на тайле храма: кирпичные ярусы двух цветов, лестница и золотой храм наверху.' },
+  { name: 'Печать', d: 'Плитка в золотой раме с розетками, как у тайлов. Поле поделено по диагонали на два цвета, в центре медальон с зиккуратом.' },
+  { name: 'Ворота Иштар', d: 'Вавилонские ворота из глазурованного кирпича: стены первого цвета, зубцы, пояса и арка второго, золотые розетки.' },
+  { name: 'Деревянная башня', d: 'Аккуратная векторная версия фигурки из коробки: башня первого цвета, лестница и нутро второго.' },
+];
+
+function monDefs(p) {
+  let s = '';
+  [...MP, GD].forEach((P, k) => {
+    const id = k === 4 ? 'g' : k;
+    s += `<linearGradient id="${p}h${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${P.l}"/><stop offset=".55" stop-color="${P.b}"/><stop offset="1" stop-color="${P.d}"/></linearGradient>`;
+    s += `<linearGradient id="${p}v${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${P.l}"/><stop offset=".6" stop-color="${P.b}"/><stop offset="1" stop-color="${P.d}"/></linearGradient>`;
+  });
+  s += `<pattern id="${p}br" patternUnits="userSpaceOnUse" width="12" height="8"><path d="M0 .4H12M0 4.4H12M3 .4V4.4M9 4.4V8.4" stroke="#000" stroke-opacity=".22" stroke-width=".7" fill="none"/></pattern>`;
+  s += `<filter id="${p}sh" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3"/></filter>`;
+  return s;
+}
+
+const f1 = (v) => +v.toFixed(1);
+function rosette(cx, cy, r) {
+  let s = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${GD.b}" stroke="${GD.d}" stroke-width="1"/>`;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4;
+    s += `<circle cx="${f1(cx + Math.cos(a) * r * 0.58)}" cy="${f1(cy + Math.sin(a) * r * 0.58)}" r="${f1(r * 0.27)}" fill="${GD.l}"/>`;
+  }
+  return s + `<circle cx="${cx}" cy="${cy}" r="${f1(r * 0.26)}" fill="${GD.d}"/>`;
+}
+
+function monumentSVG(v, c1, c2, x, y, p) {
+  const A = MP[c1], B = MP[c2];
+  const H = (c) => `url(#${p}h${c})`, V = (c) => `url(#${p}v${c})`;
+  const st = 'stroke="#1c120a" stroke-opacity=".6" stroke-width="1"';
+  const brick = `url(#${p}br)`;
+  let g = '';
+  switch (v) {
+    case 0: { // зиккурат сверху
+      g += `<rect x="8" y="10" width="110" height="110" rx="3" fill="#000" opacity=".45" filter="url(#${p}sh)"/>`;
+      const tier = (o, w, c) => {
+        const P = MP[c];
+        return `<rect x="${o}" y="${o}" width="${w}" height="${w}" fill="${P.d}" ${st}/>
+          <rect x="${o}" y="${o}" width="${w - 3}" height="${w - 3}" fill="${P.b}"/>
+          <rect x="${o}" y="${o}" width="${w - 3}" height="${w - 3}" fill="${brick}"/>
+          <path d="M${o + 1} ${o + w - 4}V${o + 1}H${o + w - 4}" stroke="${P.l}" stroke-width="2" fill="none"/>`;
+      };
+      g += tier(4, 112, c1) + tier(17, 86, c1) + tier(30, 60, c2) + tier(42, 36, c2);
+      g += `<rect x="53" y="68" width="14" height="48" fill="#d4b479" ${st}/>`;
+      for (let yy = 71; yy < 116; yy += 4) g += `<path d="M54 ${yy}H66" stroke="#7a5a2a" stroke-width="1"/>`;
+      g += `<path d="M53 68V116M67 68V116" stroke="#5a3f1c" stroke-width="1.6"/>`;
+      g += `<rect x="49" y="48" width="22" height="22" fill="${GD.d}" ${st}/><rect x="49" y="48" width="19.5" height="19.5" fill="${V('g')}"/><rect x="56" y="55" width="7" height="7" fill="${GD.d}"/>`;
+      break;
+    }
+    case 1: { // зиккурат фасадом
+      g += `<ellipse cx="60" cy="112" rx="57" ry="7" fill="#000" opacity=".45" filter="url(#${p}sh)"/>`;
+      const tiers = [[108, 24, c1], [86, 22, c1], [64, 20, c2], [42, 17, c2]];
+      let base = 112;
+      for (const [w, h, c] of tiers) {
+        const x0 = 60 - w / 2, y0 = base - h;
+        g += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${H(c)}" ${st}/>
+          <rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${brick}"/>
+          <rect x="${x0 + 0.5}" y="${y0 + 0.5}" width="${w - 1}" height="3" fill="${MP[c].l}"/>`;
+        base = y0;
+      }
+      const topY = 112 - 24 - 22 - 20;
+      g += `<path d="M46 112L53 ${topY}H67L74 112Z" fill="#d9bd85" ${st}/>`;
+      for (let yy = topY + 4; yy < 112; yy += 4.5) {
+        const hw = 7 + 7 * (yy - topY) / (112 - topY);
+        g += `<path d="M${f1(60 - hw)} ${f1(yy)}H${f1(60 + hw)}" stroke="#7a5a2a" stroke-width=".9"/>`;
+      }
+      const sy = base - 15;
+      g += `<rect x="48" y="${sy}" width="24" height="15" fill="${H('g')}" ${st}/><path d="M45 ${sy}H75" stroke="${GD.d}" stroke-width="3"/><path d="M45 ${sy - 1.5}H75" stroke="${GD.l}" stroke-width="1"/><path d="M56 ${sy + 15}V${sy + 8}a4 4 0 0 1 8 0V${sy + 15}Z" fill="#3a2410"/>`;
+      break;
+    }
+    case 2: { // печать
+      g += `<rect x="8" y="10" width="110" height="110" rx="10" fill="#000" opacity=".45" filter="url(#${p}sh)"/>`;
+      g += `<rect x="4" y="4" width="112" height="112" rx="10" fill="${V('g')}" ${st}/>`;
+      g += `<rect x="8.5" y="8.5" width="103" height="103" rx="7" fill="none" stroke="${GD.d}" stroke-width="1.2"/>`;
+      g += `<path d="M14 14H106L14 106Z" fill="${H(c1)}"/><path d="M106 14V106H14Z" fill="${H(c2)}"/>`;
+      g += `<rect x="14" y="14" width="92" height="92" fill="${brick}"/>`;
+      g += `<rect x="14" y="14" width="92" height="92" fill="none" stroke="#1c120a" stroke-opacity=".55"/>`;
+      g += `<path d="M106 14L14 106" stroke="${GD.b}" stroke-width="3.2"/><path d="M106 14L14 106" stroke="${GD.l}" stroke-width="1"/>`;
+      g += `<circle cx="60" cy="60" r="28" fill="#f0e2bf" stroke="${GD.d}" stroke-width="4"/><circle cx="60" cy="60" r="28" fill="none" stroke="${GD.l}" stroke-width="1.4"/>`;
+      g += `<path d="M39 75H81V69H76V63H71V57H66V50H54V57H49V63H44V69H39Z" fill="#3a2614"/><path d="M57 75V59H63V75Z" fill="#d4b479"/>`;
+      for (const [rx, ry] of [[14, 14], [106, 14], [14, 106], [106, 106]]) g += rosette(rx, ry, 7);
+      break;
+    }
+    case 3: { // ворота Иштар
+      g += `<ellipse cx="60" cy="113" rx="58" ry="6" fill="#000" opacity=".45" filter="url(#${p}sh)"/>`;
+      const body = (x0, y0, w, h) => `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${H(c1)}" ${st}/><rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="${brick}"/>`;
+      const merl = (x0, y0, n, w) => {
+        let s = '';
+        const mw = w / n;
+        for (let k = 0; k < n; k++) {
+          const a = x0 + k * mw + mw * 0.1, b = a + mw * 0.8, m = (b - a) / 3;
+          s += `<path d="M${f1(a)} ${y0}V${y0 - 4}H${f1(a + m)}V${y0 - 8}H${f1(b - m)}V${y0 - 4}H${f1(b)}V${y0}Z" fill="${B.b}" ${st}/>`;
+        }
+        return s;
+      };
+      g += body(34, 36, 52, 77) + merl(34, 36, 4, 52);
+      g += body(5, 18, 31, 95) + body(84, 18, 31, 95) + merl(5, 18, 3, 31) + merl(84, 18, 3, 31);
+      const band = (x0, w, yb) => {
+        let s = `<rect x="${x0}" y="${yb}" width="${w}" height="9" fill="${B.b}" ${st}/>`;
+        for (let cx = x0 + 5.5; cx < x0 + w - 2; cx += 8.5) s += `<circle cx="${f1(cx)}" cy="${yb + 4.5}" r="2.6" fill="${GD.b}" stroke="${GD.d}" stroke-width=".6"/>`;
+        return s;
+      };
+      g += band(5, 31, 30) + band(84, 31, 30) + band(5, 31, 56) + band(34, 52, 56) + band(84, 31, 56);
+      g += `<path d="M43 113V86a17 17 0 0 1 34 0V113Z" fill="${B.b}" ${st}/>`;
+      g += `<path d="M43 113V86a17 17 0 0 1 34 0" fill="none" stroke="${GD.b}" stroke-width="1.4" stroke-dasharray="2 3"/>`;
+      g += `<path d="M49 113V87a11 11 0 0 1 22 0V113Z" fill="#24170c"/>`;
+      for (const mx of [20.5, 99.5]) g += `<circle cx="${mx}" cy="88" r="10" fill="${H(c2)}" stroke="${GD.b}" stroke-width="2"/>` + rosette(mx, 88, 4.5);
+      break;
+    }
+    case 4: { // деревянная башня (изометрия)
+      g += `<ellipse cx="58" cy="102" rx="54" ry="15" fill="#000" opacity=".4" filter="url(#${p}sh)"/>`;
+      const T = [60, 13], R = [100, 36], F = [60, 59], L = [20, 36];
+      const hgt = 46, dn = (P) => [P[0], P[1] + hgt];
+      const poly = (pts, fill, extra = '') => `<polygon points="${pts.map((q) => q.map(f1).join(',')).join(' ')}" fill="${fill}" ${extra}/>`;
+      // грани
+      g += poly([L, F, dn(F), dn(L)], A.b, st) + poly([F, R, dn(R), dn(F)], A.d, st);
+      // волокна дерева
+      g += `<g transform="matrix(.4,.23,0,.46,20,36)" opacity=".18" stroke="#000" fill="none"><path d="M0 22C30 19 60 25 100 21M0 52C35 49 70 55 100 50M0 80C30 77 65 83 100 79"/></g>`;
+      g += `<g transform="matrix(.4,-.23,0,.46,60,59)" opacity=".18" stroke="#000" fill="none"><path d="M0 30C30 27 60 33 100 29M0 64C35 61 70 67 100 62"/></g>`;
+      // верх: обод и нутро второго цвета
+      g += poly([T, R, F, L], A.l, st);
+      const c = [60, 36], sc = (P, k) => [c[0] + (P[0] - c[0]) * k, c[1] + (P[1] - c[1]) * k];
+      g += poly([sc(T, 0.66), sc(R, 0.66), sc(F, 0.66), sc(L, 0.66)], B.d, st);
+      g += poly([sc(T, 0.66), sc(R, 0.66), sc(F, 0.4), sc(L, 0.66)], B.b);
+      // зубцы на передних кромках
+      const lerp = (P, Q, t) => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t];
+      const up = (P, h) => [P[0], P[1] - h];
+      for (const [P, Q, face] of [[L, F, B.b], [F, R, B.d]]) {
+        for (const [t1, t2] of [[0, 0.24], [0.38, 0.62], [0.76, 1]]) {
+          // глубина зубца: внутрь верхней грани (для левой кромки к T, для правой к L)
+          const a = lerp(P, Q, t1), b = lerp(P, Q, t2), d = P === L ? [(T[0] - L[0]) * 0.16, (T[1] - L[1]) * 0.16] : [(L[0] - F[0]) * 0.16, (L[1] - F[1]) * 0.16];
+          g += poly([a, b, up(b, 7), up(a, 7)], face, st);
+          g += poly([up(a, 7), up(b, 7), [up(b, 7)[0] + d[0], up(b, 7)[1] + d[1]], [up(a, 7)[0] + d[0], up(a, 7)[1] + d[1]]], B.l, st);
+        }
+      }
+      // дверь на левой грани
+      g += `<g transform="matrix(.4,.23,0,.46,20,36)"><path d="M36 74V47a14 14 0 0 1 28 0V74Z" fill="#24170c" stroke="#1c120a" stroke-width="1.5"/></g>`;
+      // лестница второго цвета от двери к земле
+      const P0 = [20 + 0.4 * 36, 36 + 0.23 * 36 + 0.46 * 74], Q0 = [20 + 0.4 * 64, 36 + 0.23 * 64 + 0.46 * 74];
+      const dd = [-5.2, 3];
+      for (let k = 0; k < 3; k++) {
+        const sh = (P, m) => [P[0] + dd[0] * m, P[1] + dd[1] * m + 4 * k];
+        const a = sh(P0, k), b = sh(Q0, k), a2 = sh(P0, k + 1), b2 = sh(Q0, k + 1);
+        g += poly([a, b, b2, a2], B.l, st);
+        g += poly([a2, b2, [b2[0], b2[1] + 4], [a2[0], a2[1] + 4]], B.b, st);
+        g += poly([b, [b[0], b[1] + 4 * (3 - k)], [b2[0], b2[1] + 4 * (3 - k)], b2], B.d, st);
+      }
+      break;
+    }
+  }
+  return `<g transform="translate(${x},${y})">${g}</g>`;
+}
+
+// ---------- вкладка «Монументы» ----------
+const PAIRS = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+function renderGallery() {
+  const SZ = 120, GAP = 22, LBL = 30;
+  let h = '';
+  MON_VARIANTS.forEach((V, v) => {
+    const Wd = PAIRS.length * (SZ + GAP) - GAP + 16;
+    let svg = `<defs>${monDefs('g' + v)}</defs>`;
+    PAIRS.forEach(([a, b], k) => {
+      const x = 8 + k * (SZ + GAP), y = 8;
+      svg += `<rect x="${x}" y="${y}" width="${SZ}" height="${SZ}" rx="4" fill="#d6bd88"/>`;
+      for (const [dx, dy] of [[0, 0], [60, 0], [0, 60], [60, 60]]) svg += `<rect x="${x + dx + 3}" y="${y + dy + 3}" width="54" height="54" rx="5" fill="#857a69" stroke="#5f564a"/>`;
+      svg += `<path d="M${x + 60} ${y}V${y + SZ}M${x} ${y + 60}H${x + SZ}" stroke="#4b3418" stroke-opacity=".25"/>`;
+      svg += monumentSVG(v, a, b, x, y, 'g' + v);
+      svg += `<circle cx="${x + SZ / 2 - 9}" cy="${y + SZ + 16}" r="6" fill="${HEX[a]}" stroke="#e8dcc4" stroke-width="1"/><circle cx="${x + SZ / 2 + 9}" cy="${y + SZ + 16}" r="6" fill="${HEX[b]}" stroke="#e8dcc4" stroke-width="1"/>`;
+    });
+    const smalls = PAIRS.map(([a, b]) => `<svg viewBox="0 0 120 120" width="46" height="46" aria-label="${COLNAME[a]} и ${COLNAME[b]}"><defs>${monDefs('s' + v + a + b)}</defs>${monumentSVG(v, a, b, 0, 0, 's' + v + a + b)}</svg>`).join('');
+    h += `<section class="gcard${state.mon === v ? ' on' : ''}">
+      <div class="ghead"><div><b>${v + 1}. ${V.name}</b><span>${V.d}</span></div>
+        <button class="btn${state.mon === v ? ' primary' : ''}" data-v="${v}">${state.mon === v ? 'Выбран, смотреть на поле' : 'Посмотреть на поле'}</button></div>
+      <svg class="gsvg" viewBox="0 0 ${Wd} ${SZ + LBL + 8}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>
+      <div class="gsmall"><span>В панели выбора монумента:</span>${smalls}</div>
+    </section>`;
+  });
+  const el = document.getElementById('gcards');
+  el.innerHTML = h;
+  el.querySelectorAll('button[data-v]').forEach((b) => b.addEventListener('click', () => { state.mon = +b.dataset.v; state.mode = 'war'; render(); }));
+}
+
 // ---------- поле ----------
 function renderBoard(st, mode, sel) {
   const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -283,7 +503,7 @@ function renderBoard(st, mode, sel) {
     <radialGradient id="gold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
-    <clipPath id="circ" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath>`;
+    <clipPath id="circ" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath>${monDefs('b')}`;
   for (const k of [...TILEIMG, 'tile_catastrophe']) s += `<image id="i_${k}" width="${C - 6}" height="${C - 6}" href="${IMG[k]}" preserveAspectRatio="xMidYMid slice"/>`;
   // маска реки: клетки реки, у края поля вытянуты наружу, чтобы край не скруглялся
   let rects = '';
@@ -354,10 +574,7 @@ function renderBoard(st, mode, sel) {
   // монументы
   for (const m of st.monuments) {
     if (m.pos < 0) continue;
-    const key = MONKEY[[m.c1, m.c2].sort().join(',')];
-    const x = cx(m.pos), y = cy(m.pos);
-    s += `<rect x="${x + 6}" y="${y + 6}" width="${2 * C - 12}" height="${2 * C - 12}" rx="10" fill="#2a2119" fill-opacity=".35"/>
-          <image href="${IMG['mon_' + key]}" x="${x + 4}" y="${y + 2}" width="${2 * C - 8}" height="${2 * C - 8}" filter="url(#shadow2)"/>`;
+    s += monumentSVG(state.mon, m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
   }
   // контуры царств
   const lab = st.lab;
@@ -570,13 +787,17 @@ function renderLobby() {
 }
 
 // ---------- режимы ----------
-const state = { mode: 'war', sel: 1, order: 'loser' };
+const state = { mode: 'war', sel: 1, order: 'loser', mon: 0 };
 function render() {
-  document.querySelectorAll('.mockbar .tabs button').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
-  const lobby = state.mode === 'lobby';
+  document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
+  document.querySelectorAll('#monsel button').forEach((b) => b.classList.toggle('on', +b.dataset.v === state.mon));
+  const lobby = state.mode === 'lobby', gal = state.mode === 'gallery';
   document.getElementById('lobby').hidden = !lobby;
-  document.getElementById('game').hidden = lobby;
+  document.getElementById('gallery').hidden = !gal;
+  document.getElementById('game').hidden = lobby || gal;
+  document.getElementById('monsel').hidden = lobby;
   if (lobby) { renderLobby(); return; }
+  if (gal) { renderGallery(); return; }
   const st = state.mode === 'war' ? POS.war : POS.turnSnap;
   const sel = state.mode === 'turn' ? state.sel : null;
   document.getElementById('bag').textContent = st.bag.reduce((a, b) => a + b, 0);
@@ -589,7 +810,8 @@ function render() {
   document.getElementById('log').innerHTML = journal(state.mode === 'war' ? POS.events.length : POS.turnEventsAt);
   renderHand(st, state.mode, sel ?? -1);
 }
-document.querySelectorAll('.mockbar .tabs button').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; render(); }));
+document.querySelectorAll('.mockbar .tabs button[data-mode]').forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; render(); }));
+document.querySelectorAll('#monsel button').forEach((b) => b.addEventListener('click', () => { state.mon = +b.dataset.v; render(); }));
 document.getElementById('camT').addEventListener('click', (e) => { const g = document.getElementById('cams'); g.hidden = !g.hidden; e.target.textContent = g.hidden ? 'Развернуть' : 'Свернуть'; });
 document.getElementById('log').addEventListener('click', (e) => {
   const li = e.target.closest('li'); if (!li || li.dataset.cell === '') return;

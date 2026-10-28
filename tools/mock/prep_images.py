@@ -53,17 +53,5 @@ for sym in ['lion', 'bull', 'bow', 'pot']:
         im.putalpha(m.resize((96, 96), Image.LANCZOS))
         res[f'tok_{sym}_{col}'] = b64(im, 'PNG', optimize=True)
 
-for mon in ['red_blue', 'red_green', 'red_black', 'green_blue', 'blue_black', 'green_black']:
-    fn = mon if mon != 'red_blue' else 'blue_red'
-    im = Image.open(f'{src}/monuments/{fn}.jpg').convert('RGB')
-    box = square(bbox_nonwhite(im, 40))
-    im = im.crop(box).resize((140, 140), Image.LANCZOS)
-    # белый фон -> прозрачность по близости к белому
-    g = ImageChops.difference(im, Image.new('RGB', im.size, (255, 255, 255))).convert('L')
-    a = g.point(lambda v: 0 if v < 18 else min(255, (v - 18) * 6))
-    im = im.convert('RGBA')
-    im.putalpha(a)
-    res['mon_' + mon] = b64(im, 'PNG', optimize=True)
-
 json.dump(res, open(out, 'w', encoding='utf-8'))
 print({k: len(v) // 1024 for k, v in res.items()}, 'КБ всего', sum(len(v) for v in res.values()) // 1024)
