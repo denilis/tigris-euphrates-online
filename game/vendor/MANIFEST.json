@@ -1,9 +1,9 @@
 {
   "source": "tigris-bot",
   "branch": "feat/train-eval",
-  "commit": "4c58fde9523c831704a8b18b8b662086ffbd3c93",
+  "commit": "925f21df46e6cdf08705bc434f8ce1865e7777a7",
   "dirty": false,
-  "syncedAt": "2026-10-28T10:52:17.698Z",
+  "syncedAt": "2026-10-28T13:27:33.451Z",
   "files": {
     "bot/belief.js": "ea519c324ffb1ca495719ac496058f3c554d47d5e8f3b781b9554bc08b22f96f",
     "bot/bot.js": "5beeea45a4071a0618b253e85b9e5b8093f8e430cf9979be67edaf0587309ce8",
@@ -18,11 +18,11 @@
     "engine/constants.js": "40ad4a5dcab42502f9dcf28b32bdbcbed60f3f0e663d3d6ac23010d7c99114f4",
     "engine/engine.js": "b2b35d57336d531bce636059662d42d1f7f0b1568b77351aedba4412c4a0fe1d",
     "engine/rng.js": "c7254a58e8951f4dd8f8551f1c321a20114f0bc065e2f85db5bd7f60cd6d8d44",
-    "test/fixes.test.js": "29f5581632686ba00639efa7d0fc98eb385a84e17ee8022cb87cde887230e76f",
+    "test/fixes.test.js": "ba5f37f660c56b25c0b44cd8f93ae2b276d84e263c98cb75a75d507ae5a6ae35",
     "test/fixtures/935700491_early_catastrophes.json": "93c3e5d55efa8883d8823664a04da98965aedfc3000dbb16aecd395a6aa9006f",
     "test/helpers.js": "eab616f7593e1cb28e0fe0e360dbad6a7a37ad162731bafc54355c3d3fbb650c",
     "test/random.test.js": "328f46bc8dc6da9de5c5d5ada8c6b798b09d6d85b449557b9defe0f14a250284",
     "test/rules.test.js": "96f5d0e3a8bb3aa1095c9d2a57350bf3128d1d3aff46bb9ae96bcd1b45bbbbcd",
-    "test/time.test.js": "d090971379fca65a13b099c032ca76bace1cb28014b00f31772f51deb817a45f"
+    "test/time.test.js": "ac6a68d0c28468de1d1e865d9e277c7881a58ee6b0e35cf5a4d4c95f225e8f29"
   }
 }

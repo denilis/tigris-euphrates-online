@@ -110,10 +110,14 @@ test('безопасный ход допустим в любой фазе', () =
 
 test('потолок времени: бот на силе 100 укладывается', async () => {
   const t = botTable(7, { strength: 100, errors: 0 });
+  const c0 = process.cpuUsage();
   const r = await botStep(t, { rng: makeRng(1), botRng: makeRng(2), now: T0, timeCap: 300 });
+  const c = process.cpuUsage(c0);
+  const cpuMs = (c.user + c.system) / 1000;
   assert.equal(r.fallback, false);
-  // срок мягкий (лучший кандидат досчитывается всегда), но не в разы больше потолка
-  assert.ok(r.ms < 1500, `решение заняло ${r.ms} мс`);
+  // срок мягкий (лучший кандидат досчитывается всегда), но не в разы больше потолка.
+  // Меряем процессорное время: часы врут, когда тесты идут параллельно и делят процессор.
+  assert.ok(cpuMs < 1500, `решение заняло ${Math.round(cpuMs)} мс процессора`);
 });
 
 test('сбой бота: падение или недопустимый ход заменяются безопасным ходом', async () => {

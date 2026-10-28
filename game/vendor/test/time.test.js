@@ -30,8 +30,13 @@ test('без потолка времени решение повторяется
 
 test('потолок времени соблюдается на сильном боте', () => {
   const s = createGame({ layout: BOARDS.advanced, numPlayers: 4, cfg: CFG }, makeRng(3));
-  const res = decide(makeView(s, 0, 'none', makeRng(1)), { strength: 100, errors: 0, timeMs: 300 }, makeRng(2));
+  const view = makeView(s, 0, 'none', makeRng(1));
+  const c0 = process.cpuUsage();
+  const res = decide(view, { strength: 100, errors: 0, timeMs: 300 }, makeRng(2));
+  const c = process.cpuUsage(c0);
+  const cpuMs = (c.user + c.system) / 1000;
   assert.ok(legalMoves(s).some((m) => JSON.stringify(m) === JSON.stringify(res.move)));
-  // срок мягкий (лучший кандидат досчитывается всегда), но не в разы больше потолка
-  assert.ok(res.ms < 300 * 4, `решение заняло ${res.ms} мс при потолке 300`);
+  // срок мягкий (лучший кандидат досчитывается всегда), но не в разы больше потолка.
+  // Меряем процессорное время: часы врут, когда тесты идут параллельно и делят процессор.
+  assert.ok(cpuMs < 300 * 4, `решение заняло ${Math.round(cpuMs)} мс процессора при потолке 300`);
 });

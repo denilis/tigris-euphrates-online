@@ -86,9 +86,10 @@ test('проверка ответа соперника: при силе 50 пр�
   }
   while (s.phase !== 'action') applyMove(s, legalMoves(s)[0], rng);
   const view = () => makeView(s, s.toMove, 'none', makeRng(4));
-  const on = decide(view(), { strength: 50, errors: 0, style: 'base' }, makeRng(5));
+  // без потолка времени: под нагрузкой часы съедали бюджет до проверки ответов (тест падал)
+  const on = decide(view(), { strength: 50, errors: 0, style: 'base', timeMs: Infinity }, makeRng(5));
   assert.ok(on.replied >= 2, 'проверено ответом соперника: ' + on.replied);
-  const off = decide(view(), { strength: 50, errors: 0, style: 'base', reply: false }, makeRng(5));
+  const off = decide(view(), { strength: 50, errors: 0, style: 'base', reply: false, timeMs: Infinity }, makeRng(5));
   assert.equal(off.replied, 0);
   assert.equal(params({ strength: 20 }).replyK, 0, 'слабый бот ответ соперника не проверяет');
 });
@@ -102,7 +103,7 @@ test('позиции живой партии 935700491: катастрофы н�
     for (const [k, T] of Object.entries(typed)) s[k] = T.from(p.state[k]);
     assert.equal(p.played.startsWith('катастрофа'), true, 'в партии здесь была катастрофа');
     for (const style of ['base', 'universal']) {
-      const res = decide(makeView(s, p.seat, 'none', makeRng(3)), { strength: 50, errors: 0, style }, makeRng(4));
+      const res = decide(makeView(s, p.seat, 'none', makeRng(3)), { strength: 50, errors: 0, style, timeMs: Infinity }, makeRng(4));
       assert.notEqual(res.move.type, 'catastrophe', `ход ${p.turn}, стиль ${style}: ${res.text}`);
     }
   }
