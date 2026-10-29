@@ -5,6 +5,8 @@ export const RING = ['#b8432f', '#2d6a93', '#3d7a46', '#cfc6b4']; // у черн
 export const COLKEY = ['red', 'blue', 'green', 'black'];
 export const COLNAME = ['красный', 'синий', 'зеленый', 'черный'];
 export const COLADJPL = ['красных', 'синих', 'зеленых', 'черных'];
+export const COLGEN = ['красного', 'синего', 'зеленого', 'черного'];
+export const COLDAT = ['красному', 'синему', 'зеленому', 'черному'];
 export const TILE = ['храм', 'ферма', 'рынок', 'поселение'];
 export const TILEPL = ['храмов', 'ферм', 'рынков', 'поселений'];
 export const TILEDAT = ['храмам', 'фермам', 'рынкам', 'поселениям'];
@@ -19,6 +21,7 @@ export const FACEDOWN = 4, WONDER = 5, CATASTROPHE = 6;
 
 export const tileImg = (c) => `/img/tiles/${TILEFILE[c]}.jpg`;
 export const catImg = '/img/tiles/catastrophe.jpg';
+export const uniteImg = '/img/tiles/unification.jpg';
 export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.png`;
 export const cellName = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
 
@@ -72,15 +75,21 @@ export function groups(board, blocked = -1) {
   return lab;
 }
 
-/** Группы клеток и лидеры в каждой: lead.get(группа)[цвет] = игрок движка или null. */
-export function kingdomLeaders(board) {
-  const lab = groups(board);
+/** Два лидера одного цвета в одной группе (идет восстание): чей цвет, решит конфликт. */
+export const CONTESTED = -1;
+
+/**
+ * Группы клеток и лидеры в каждой: lead.get(группа)[цвет] = игрок движка, null или CONTESTED.
+ * blocked — тайл объединения во время войны: как и в движке, он не входит ни в одно царство.
+ */
+export function kingdomLeaders(board, blocked = -1) {
+  const lab = groups(board, blocked);
   const lead = new Map();
   for (let i = 0; i < W * H; i++) {
     const v = board.leader[i];
-    if (v < 0) continue;
+    if (v < 0 || lab[i] < 0) continue;
     const a = lead.get(lab[i]) || [null, null, null, null];
-    a[v & 3] = v >> 2;
+    a[v & 3] = a[v & 3] == null ? v >> 2 : CONTESTED;
     lead.set(lab[i], a);
   }
   return { lab, lead };
@@ -89,18 +98,23 @@ export function kingdomLeaders(board) {
 /**
  * Чей тайл (метки владельца, идея Дениса 29.10): тайл в царстве идёт лидеру своего цвета,
  * а если такого лидера нет, царю (ему движок начисляет очки за такие тайлы). Тайл вне
- * царства ничей. Возвращает по клетке null или { p, c, king }.
+ * царства и тайл, за цвет которого идет восстание, ничей. Возвращает по клетке null или { p, c, king }.
  */
 export function tileOwners(board, kl = kingdomLeaders(board)) {
   const { lab, lead } = kl;
   return Array.from({ length: W * H }, (_, i) => {
     const t = board.tile[i];
-    const a = t >= 0 && t <= 3 ? lead.get(lab[i]) : null;
+    const a = t >= 0 && t <= 3 && lab[i] >= 0 ? lead.get(lab[i]) : null;
     if (!a) return null;
-    if (a[t] != null) return { p: a[t], c: t, king: false };
-    if (a[3] != null) return { p: a[3], c: 3, king: true };
-    return null;
+    const own = a[t] != null ? a[t] : a[3];
+    if (own == null || own === CONTESTED) return null;
+    return { p: own, c: a[t] != null ? t : 3, king: a[t] == null };
   });
+}
+
+/** Клетка тайла объединения, пока идут войны за него, иначе null. */
+export function unitePos(g) {
+  return g?.ctx?.unite && g.ctx.pos != null ? g.ctx.pos : null;
 }
 
 /** Разметка из строки шаблона в узел. */

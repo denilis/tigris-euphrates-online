@@ -1,7 +1,7 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders } from './util.js';
+import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders } from './util.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -89,6 +89,7 @@ function staticLayer(river) {
     ${monDefs('b')}
     ${[0, 1, 2, 3].map((c) => `<image id="tl${c}" width="${C - 6}" height="${C - 6}" href="${tileImg(c)}" preserveAspectRatio="xMidYMid slice"/>`).join('')}
     <image id="tlcat" width="${C - 6}" height="${C - 6}" href="${catImg}" preserveAspectRatio="xMidYMid slice"/>
+    <image id="tlun" width="${C - 6}" height="${C - 6}" href="${uniteImg}" preserveAspectRatio="xMidYMid slice"/>
     ${HEROES.flatMap((h) => [0, 1, 2, 3].map((c) => `<image id="tk_${h}_${c}" width="44" height="44" href="${tokenImg(h, c)}"/>`)).join('')}
     <mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo)">${rects}</g></mask>
     <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo2)">${rects}</g></mask>
@@ -116,9 +117,18 @@ function staticLayer(river) {
 }
 
 /**
+ * Тайл объединения (замечание Дениса 29.10, как на BGA): пока идут войны, вместо цветного тайла
+ * лежит тайл объединения, цвет не читается и ничьей метки нет; рамка пульсирует.
+ */
+function uniteMark(x, y) {
+  return `<rect class="pulse" x="${x + 1.5}" y="${y + 1.5}" width="${C - 3}" height="${C - 3}" rx="6" fill="none" stroke="#ffe08a" stroke-width="3" pointer-events="none"/>`;
+}
+
+/**
  * Нарисовать поле. g — view.game, heroOf(p) — герой игрока движка p.
  * opts: targets (клетки для хода), squares (левые верхние клетки монументов 2x2),
- * crosses (центры чуда), conflict { k, kind, unitePos, myExtra, me }, flash (клетка из журнала).
+ * crosses (центры чуда), conflict { k, kind, myExtra, me }, flash (клетка из журнала),
+ * unite (тайл объединения, пока идут войны: не входит ни в одно царство, рисуется тайлом объединения).
  */
 export function renderBoard(svg, g, heroOf, opts = {}) {
   const b = g.board;
@@ -131,11 +141,12 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     svg.dataset.key = key;
   }
   let s = '';
+  const up = opts.unite ?? -1;
 
   // стороны войны подкрашены (без объединяющего тайла царства распадаются на две части)
   const cf = opts.conflict;
-  if (cf && cf.kind === 'war' && cf.unitePos != null) {
-    const lab = groups(b, cf.unitePos);
+  if (cf && cf.kind === 'war' && up >= 0) {
+    const lab = groups(b, up);
     const la = lab[cf.k.attPos], ld = lab[cf.k.defPos];
     for (let i = 0; i < W * H; i++) {
       if (lab[i] === la) s += `<rect x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}" fill="#ff7a45" fill-opacity=".3"/>`;
@@ -148,7 +159,8 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     const t = b.tile[i];
     if (t < 0) continue;
     const x = cx(i) + 3, y = cy(i) + 3;
-    if (t <= 3) tiles += `<use href="#tl${t}" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
+    if (i === up) tiles += `<use href="#tlun" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
+    else if (t <= 3) tiles += `<use href="#tl${t}" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
     else if (t === CATASTROPHE) tiles += `<use href="#tlcat" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
     else if (t === FACEDOWN) tiles += `<rect x="${x}" y="${y}" width="${C - 6}" height="${C - 6}" rx="5" fill="#857a69" stroke="#5f564a"/>`;
     else tiles += `<rect x="${x}" y="${y}" width="${C - 6}" height="${C - 6}" rx="5" fill="#c9a24d" stroke="#94691f"/>`; // клетка чуда
@@ -157,7 +169,7 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
 
   // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;
   // полупрозрачный черный жетон — своего лидера нет, тайл идет царю
-  const kl = opts.owners ? kingdomLeaders(b) : null;
+  const kl = opts.owners ? kingdomLeaders(b, up) : null;
   if (opts.owners) {
     const own = tileOwners(b, kl);
     let m = '';
@@ -197,8 +209,8 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     }
   }
 
-  // контуры царств (групп, где стоит хотя бы один лидер)
-  const lab = groups(b);
+  // контуры царств (групп, где стоит хотя бы один лидер); во время войны тайл объединения отдельно
+  const lab = groups(b, up);
   const kingdom = new Set();
   for (let i = 0; i < W * H; i++) if (b.leader[i] >= 0) kingdom.add(lab[i]);
   let edges = '';
@@ -231,8 +243,8 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
       s += `<circle class="pulse" cx="${x}" cy="${y}" r="27" fill="none" stroke="${col}" stroke-width="3.5"/>
         <g transform="translate(${x + 18},${y - 22})"><circle r="13" fill="${col}" stroke="#1b1713" stroke-width="2"/><text y="5" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1713">${val}</text></g>`;
     }
-    if (cf.unitePos != null) s += `<rect class="pulse" x="${cx(cf.unitePos) + 1.5}" y="${cy(cf.unitePos) + 1.5}" width="${C - 3}" height="${C - 3}" rx="6" fill="none" stroke="#ffe08a" stroke-width="3.5"/>`;
   }
+  if (up >= 0) s += uniteMark(cx(up), cy(up));
 
   for (const i of opts.targets || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;

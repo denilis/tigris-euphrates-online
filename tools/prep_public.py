@@ -33,7 +33,7 @@ os.makedirs(os.path.join(DST, 'tiles'), exist_ok=True)
 os.makedirs(os.path.join(DST, 'tokens'), exist_ok=True)
 sizes = {}
 
-for name in ['temple', 'farm', 'market', 'settlement', 'catastrophe']:
+for name in ['temple', 'farm', 'market', 'settlement', 'catastrophe', 'unification']:
     im = Image.open(os.path.join(SRC, 'tiles', f'{name}.jpg')).convert('RGB')
     l, t, r, b = square(bbox_nonwhite(im))
     k = int((r - l) * 0.035)  # срезаем светлый кант плитки

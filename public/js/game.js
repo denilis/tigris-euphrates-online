@@ -3,8 +3,10 @@
 import { renderBoard, sealIcon } from './board.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
+import { battlesIn, battleCard } from './battle.js';
 import {
-  HEX, RING, COLNAME, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
+  HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
+  unitePos,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -39,6 +41,7 @@ const SKELETON = `<div class="app" id="game">
   </aside>
   <footer class="hand" id="gHand"></footer>
   <div class="modal" id="gDock" hidden></div>
+  <div class="battle" id="gBattle" hidden></div>
   <div class="endwrap" id="gEnd" hidden></div>
 </div>`;
 
@@ -51,6 +54,12 @@ export function renderGame(root, view, { act, go }) {
       if (r) onCell(+r.dataset.i);
     });
     root.querySelector('#gLog').addEventListener('click', (e) => {
+      const bb = e.target.closest('[data-battle]');
+      if (bb) {
+        ui.battleShow = +bb.dataset.battle;
+        draw();
+        return;
+      }
       const li = e.target.closest('li[data-cell]');
       if (!li || li.dataset.cell === '') return;
       ui.flash = +li.dataset.cell;
@@ -116,10 +125,10 @@ function onCell(i) {
 
 function boardOpts() {
   const { g, me, legal, decides } = D();
-  const o = { flash: ui.flash, owners: ui.owners };
+  const o = { flash: ui.flash, owners: ui.owners, unite: unitePos(g) };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
-    o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', unitePos: g.ctx.war ? g.ctx.pos : null, myExtra: ui.chosen.size, me };
+    o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
   }
   if (!decides) return o;
   if (g.phase === 'action' && ui.sel) {
@@ -159,7 +168,25 @@ function draw() {
   const app = root.querySelector('#game');
   app.classList.toggle('conflict', active && !ui.collapsed);
   app.classList.toggle('locked', active);
+  drawBattle(d);
   renderEnd(root.querySelector('#gEnd'), view, ctl);
+}
+
+// --- ход боя: новые бои с прошлого «Понятно» (при входе на стол старые не показываем),
+// или бой, выбранный в журнале
+function drawBattle({ view, g }) {
+  const box = ctl.root.querySelector('#gBattle');
+  if (ui.battleCode !== view.code) Object.assign(ui, { battleCode: view.code, battleSeen: g.log.length, battleShow: null });
+  const list = ui.battleShow != null ? battlesIn(g.log, ui.battleShow).slice(0, 1) : battlesIn(g.log, ui.battleSeen).slice(-2);
+  const key = list.map((b) => b.i).join(',');
+  if (box.dataset.key === key) return; // не перерисовываем: иначе показ боя начнется заново
+  box.dataset.key = key;
+  box.hidden = !list.length;
+  box.innerHTML = list.length ? `${list.map((b) => battleCard(b, view)).join('')}<div class="bfoot"><button class="btn primary" id="bOk">Понятно</button></div>` : '';
+  box.querySelector('#bOk')?.addEventListener('click', () => {
+    Object.assign(ui, { battleSeen: current.game.log.length, battleShow: null });
+    draw();
+  });
 }
 
 function drawPlayers({ view, g, me, seat }) {
@@ -356,11 +383,12 @@ function drawLog({ g, seat }) {
   const name = (id) => seat(id)?.name || 'Бот';
   const lines = [];
   let key = null, line = null;
-  for (const e of g.log) {
+  for (let li = 0; li < g.log.length; li++) {
+    const e = g.log[li];
     const k = `${e.turn}:${e.actor}:${e.action}`;
     if (k !== key) {
       key = k;
-      line = { turn: e.turn, actor: e.actor, parts: [], pts: [], cell: null, unite: false };
+      line = { turn: e.turn, actor: e.actor, parts: [], pts: [], cell: null, unite: false, battles: [] };
       lines.push(line);
     }
     switch (e.ev) {
@@ -374,9 +402,17 @@ function drawLog({ g, seat }) {
       case 'withdraw': line.parts.push(`${LEADER[e.c]} в руку`); break;
       case 'catastrophe': line.parts.push(`катастрофа ${cellName(e.pos)}`); line.cell = e.pos; break;
       case 'discard': line.parts.push(`сброс ${e.n}`); break;
-      case 'warStart': line.parts.push(`война за ${COLNAME[e.color]}: атакует ${name(e.att)}, защищается ${name(e.def)}`); break;
-      case 'war': line.parts.push(`победа: ${name(e.winner)} ${e.attTotal}:${e.defTotal}`); break;
-      case 'revolt': line.parts.push(`восстание, победа: ${name(e.winner)} ${e.attTotal}:${e.defTotal}`); break;
+      case 'warStart':
+        line.parts.push(`война за ${COLNAME[e.color]}: атакует ${name(e.att)}${e.att !== e.actor ? ` (у ходящего нет ${COLGEN[e.color]} лидера)` : ''}, защищается ${name(e.def)}`);
+        break;
+      case 'war':
+        line.battles.push(li);
+        line.parts.push(e.attTotal === e.defTotal ? `ничья ${e.attTotal}:${e.defTotal}, побеждает защитник ${name(e.winner)}` : `победа: ${name(e.winner)} ${e.attTotal}:${e.defTotal}`);
+        break;
+      case 'revolt':
+        line.battles.push(li);
+        line.parts.push(`восстание, ${e.attTotal === e.defTotal ? `ничья ${e.attTotal}:${e.defTotal}, побеждает защитник ${name(e.winner)}` : `победа: ${name(e.winner)} ${e.attTotal}:${e.defTotal}`}`);
+        break;
       case 'monument': line.parts.push('монумент'); line.cell = e.tl; break;
       case 'wonder': line.parts.push('чудо'); line.cell = e.center; break;
       case 'building': line.parts.push(`здание «${TILE[e.c]}»`); line.cell = e.pos; break;
@@ -389,7 +425,8 @@ function drawLog({ g, seat }) {
   }
   ctl.root.querySelector('#gLog').innerHTML = lines.reverse().slice(0, 120)
     .filter((l) => l.parts.length || l.pts.length)
-    .map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><span><u>${esc(name(l.actor))}:</u> ${esc([...l.parts, ...l.pts].join(', '))}</span></li>`).join('');
+    .map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><span><u>${esc(name(l.actor))}:</u> ${esc([...l.parts, ...l.pts].join(', '))}${
+      l.battles.map((i) => ` <button class="lb" data-battle="${i}" title="Показать бой">бой</button>`).join('')}</span></li>`).join('');
 }
 
 export { plural };

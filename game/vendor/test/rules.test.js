@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyMove, legalMoves, validate, finalVector, ranking, tileTargets, leaderTargets,
-  catastropheTargets, buildingOptions,
+  catastropheTargets, buildingOptions, createGame,
 } from '../engine/engine.js';
+import { BOARDS } from '../engine/boards.js';
 import { RED, BLUE, GREEN, BLACK, FACEDOWN, WONDER, CATASTROPHE, EMPTY } from '../engine/constants.js';
 import { makeRng } from '../engine/rng.js';
 import { at, bare, put, lead, setHand } from './helpers.js';
@@ -356,4 +357,27 @@ test('итоговый счёт: сокровища закрывают слаб�
   s.players[1].score = [5, 5, 6, 6];
   s.players[2].score = [4, 9, 9, 9];
   assert.deepEqual(ranking(s), [1, 0, 2]);
+});
+
+test('событие боя: стороны, поле и поддержка из руки сходятся с итогом', () => {
+  const kinds = { war: 0, revolt: 0 };
+  for (let seed = 1; seed <= 30; seed++) {
+    const r = makeRng(seed);
+    const s = createGame({ layout: BOARDS.advanced, numPlayers: 3, cfg: { englishSupport: true, buildings: true, wonder: true } }, r);
+    s.log = [];
+    for (let k = 0; k < 600 && !s.over; k++) {
+      const legal = legalMoves(s);
+      applyMove(s, legal[Math.floor(r() * legal.length)], r);
+      for (const e of s.log) {
+        if (e.ev !== 'war' && e.ev !== 'revolt') continue;
+        kinds[e.ev]++;
+        assert.equal(e.attTotal, e.attBoard + e.attN);
+        assert.equal(e.defTotal, e.defBoard + e.defN);
+        assert.equal(e.winner, e.attTotal > e.defTotal ? e.att : e.def);
+        assert.equal(e.loser, e.winner === e.att ? e.def : e.att);
+      }
+      s.log.length = 0;
+    }
+  }
+  assert.ok(kinds.war > 10 && kinds.revolt > 10, JSON.stringify(kinds));
 });

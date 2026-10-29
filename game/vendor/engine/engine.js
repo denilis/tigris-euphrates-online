@@ -594,7 +594,11 @@ function resolveConflict(s, k, color, kind) {
   const loser = attWins ? k.def : k.att;
   const loserPos = attWins ? k.defPos : k.attPos;
   const lc = kind === 'revolt' ? k.leaderColor : color;
-  emit(s, { ev: kind, winner, loser, color: lc, attTotal, defTotal });
+  // стороны боя целиком (поле и поддержка из руки): по ним сайт показывает ход боя
+  emit(s, {
+    ev: kind, winner, loser, color: lc, attTotal, defTotal,
+    att: k.att, def: k.def, attBoard: k.attBoard, defBoard: k.defBoard, attN: k.attN, defN: k.defN,
+  });
   if (kind === 'revolt') {
     removeLeader(s, loser, lc);
     s.players[winner].score[RED] += 1;

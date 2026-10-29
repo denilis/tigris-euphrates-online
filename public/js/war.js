@@ -2,11 +2,10 @@
 // но не нажимается, партия ждет решения. Поддержка выбирается тайлами в руке, исход каждого
 // варианта считает сервер (view.game.preview). Восстание и выбор цвета войны — здесь же.
 import {
-  HEX, COLNAME, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
+  HEX, COLNAME, COLGEN, COLDAT, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
 } from './util.js';
 
 const PHASES = ['warSupport', 'revoltSupport', 'warChoose'];
-const COLDAT = ['красному', 'синему', 'зеленому', 'черному'];
 
 export function warActive(view) {
   const g = view.game;
@@ -111,12 +110,14 @@ export function renderWarDock(box, view, ui, { move, redraw }) {
     : `Можно добавить от 0 до ${Math.max(...legalNs)}.`;
   const title = isRevolt ? `Восстание: ${LEADER[k.leaderColor]}` : `Война за ${COLNAME[color]}`;
   const who = isAtt ? `Вы атакуете, защищается ${esc(name(opp))}.` : `Атакует ${esc(name(opp))}, вы защищаетесь.`;
-  const cause = !isRevolt && g.ctx.unite !== undefined ? `Тайл на ${cellName(g.ctx.pos)} объединил два царства. ` : '';
+  const cause = !isRevolt && g.ctx.unite ? `Тайл на ${cellName(g.ctx.pos)} объединил два царства. ` : '';
+  // ходящий без лидера этого цвета в войне не участвует: атакует следующий по очереди участник
+  const why = !isRevolt && k.att !== g.cur ? ` У ходящего (${esc(name(g.cur))}) нет ${COLGEN[color]} лидера в этих царствах, поэтому атакует следующий по очереди участник.` : '';
   const strength = isRevolt ? 'Сила по храмам рядом с лидером и храмам из руки.' : `Сила по ${TILEDAT[color]}, стороны подсвечены на поле.`;
 
   box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
     <div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
-    <p class="msub">${cause}${who} ${strength}</p>
+    <p class="msub">${cause}${who}${why} ${strength}</p>
     <div class="sides">
       ${side(k.att, 'атака', 'att', k.attBoard, attAdd, attTot, isAtt, false)}
       ${side(k.def, 'защита', 'def', k.defBoard, isAtt ? 0 : n, defTot, !isAtt, isAtt)}

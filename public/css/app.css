@@ -269,6 +269,27 @@ input,select{font:inherit;color:var(--text)}
 .endtbl .who small{color:var(--muted);font-weight:400}
 .reopen{position:fixed;right:16px;bottom:calc(var(--hand) + 12px);z-index:40}
 
+/* ход боя: стороны, тайлы на поле и из руки по очереди, итог */
+.battle{position:fixed;left:16px;top:calc(var(--top) + 12px);z-index:45;width:min(360px,calc(100vw - 32px));max-height:calc(100dvh - var(--top) - var(--hand) - 24px);overflow:auto;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:rgba(36,28,20,.97);border:1px solid var(--gold2);border-radius:14px;box-shadow:0 14px 44px rgba(0,0,0,.65);animation:slidein .25s ease-out}
+.bcard+.bcard{border-top:1px dashed #3a2e22;padding-top:8px}
+.bhead{display:flex;align-items:center;gap:8px;font-family:Cinzel,Georgia,serif;color:var(--gold);font-size:16px}
+.bhead i{width:12px;height:12px;border-radius:3px;box-shadow:0 0 0 2px #e8dcc4}
+.bhead small{margin-left:auto;font-family:system-ui,sans-serif;color:var(--muted);font-size:12px}
+.battle .sides{margin:6px 0}
+.battle .mt,.battle .mt.sent{animation:bdrop .35s ease-out both;animation-delay:var(--d)}
+.battle .stot,.battle .bres{animation:bfade .3s ease-out both;animation-delay:var(--d)}
+.battle .sbox.win{animation:bwin .5s ease-out both;animation-delay:var(--w)}
+.battle .sbox.lose{animation:blose .5s ease-out both;animation-delay:var(--w)}
+@keyframes bdrop{from{transform:translateY(-12px) scale(1.25);opacity:0}}
+@keyframes bfade{from{opacity:0}}
+@keyframes bwin{to{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(224,182,90,.45)}}
+@keyframes blose{to{opacity:.6}}
+.bres{margin:0;font-size:12.5px;line-height:1.45}
+.bfoot{display:flex;justify-content:flex-end}
+.lb{margin-left:4px;padding:0 6px;font:inherit;font-size:11px;line-height:16px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--gold);cursor:pointer}
+.lb:hover{border-color:var(--gold2)}
+@media (prefers-reduced-motion:reduce){.battle,.battle *{animation:none!important}}
+
 /* ---------- узкие экраны ---------- */
 @media (max-width:1200px){:root{--side:250px;--dock:390px}.badges{display:none}}
 @media (max-width:900px){
@@ -286,6 +307,7 @@ input,select{font:inherit;color:var(--text)}
   .hint{white-space:normal}
   .modal.dock{top:auto;width:100%;max-height:72vh;border-left:0;border-top:1px solid var(--gold2);border-radius:16px 16px 0 0}
   .modal.pill{bottom:12px;white-space:normal;flex-wrap:wrap;justify-content:center}
+  .battle{left:8px;right:8px;width:auto;top:auto;bottom:12px;max-height:70vh}
   .seat{grid-template-columns:1fr}
   .botset{grid-column:auto}
   .lcard{padding:16px}

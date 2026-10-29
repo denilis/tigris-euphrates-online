@@ -1,17 +1,18 @@
 // Найти позицию, где решение фазы phase принимает человек, и положить стол в локальный
 // сервер (dev/server.js, путь /__dev/table). Для ручной проверки редких решений: монумент,
 // очко за чудо, выбор войны.
-//   node tools/dev-position.js <phase> <userId Дениса> <userId Андрея> <userId Влада> [порт]
+//   node tools/dev-position.js <phase> <userId Дениса> <userId Андрея> <userId Влада> [порт] [префикс кода]
+// Стол с таким кодом уже есть — сервер его не заменит: возьмите другой префикс.
 import { createTable, sit, setHero, start, submit, submitSeat, botDue } from '../game/table.js';
 import { stateFromJSON } from '../game/serialize.js';
 import { legalMoves } from '../game/vendor/engine/engine.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
 
-const [phase = 'monument', u0, u1, u2, port = 3017] = process.argv.slice(2);
+const [phase = 'monument', u0, u1, u2, port = 3017, prefix = 'DEV'] = process.argv.slice(2);
 const users = [{ userId: u0, name: 'Денис' }, { userId: u1, name: 'Андрей' }, { userId: u2, name: 'Влад' }];
 
 for (let seed = 1; seed <= 2000; seed++) {
-  const code = 'DEV' + String(seed).padStart(3, '0').slice(-3);
+  const code = prefix + String(seed).padStart(3, '0').slice(-3);
   const t = createTable({ code, host: users[0], now: Date.now() });
   sit(t, users[1], 1, 0);
   sit(t, users[2], 2, 0);
