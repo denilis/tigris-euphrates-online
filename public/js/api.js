@@ -59,6 +59,8 @@ export function watchTable(code, onView, onError) {
 
   const merge = (v, appendLog) => {
     if (appendLog && view?.game && v.game) v.game.log = [...view.game.log, ...v.game.log];
+    // часы сервера против своих: таймеры считаем по серверу
+    if (v.game?.clock?.now) v.game.clock.skew = v.game.clock.now - Date.now();
     view = v;
     version = v.version;
     onView(v);
@@ -67,8 +69,8 @@ export function watchTable(code, onView, onError) {
   async function fetchView(full = false) {
     const from = !full && view?.game ? view.game.log.length : 0;
     const v = await api('GET', `tables/${code}${from ? `?logFrom=${from}` : ''}`);
-    // журнал разошёлся (стол пересоздан или пропуск): берём целиком
-    if (from && v.game && v.game.logTotal !== from + v.game.log.length) return fetchView(true);
+    // журнал разошёлся (стол пересоздан, пропуск или отмена хода): берём целиком
+    if (from && v.game && (v.game.logTotal !== from + v.game.log.length || (v.game.logEpoch || 0) !== (view.game.logEpoch || 0))) return fetchView(true);
     merge(v, Boolean(from));
   }
 

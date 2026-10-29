@@ -4,9 +4,10 @@ import { renderBoard, sealIcon } from './board.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
 import { battlesIn, battleCard } from './battle.js';
+import { fmt, fmtTotal, clockNow } from './clock.js';
 import {
   HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
-  unitePos,
+  unitePos, toast,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -67,6 +68,7 @@ export function renderGame(root, view, { act, go }) {
       setTimeout(() => { ui.flash = null; draw(); }, 1300);
     });
     root.querySelector('#gCode').addEventListener('click', () => copy(location.origin + location.pathname + location.search + '#/t/' + current.code));
+    setInterval(updateClocks, 250);
     root.querySelector('#gOwners').addEventListener('click', () => {
       ui.owners = !ui.owners;
       try { localStorage.setItem('tigris.owners', ui.owners ? 'on' : 'off'); } catch { /* без памяти */ }
@@ -205,7 +207,8 @@ function drawPlayers({ view, g, me, seat }) {
       <div class="av" style="background-image:url(${tokenImg(s.hero, pl.seat === me ? 0 : 3)})"></div>
       <div class="nm">${esc(s.name || 'Бот')}${pl.seat === me ? ' <small>(вы)</small>' : ''} <small>${HERONAME[s.hero] || ''}</small> ${bot} ${tag}</div>
       <span class="tm">${pl.handCount} в руке</span>
-      <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы"><i class="cat" style="background-image:url(${catImg})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span>${sc}</div>
+      <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы"><i class="cat" style="background-image:url(${catImg})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span>${sc}</div>${
+      g.clock ? `<div class="ptime" data-clock="seat" data-seat="${pl.seat}" title="Время за партию; красным то, что сверх времени хода"></div>` : ''}
     </div>`;
   }).join('');
 }
@@ -224,6 +227,7 @@ function waitingText({ g, name, seat }) {
     case 'monument': return `${n} решает, строить ли монумент.`;
     case 'treasure': return `${n} выбирает сокровище.`;
     case 'wonderPoint': return `${n} выбирает цвет очка за чудо.`;
+    case 'confirm': return `${n} завершает ход: пока идет окно, действие можно отменить.`;
     default: return '';
   }
 }
@@ -259,11 +263,12 @@ function drawNow(d) {
       buttons += btn('cancel', 'Отмена');
     } else {
       body = `<p>Действие ${g.actionNo} из 2. Выберите внизу тайл, лидера или катастрофу.</p>`;
+      if (g.canUndo) buttons = btn('undo', 'Отменить действие');
     }
   } else if (g.phase === 'build') {
     title = 'Здание';
     body = `<p>Можно построить здание «${TILE[g.ctx.color]}». Нажмите подсвеченную клетку.</p>`;
-    buttons = btn('skip', 'Не строить');
+    buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'monument') {
     title = 'Монумент';
     const ids = [...new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id))];
@@ -273,16 +278,22 @@ function drawNow(d) {
     }).join('');
     const wonder = legal.some((m) => m.type === 'wonder') ? `<button class="monopt${ui.monSel === 'wonder' ? ' on' : ''}" data-mon="wonder"><span class="wonderico"></span><span>чудо</span></button>` : '';
     body = `<p>${ui.monSel == null ? 'Выберите монумент, потом место на поле.' : 'Нажмите подсвеченное место на поле.'}</p><div class="monopts">${opts}${wonder}</div>`;
-    buttons = btn('skip', 'Не строить');
+    buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'treasure') {
     title = 'Сокровище';
     body = '<p>Возьмите сокровище: нажмите подсвеченное на поле.</p>';
+    if (g.canUndo) buttons = btn('undo', 'Отменить действие');
+  } else if (g.phase === 'confirm') {
+    title = 'Ход сделан';
+    body = `<p>Последнее действие еще можно отменить. Ход завершится сам через <b data-clock="confirm"></b>.</p>`;
+    buttons = btn('confirm', 'Завершить ход', 'primary') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'wonderPoint') {
     title = 'Очко за чудо';
     body = '<p>Выберите цвет, в который получите очко.</p>';
     buttons = legal.map((m, i) => `<button class="btn colorbtn" data-idx="${i}" style="border-color:${RING[m.color]}"><i style="background:${HEX[m.color]}"></i>${COLNAME[m.color]}</button>`).join('');
   }
-  el.innerHTML = `<h3>${title}</h3>${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
+  const clk = g.clock && !g.over ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
+  el.innerHTML = `<h3>${title}${clk}</h3>${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
   el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.act)));
   el.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', () => {
     ui.monSel = b.dataset.mon === 'wonder' ? 'wonder' : +b.dataset.mon;
@@ -297,6 +308,8 @@ function onNow(a) {
   else if (a === 'passYes') move(legal.findIndex((m) => m.type === 'pass'));
   else if (a === 'skip') move(legal.findIndex((m) => m.type === 'pass'));
   else if (a === 'withdraw') move(legal.findIndex((m) => m.type === 'withdraw' && m.color === ui.sel.color));
+  else if (a === 'confirm') move(legal.findIndex((m) => m.type === 'confirm'));
+  else if (a === 'undo') ctl.act({ action: 'undo', version: view.version });
   else if (a === 'discardYes') {
     const counts = [0, 0, 0, 0];
     for (const k of ui.discard) counts[handColors(view)[k]]++;
@@ -336,6 +349,7 @@ function drawHand(d) {
   if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
   else if (warActive(view)) hint = 'Идет конфликт: решите в окне справа.';
   else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите справа.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера или катастрофу.`;
+  else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие справа.';
   else hint = 'Решите в панели справа.';
   el.className = 'hand' + (acting ? '' : ' locked');
   el.innerHTML = `<div class="hint">${hint}</div>
@@ -376,6 +390,36 @@ function drawHand(d) {
   }));
 }
 
+// --- время (просьбы Дениса 29.10): у решающего таймер хода, сверх него минус и красный,
+// у каждого игрока копится время за партию. Цифры обновляются 4 раза в секунду без перерисовки.
+
+function updateClocks() {
+  if (!current?.game || !ctl?.root.querySelector('#game')) return;
+  const g = current.game, k = clockNow(g);
+  if (!k) return;
+  for (const el of ctl.root.querySelectorAll('[data-clock]')) {
+    const kind = el.dataset.clock;
+    if (kind === 'turn') {
+      if (!k.live) continue;
+      el.textContent = fmt(k.left);
+      el.classList.toggle('low', k.left > 0 && k.left <= 10000);
+      el.classList.toggle('neg', k.left <= 0);
+    } else if (kind === 'confirm') {
+      el.textContent = `${Math.max(0, Math.ceil((k.confirmLeft ?? 0) / 1000))} с`;
+    } else if (kind === 'seat') {
+      const seat = +el.dataset.seat, over = k.over(seat);
+      el.innerHTML = `время ${fmtTotal(k.used(seat))}${over >= 1000 ? `, <b>сверх ${fmtTotal(over)}</b>` : ''}`;
+    }
+  }
+  // красное предупреждение один раз за ход, когда время своего решения вышло
+  const mine = g.toMove === current.me && g.phase !== 'confirm';
+  const warnKey = `${current.code}:${g.turn}:${g.toMove}:${g.phase === 'action' ? 'act' : g.phase}`;
+  if (k.live && mine && k.left <= 0 && ui.warned !== warnKey) {
+    ui.warned = warnKey;
+    toast('Время хода вышло: таймер ушел в минус');
+  }
+}
+
 // --- журнал
 
 function drawLog({ g, seat }) {
@@ -398,6 +442,7 @@ function drawLog({ g, seat }) {
         line.cell ??= e.pos;
         break;
       case 'unite': line.unite = true; break;
+      case 'undo': line.parts.push('отмена действия'); key = null; break;
       case 'leader': line.parts.push(`${LEADER[e.c]} ${e.from >= 0 ? 'переставлен на' : 'на'} ${cellName(e.pos)}`); line.cell ??= e.pos; break;
       case 'withdraw': line.parts.push(`${LEADER[e.c]} в руку`); break;
       case 'catastrophe': line.parts.push(`катастрофа ${cellName(e.pos)}`); line.cell = e.pos; break;

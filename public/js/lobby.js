@@ -74,6 +74,12 @@ export function renderLobby(root, view, { act }) {
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
         <label><input type="checkbox" data-opt="openScore" ${o.openScore ? 'checked' : ''} ${dis}> Открытый счет (видны очки соперников)</label>
       </div>
+      <h2>Время</h2>
+      <div class="opts">
+        <span class="muted">На ход</span><span class="seg">${[20, 30, 45, 60, 90].map((n) => `<button data-time="turnSeconds" data-val="${n}" class="${(o.turnSeconds ?? 30) === n ? 'on' : ''}" ${dis}>${n} с</button>`).join('')}</span>
+        <span class="muted">Окно отмены</span><span class="seg">${[[0, 'нет'], [10, '10 с'], [20, '20 с'], [30, '30 с']].map(([n, t]) => `<button data-time="confirmSeconds" data-val="${n}" class="${(o.confirmSeconds ?? 20) === n ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
+      </div>
+      <p class="muted small">Ход не отнимается: когда время выходит, таймер уходит в минус и горит красным, у каждого копится общее время за партию. После второго действия ход еще можно отменить, пока идет окно отмены. Сброс тайлов и нападение не отменяются.</p>
       ${host ? '' : '<p class="muted small">Правила, места и ботов меняет хозяин стола.</p>'}
 
       <div class="lfoot">
@@ -98,5 +104,6 @@ export function renderLobby(root, view, { act }) {
   on('input[name=ord]', 'change', (el) => act({ action: 'options', options: { order: el.value } }));
   on('[data-board]', 'click', (el) => act({ action: 'options', options: { board: el.dataset.board } }));
   on('[data-opt]', 'change', (el) => act({ action: 'options', options: { [el.dataset.opt]: el.checked } }));
+  on('[data-time]', 'click', (el) => act({ action: 'options', options: { [el.dataset.time]: +el.dataset.val } }));
   root.querySelector('#lStart').addEventListener('click', () => act({ action: 'start' }));
 }

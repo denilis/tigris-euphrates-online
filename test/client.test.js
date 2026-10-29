@@ -7,6 +7,7 @@ import { createGame, legalMoves, applyMove, components, finalVector } from '../g
 import { BOARDS } from '../game/vendor/engine/boards.js';
 import { battlesIn, battleCard } from '../public/js/battle.js';
 import { journalEntries } from '../game/journal.js';
+import { fmt, fmtTotal, clockNow } from '../public/js/clock.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
 
 test('склонения: клетки и тайлы', () => {
@@ -159,4 +160,34 @@ test('ход боя: старая запись без сторон показы�
   assert.doesNotMatch(card, /из руки/);
   assert.match(card, /Восстание: торговец/);
   assert.match(card, /Победа: Бот, \+1 к красному\. Денис \(вы\) теряет торговца\./);
+});
+
+// таймер хода и время игроков (просьба Дениса 29.10)
+test('часы: формат таймера и общего времени', () => {
+  assert.deepEqual([30000, 29001, 29000, 500, 0, -1, -1000, -1001, -65000].map(fmt),
+    ['0:30', '0:30', '0:29', '0:01', '0:00', '-0:01', '-0:01', '-0:02', '-1:05']);
+  assert.deepEqual([0, 65000, 3725000].map(fmtTotal), ['0:00', '1:05', '1:02:05']);
+});
+
+test('часы: ходящему время на весь ход, сверх уходит в минус, окно подтверждения стоит', () => {
+  const clock = { at: 1000, turnUsed: 20000, used: { 0: 50000, 1: 7000 }, over: { 0: 0, 1: 2000 }, turnMs: 30000, confirmBy: null };
+  const g = { clock, toMove: 0, cur: 0, phase: 'action', over: false };
+  const k = clockNow(g, 16000);
+  assert.equal(k.left, -5000);
+  assert.equal(k.used(0), 65000);
+  assert.equal(k.over(0), 5000);
+  assert.equal(k.used(1), 7000, 'у остальных время стоит');
+  assert.equal(k.over(1), 2000);
+  // защитник в чужой войне: свое решение отдельно от хода
+  const d = clockNow({ ...g, toMove: 1 }, 11000);
+  assert.equal(d.left, 20000);
+  // окно подтверждения: таймер хода стоит, идет свой отсчет
+  const w = clockNow({ ...g, phase: 'confirm', clock: { ...clock, confirmBy: 21000 } }, 16000);
+  assert.equal(w.left, 10000);
+  assert.equal(w.confirmLeft, 5000);
+  assert.equal(w.used(0), 50000);
+  const end = clockNow({ ...g, over: true, toMove: null }, 99000);
+  assert.equal(end.live, false);
+  assert.equal(end.used(0), 50000, 'после конца время стоит');
+  assert.equal(clockNow({ ...g, clock: null }), null, 'старый сервер без часов');
 });
