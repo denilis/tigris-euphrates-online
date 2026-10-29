@@ -8,7 +8,12 @@ import {
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
-const ui = { key: null, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false, flash: null };
+const ui = { key: null, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false, flash: null, owners: loadOwners() };
+
+// метки владельца на тайлах: включены по умолчанию, выбор помнит браузер
+function loadOwners() {
+  try { return localStorage.getItem('tigris.owners') !== 'off'; } catch { return true; }
+}
 
 function resetFor(view) {
   // новый момент партии: прежний выбор больше не к месту
@@ -24,7 +29,7 @@ const SKELETON = `<div class="app" id="game">
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
     <div class="meta"><span>мешок <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span></div>
-    <nav class="nav"><a class="navbtn" href="#/">Мои столы</a></nav>
+    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <aside class="side">
@@ -53,6 +58,11 @@ export function renderGame(root, view, { act, go }) {
       setTimeout(() => { ui.flash = null; draw(); }, 1300);
     });
     root.querySelector('#gCode').addEventListener('click', () => copy(location.origin + location.pathname + location.search + '#/t/' + current.code));
+    root.querySelector('#gOwners').addEventListener('click', () => {
+      ui.owners = !ui.owners;
+      try { localStorage.setItem('tigris.owners', ui.owners ? 'on' : 'off'); } catch { /* без памяти */ }
+      draw();
+    });
   }
   current = view;
   ctl = { act, go, root };
@@ -106,7 +116,7 @@ function onCell(i) {
 
 function boardOpts() {
   const { g, me, legal, decides } = D();
-  const o = { flash: ui.flash };
+  const o = { flash: ui.flash, owners: ui.owners };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', unitePos: g.ctx.war ? g.ctx.pos : null, myExtra: ui.chosen.size, me };
@@ -136,6 +146,9 @@ function draw() {
   ].filter(Boolean).map((b) => `<span class="badge">${b}</span>`).join('');
   root.querySelector('#gBag').textContent = g.bagPct + '%';
   root.querySelector('#gTurn').textContent = g.turn;
+  const ob = root.querySelector('#gOwners');
+  ob.textContent = ui.owners ? 'Метки: вкл' : 'Метки: выкл';
+  ob.setAttribute('aria-pressed', String(ui.owners));
   renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts());
   drawPlayers(d);
   drawNow(d);

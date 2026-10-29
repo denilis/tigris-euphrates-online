@@ -72,6 +72,37 @@ export function groups(board, blocked = -1) {
   return lab;
 }
 
+/** Группы клеток и лидеры в каждой: lead.get(группа)[цвет] = игрок движка или null. */
+export function kingdomLeaders(board) {
+  const lab = groups(board);
+  const lead = new Map();
+  for (let i = 0; i < W * H; i++) {
+    const v = board.leader[i];
+    if (v < 0) continue;
+    const a = lead.get(lab[i]) || [null, null, null, null];
+    a[v & 3] = v >> 2;
+    lead.set(lab[i], a);
+  }
+  return { lab, lead };
+}
+
+/**
+ * Чей тайл (метки владельца, идея Дениса 29.10): тайл в царстве идёт лидеру своего цвета,
+ * а если такого лидера нет, царю (ему движок начисляет очки за такие тайлы). Тайл вне
+ * царства ничей. Возвращает по клетке null или { p, c, king }.
+ */
+export function tileOwners(board, kl = kingdomLeaders(board)) {
+  const { lab, lead } = kl;
+  return Array.from({ length: W * H }, (_, i) => {
+    const t = board.tile[i];
+    const a = t >= 0 && t <= 3 ? lead.get(lab[i]) : null;
+    if (!a) return null;
+    if (a[t] != null) return { p: a[t], c: t, king: false };
+    if (a[3] != null) return { p: a[3], c: 3, king: true };
+    return null;
+  });
+}
+
 /** Разметка из строки шаблона в узел. */
 export function html(s) {
   const t = document.createElement('template');

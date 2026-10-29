@@ -2,7 +2,7 @@
 // (контуры царств и стороны войны должны совпадать с движком).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cells, plural, finalScore, groups } from '../public/js/util.js';
+import { cells, plural, finalScore, groups, tileOwners } from '../public/js/util.js';
 import { createGame, legalMoves, applyMove, components, finalVector } from '../game/vendor/engine/engine.js';
 import { BOARDS } from '../game/vendor/engine/boards.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
@@ -47,4 +47,28 @@ test('группы клеток на клиенте совпадают с дви
     }
   }
   assert.ok(checks > 300);
+});
+
+test('метка владельца тайла совпадает с тем, кому движок начисляет очко за тайл', () => {
+  let checks = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const r = makeRng(seed);
+    const s = createGame({ layout: BOARDS.advanced, numPlayers: 4, cfg: { englishSupport: true, buildings: true, wonder: true } }, r);
+    s.log = [];
+    for (let k = 0; k < 500 && !s.over; k++) {
+      const legal = legalMoves(s);
+      s.log.length = 0;
+      applyMove(s, legal[Math.floor(r() * legal.length)], r);
+      // тайл без объединения: очко за него получает лидер того же цвета в царстве или царь
+      const tile = s.log.find((e) => e.ev === 'tile');
+      const score = s.log.find((e) => e.ev === 'score' && e.why === 'tile');
+      if (!tile || !score || s.log.some((e) => e.ev === 'unite') || s.tile[tile.pos] !== tile.c) continue;
+      const own = tileOwners({ tile: Array.from(s.tile), leader: Array.from(s.leader) })[tile.pos];
+      assert.ok(own, `у тайла ${tile.pos} должна быть метка`);
+      assert.equal(own.p, score.p);
+      assert.equal(own.king, own.c !== tile.c, 'метка царя ставится, только если своего лидера нет');
+      checks++;
+    }
+  }
+  assert.ok(checks > 200, `проверок ${checks}`);
 });

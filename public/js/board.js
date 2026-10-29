@@ -1,7 +1,7 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, tokenImg, cellName, groups } from './util.js';
+import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders } from './util.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -155,6 +155,20 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
   }
   s += `<g filter="url(#shadow)">${tiles}</g>`;
 
+  // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;
+  // полупрозрачный черный жетон — своего лидера нет, тайл идет царю
+  const kl = opts.owners ? kingdomLeaders(b) : null;
+  if (opts.owners) {
+    const own = tileOwners(b, kl);
+    let m = '';
+    for (let i = 0; i < W * H; i++) {
+      const o = own[i];
+      if (!o) continue;
+      m += `<g transform="translate(${cx(i) + 4},${cy(i) + 4})"${o.king ? ' opacity=".72"' : ''}><circle cx="10" cy="10" r="10" fill="${HEX[o.c]}" stroke="#fff3cf" stroke-width="1.2"/><use href="#tk_${heroOf(o.p) || 'pot'}_${o.c}" transform="translate(1 1) scale(.41)"/></g>`;
+    }
+    s += `<g filter="url(#shadow)">${m}</g>`;
+  }
+
   for (let i = 0; i < W * H; i++) {
     const bc = b.building[i];
     if (bc >= 0) s += `<rect x="${cx(i) + 2}" y="${cy(i) + 2}" width="${C - 4}" height="${C - 4}" rx="6" fill="none" stroke="${HEX[bc]}" stroke-width="4"/><rect x="${cx(i) + C - 22}" y="${cy(i) + C - 16}" width="18" height="12" rx="2" fill="${HEX[bc]}" stroke="#e8dcc4" stroke-width=".8"/>`;
@@ -169,7 +183,19 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     const x = cx(g.wonderPos) + C / 2, y = cy(g.wonderPos) + C / 2;
     s += `<g filter="url(#shadow2)"><path d="M${x - 70} ${y - 22}h48v-48h44v48h48v44h-48v48h-44v-48h-48z" fill="url(#bvg)" stroke="#94691f" stroke-width="2" opacity=".92"/>${rosette(x, y, 16)}</g>`;
   }
-  for (const m of g.monuments) if (m.pos >= 0) s += sealSVG(m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
+  for (const m of g.monuments) {
+    if (m.pos < 0) continue;
+    s += sealSVG(m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
+    // на каждой половине монумента жетон героя, чей лидер этого цвета стоит в том же царстве
+    // (он получает очко за монумент в конце своего хода); нет лидера — пусто
+    const a = kl && kl.lead.get(kl.lab[m.pos]);
+    if (!a) continue;
+    for (const [c, ox, oy] of [[m.c1, 33, 35], [m.c2, 87, 85]]) {
+      if (a[c] == null) continue;
+      const x = cx(m.pos) + ox, y = cy(m.pos) + oy;
+      s += `<g filter="url(#shadow)"><circle cx="${x}" cy="${y}" r="12.5" fill="${HEX[c]}" stroke="#fff3cf" stroke-width="1.5"/><use href="#tk_${heroOf(a[c]) || 'pot'}_${c}" transform="translate(${x - 11} ${y - 11}) scale(.5)"/></g>`;
+    }
+  }
 
   // контуры царств (групп, где стоит хотя бы один лидер)
   const lab = groups(b);
