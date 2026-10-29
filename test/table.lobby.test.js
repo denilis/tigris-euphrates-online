@@ -20,7 +20,7 @@ test('новый стол: хост на первом месте, по умол�
   assert.equal(t.seats[0].name, 'Денис');
   assert.deepEqual(t.options, {
     board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-    turnSeconds: 30, confirmSeconds: 20,
+    turnSeconds: 30, confirmSeconds: 10,
   });
   assert.equal(t.seats[3].bot.style, 'universal');
   assert.ok(t.seats[3].hero, 'боту сразу назначен герой');

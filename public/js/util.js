@@ -112,6 +112,23 @@ export function tileOwners(board, kl = kingdomLeaders(board)) {
   });
 }
 
+/**
+ * Поддержка лидера (просьба Дениса 29.10): сколько тайлов его цвета в его царстве, это его сила
+ * в войне, как считает движок. lab — группы клеток (во время войны без тайла объединения).
+ * По клетке лидера число, по остальным null.
+ */
+export function leaderSupport(board, lab = groups(board)) {
+  const n = new Map();
+  for (let i = 0; i < W * H; i++) {
+    const t = board.tile[i];
+    if (t >= 0 && t <= 3 && lab[i] >= 0) n.set(lab[i] * 4 + t, (n.get(lab[i] * 4 + t) || 0) + 1);
+  }
+  return Array.from({ length: W * H }, (_, i) => {
+    const v = board.leader[i];
+    return v < 0 ? null : n.get(lab[i] * 4 + (v & 3)) || 0;
+  });
+}
+
 /** Клетка тайла объединения, пока идут войны за него, иначе null. */
 export function unitePos(g) {
   return g?.ctx?.unite && g.ctx.pos != null ? g.ctx.pos : null;

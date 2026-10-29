@@ -175,7 +175,22 @@ function draw() {
 }
 
 // --- ход боя: новые бои с прошлого «Понятно» (при входе на стол старые не показываем),
-// или бой, выбранный в журнале
+// или бой, выбранный в журнале. Новый бой закрывается сам через 10 с, «Изучаю» оставляет
+// его открытым (просьба Дениса 29.10); пока вкладка скрыта, отсчет стоит. Бой из журнала
+// открыт, пока не нажать «Понятно».
+const BATTLE_MS = 10000;
+
+function stopBattleTimer() {
+  clearInterval(ui.battleTimer);
+  ui.battleTimer = null;
+}
+
+function closeBattle() {
+  stopBattleTimer();
+  Object.assign(ui, { battleSeen: current.game.log.length, battleShow: null });
+  draw();
+}
+
 function drawBattle({ view, g }) {
   const box = ctl.root.querySelector('#gBattle');
   if (ui.battleCode !== view.code) Object.assign(ui, { battleCode: view.code, battleSeen: g.log.length, battleShow: null });
@@ -183,11 +198,28 @@ function drawBattle({ view, g }) {
   const key = list.map((b) => b.i).join(',');
   if (box.dataset.key === key) return; // не перерисовываем: иначе показ боя начнется заново
   box.dataset.key = key;
+  stopBattleTimer();
   box.hidden = !list.length;
-  box.innerHTML = list.length ? `${list.map((b) => battleCard(b, view)).join('')}<div class="bfoot"><button class="btn primary" id="bOk">Понятно</button></div>` : '';
-  box.querySelector('#bOk')?.addEventListener('click', () => {
-    Object.assign(ui, { battleSeen: current.game.log.length, battleShow: null });
-    draw();
+  const auto = list.length > 0 && ui.battleShow == null;
+  const hold = auto ? '<span class="bleft" id="bLeft"></span><button class="btn" id="bHold">Изучаю</button>' : '';
+  box.innerHTML = list.length ? `${list.map((b) => battleCard(b, view)).join('')}<div class="bfoot">${hold}<button class="btn primary" id="bOk">Понятно</button></div>` : '';
+  box.querySelector('#bOk')?.addEventListener('click', closeBattle);
+  if (!auto) return;
+  let left = BATTLE_MS, last = Date.now();
+  const tick = () => {
+    if (!box.isConnected) return stopBattleTimer();
+    const now = Date.now();
+    if (document.visibilityState === 'visible') left -= now - last;
+    last = now;
+    if (left <= 0) return closeBattle();
+    box.querySelector('#bLeft').textContent = `закроется через ${Math.ceil(left / 1000)} с`;
+  };
+  tick();
+  ui.battleTimer = setInterval(tick, 250);
+  box.querySelector('#bHold').addEventListener('click', () => {
+    stopBattleTimer();
+    box.querySelector('#bLeft').textContent = 'открыто до «Понятно»';
+    box.querySelector('#bHold').remove();
   });
 }
 

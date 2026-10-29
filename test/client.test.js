@@ -2,7 +2,7 @@
 // (контуры царств и стороны войны должны совпадать с движком).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cells, plural, finalScore, groups, tileOwners, kingdomLeaders, unitePos, CONTESTED } from '../public/js/util.js';
+import { cells, plural, finalScore, groups, tileOwners, kingdomLeaders, unitePos, leaderSupport, CONTESTED } from '../public/js/util.js';
 import { createGame, legalMoves, applyMove, components, finalVector } from '../game/vendor/engine/engine.js';
 import { BOARDS } from '../game/vendor/engine/boards.js';
 import { battlesIn, battleCard } from '../public/js/battle.js';
@@ -94,6 +94,21 @@ test('во время войны тайл объединения ничей, а 
   assert.equal(unitePos({ ctx: null }), null);
 });
 
+// просьба Дениса 29.10: у лидера цифра, сколько тайлов его цвета в его царстве
+test('поддержка лидера: тайлы его цвета в его царстве, без тайла объединения', () => {
+  const board = { tile: new Array(176).fill(-1), leader: new Array(176).fill(-1) };
+  // A1 храм, B1 красный лидер игрока 0, C1 храм, D1 ферма, F1 храм отдельно; B2 синий лидер игрока 1
+  board.tile[0] = 0; board.tile[2] = 0; board.tile[3] = 1; board.tile[5] = 0;
+  board.leader[1] = 0 * 4 + 0; board.leader[17] = 1 * 4 + 1;
+  const sup = leaderSupport(board);
+  assert.equal(sup[1], 2, 'отдельный храм F1 не в счет');
+  assert.equal(sup[17], 1);
+  assert.equal(sup[0], null, 'у тайла цифры нет');
+  const war = leaderSupport(board, groups(board, 2));
+  assert.equal(war[1], 1);
+  assert.equal(war[17], 0, 'ферма за тайлом объединения в другом царстве');
+});
+
 test('метки во время войны совпадают со сторонами войны в движке', () => {
   let checks = 0;
   for (let seed = 1; seed <= 60 && checks < 150; seed++) {
@@ -108,6 +123,9 @@ test('метки во время войны совпадают со сторон
         assert.equal(kl.lead.get(kl.lab[w.attPos])[w.color], w.att);
         assert.equal(kl.lead.get(kl.lab[w.defPos])[w.color], w.def);
         assert.equal(tileOwners(board, kl)[s.ctx.pos], null);
+        const sup = leaderSupport(board, kl.lab);
+        assert.equal(sup[w.attPos], w.attBoard, 'поддержка нападающего равна его силе на поле в движке');
+        assert.equal(sup[w.defPos], w.defBoard);
         checks++;
       }
       const legal = legalMoves(s);

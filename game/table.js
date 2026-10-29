@@ -23,10 +23,11 @@ const fail = (code, message, status) => {
 export const HEROES = ['lion', 'bull', 'bow', 'pot'];
 const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётся герой с конца, людям остаётся лев
 // turnSeconds — время на ход, сверх него таймер уходит в минус (ход не отнимается);
-// confirmSeconds — окно, в котором сделанный ход еще можно отменить (0 — без окна). Решения Дениса 29.10.
+// confirmSeconds — окно, в котором сделанный ход еще можно отменить, потом он завершается сам
+// (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
 export const DEFAULT_OPTIONS = {
   board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-  turnSeconds: 30, confirmSeconds: 20,
+  turnSeconds: 30, confirmSeconds: 10,
 };
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };

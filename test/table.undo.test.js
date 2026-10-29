@@ -87,9 +87,9 @@ test('окно подтверждения: ход ждет, в окне можн
   let s = stateFromJSON(t.game.state);
   assert.equal(s.phase, 'confirm');
   assert.equal(t.game.toMove, who.id);
-  assert.equal(t.game.confirmBy, T0 + 22000);
-  assert.equal(confirmDue(t, T0 + 21999), false);
-  assert.equal(autoConfirm(t, { rng: makeRng(4), now: T0 + 21999 }), false);
+  assert.equal(t.game.confirmBy, T0 + 12000);
+  assert.equal(confirmDue(t, T0 + 11999), false);
+  assert.equal(autoConfirm(t, { rng: makeRng(4), now: T0 + 11999 }), false);
 
   undo(t, who.userId, { version: t.version }, { now: T0 + 3000 });
   s = stateFromJSON(t.game.state);
@@ -98,9 +98,9 @@ test('окно подтверждения: ход ждет, в окне можн
   assert.equal(t.game.confirmBy, null);
 
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 4000 });
-  assert.equal(t.game.confirmBy, T0 + 24000);
+  assert.equal(t.game.confirmBy, T0 + 14000);
   const hand = s.players[cur].hand.reduce((a, b) => a + b, 0);
-  assert.ok(autoConfirm(t, { rng: makeRng(4), now: T0 + 24000 }));
+  assert.ok(autoConfirm(t, { rng: makeRng(4), now: T0 + 14000 }));
   s = stateFromJSON(t.game.state);
   assert.ok(s.over || s.cur !== cur, 'ход перешел');
   if (!s.over) assert.ok(s.players[cur].hand.reduce((a, b) => a + b, 0) > hand - 1, 'рука добрана после подтверждения');
@@ -168,8 +168,8 @@ test('время: копится по местам, сверх времени х
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(8), now: T0 + 47000 });
   assert.equal(c.used[who.id], u0 + 42000);
   assert.equal(c.over[who.id], o0 + 12000);
-  assert.ok(autoConfirm(t, { rng: makeRng(9), now: T0 + 67000 }));
+  assert.ok(autoConfirm(t, { rng: makeRng(9), now: T0 + 57000 }));
   assert.equal(c.used[who.id], u0 + 42000, 'окно подтверждения не в счет');
   assert.equal(c.turnUsed, 0, 'у следующего хода свой отсчет');
-  assert.equal(c.at, T0 + 67000);
+  assert.equal(c.at, T0 + 57000);
 });

@@ -1,7 +1,7 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders } from './util.js';
+import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -225,12 +225,17 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
   }
   s += `<path d="${edges}" stroke="#fff3cf" stroke-opacity=".8" stroke-width=".8" fill="none" stroke-linecap="round"/>`;
 
+  // в левом верхнем углу лидера его поддержка: тайлы его цвета в царстве (у сторон конфликта
+  // вместо нее сила в бою справа)
+  const sup = leaderSupport(b, lab);
   for (let i = 0; i < W * H; i++) {
     const v = b.leader[i];
     if (v < 0) continue;
     const p = v >> 2, c = v & 3, x = cx(i) + C / 2, y = cy(i) + C / 2;
     s += `<g filter="url(#shadow2)"><circle cx="${x}" cy="${y}" r="24.5" fill="${HEX[c]}"/><use href="#tk_${heroOf(p) || 'pot'}_${c}" x="${x - 22}" y="${y - 22}"/></g>
       <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${RING[c]}" stroke-width="3"/>`;
+    if (cf && (i === cf.k.attPos || i === cf.k.defPos)) continue;
+    s += `<g class="sup" transform="translate(${x - 19},${y - 19})"><circle r="10.5" fill="#1b1713" stroke="${RING[c]}" stroke-width="2"/><text y="4.6" text-anchor="middle" font-size="13" font-weight="700" fill="#fff3cf">${sup[i]}</text></g>`;
   }
 
   // конфликт: лидеры сторон пульсируют, над ними сила

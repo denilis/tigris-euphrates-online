@@ -294,7 +294,8 @@ input,select{font:inherit;color:var(--text)}
 @keyframes bwin{to{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(224,182,90,.45)}}
 @keyframes blose{to{opacity:.6}}
 .bres{margin:0;font-size:12.5px;line-height:1.45}
-.bfoot{display:flex;justify-content:flex-end}
+.bfoot{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+.bleft{flex:1;font-size:13px;color:var(--muted)}
 .lb{margin-left:4px;padding:0 6px;font:inherit;font-size:11px;line-height:16px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--gold);cursor:pointer}
 .lb:hover{border-color:var(--gold2)}
 @media (prefers-reduced-motion:reduce){.battle,.battle *{animation:none!important}}
