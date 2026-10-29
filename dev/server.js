@@ -7,6 +7,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeHandler } from '../api/index.js';
+import { memoryStore } from '../server/store-memory.js';
+import { botDue } from '../game/table.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pub = path.join(root, 'public');
@@ -18,10 +20,21 @@ const env = {
   SESSION_SECRET: 'dev-secret', CODE_PEPPER: 'dev-pepper', ADMIN_CODE: 'DEVA-DMNN-2345', ADMIN_NAME: 'Денис',
   ...process.env,
 };
-const handler = makeHandler(env);
+const store = memoryStore();
+const handler = makeHandler(env, store);
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
+  // только для разработки: положить готовый стол (tools/dev-position.js), на Vercel этого пути нет
+  if (url.pathname === '/__dev/table' && req.method === 'POST') {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const t = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    await store.putTable(t, null, botDue(t) !== null ? 'bot' : '');
+    for (const s of t.seats) if (s.kind === 'human' && s.userId) await store.addMyTable(s.userId, t.code);
+    res.statusCode = 200;
+    return res.end('ok');
+  }
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     url.searchParams.set('route', url.pathname.replace(/^\/api\/?/, ''));
     req.url = '/api/index' + url.search;
@@ -38,6 +51,7 @@ createServer(async (req, res) => {
   try {
     const body = await readFile(file);
     res.setHeader('Content-Type', TYPES[path.extname(file)] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'no-cache'); // правки модулей видны сразу, без жесткой перезагрузки
     res.end(body);
   } catch {
     res.statusCode = 404;

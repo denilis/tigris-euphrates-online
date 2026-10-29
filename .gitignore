@@ -4,3 +4,6 @@ node_modules/
 *.log
 
 .vercel
+
+# дизайн-скиллы подключаются к проекту скриптом из skills-library, в git не храним
+.claude/skills/
