@@ -22,7 +22,12 @@ const fail = (code, message, status) => {
 
 export const HEROES = ['lion', 'bull', 'bow', 'pot'];
 const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётся герой с конца, людям остаётся лев
-export const DEFAULT_OPTIONS = { board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser' };
+// turnSeconds — время на ход, сверх него таймер уходит в минус (ход не отнимается);
+// confirmSeconds — окно, в котором сделанный ход еще можно отменить (0 — без окна). Решения Дениса 29.10.
+export const DEFAULT_OPTIONS = {
+  board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
+  turnSeconds: 30, confirmSeconds: 20,
+};
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
 
@@ -33,6 +38,8 @@ const OPTION_CHECKS = {
   wonder: (v) => typeof v === 'boolean',
   openScore: (v) => typeof v === 'boolean',
   order: (v) => ['loser', 'random', 'custom'].includes(v),
+  turnSeconds: (v) => Number.isInteger(v) && v >= 10 && v <= 600,
+  confirmSeconds: (v) => Number.isInteger(v) && v >= 0 && v <= 60,
 };
 const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
 const BOT_CHECKS = {
@@ -190,7 +197,8 @@ export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMod
     && t.seats.every((s) => s.hero && (s.kind === 'bot' || s.userId));
   if (!ready) fail('seats-not-ready', 'Не все места заняты или не у всех выбран герой', 409);
   const ord = playOrder(t.seats, orderMode || t.options.order, { last, rng });
-  const cfg = { englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder };
+  const { confirmMs } = timing(t);
+  const cfg = { englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder, confirmTurn: confirmMs > 0 };
   const s = createGame({ layout: BOARDS[t.options.board], numPlayers: t.seats.length, cfg }, rng);
   t.game = {
     id: `${t.code}-${now}`,
@@ -199,8 +207,12 @@ export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMod
     state: stateToJSON(s),
     toMove: ord.order[s.toMove],
     log: [],
+    logEpoch: 0, // растет при отмене: журнал укоротился, клиенту перечитать его целиком
     startedAt: now,
     result: null,
+    undo: [], // снимки перед действиями ходящего в этом ходу (только для отмены, в вид не идут)
+    confirmBy: null, // когда ход завершится сам, если не нажать «Завершить ход»
+    clock: { at: now, turnUsed: 0, used: {}, over: {} },
   };
   t.status = 'playing';
   touch(t, now);
@@ -236,9 +248,46 @@ export function submitSeat(t, seatId, move, { rng = cryptoRng(), now } = {}) {
   return applyLegal(t, s, legal[i], rng, now);
 }
 
-function applyLegal(t, s, move, rng, now) {
+/** Время на ход и окно подтверждения в мс (у столов до 29.10 этих настроек нет). */
+export function timing(t) {
+  return {
+    turnMs: 1000 * (t.options.turnSeconds ?? DEFAULT_OPTIONS.turnSeconds),
+    confirmMs: 1000 * (t.options.confirmSeconds ?? DEFAULT_OPTIONS.confirmSeconds),
+  };
+}
+
+const CONFLICT = ['warChoose', 'warSupport', 'revoltSupport'];
+const UNDO_PHASES = ['action', 'build', 'monument', 'treasure', 'confirm'];
+
+/**
+ * Учет времени (просьба Дениса 29.10): решающему месту записывается время с прошлого хода.
+ * Ходящему на весь ход дается turnMs, у остальных (поддержка в чужой войне) каждое решение
+ * отдельно; все, что сверх, копится в over. Окно подтверждения не считается.
+ */
+function spend(t, s, seatId, now) {
+  const c = t.game.clock;
+  if (!c || !Number.isFinite(now)) return;
+  const ms = Math.max(0, now - c.at);
+  c.at = now;
+  if (s.phase === 'confirm') return;
+  const { turnMs } = timing(t);
+  const active = seatId === t.game.order[s.cur];
+  const before = active ? c.turnUsed : 0;
+  if (active) c.turnUsed += ms;
+  c.used[seatId] = (c.used[seatId] || 0) + ms;
+  c.over[seatId] = (c.over[seatId] || 0) + Math.max(0, before + ms - turnMs) - Math.max(0, before - turnMs);
+}
+
+/** Один ход движка с журналом, снимком для отмены и временем; версию двигает вызывающий. */
+function step(t, s, move, rng, now) {
   const g = t.game;
+  const seatId = g.order[s.toMove];
   const meta = { turn: s.turn, cur: s.cur, action: s.actionNo };
+  const before = s.phase;
+  spend(t, s, seatId, now);
+  // снимок перед действием ходящего человека: к нему вернет «Отменить»
+  g.undo ||= [];
+  if (before === 'action' && seatById(t, seatId)?.kind === 'human') g.undo.push({ state: g.state, logLen: g.log.length });
   s.log = [];
   applyMove(s, move, rng);
   const errs = validate(s);
@@ -247,9 +296,67 @@ function applyLegal(t, s, move, rng, now) {
   g.log.push(...entries);
   g.state = stateToJSON(s);
   g.toMove = s.over ? null : g.order[s.toMove];
+  // отменять нельзя после сброса (уже видны новые тайлы) и нападения (война, восстание),
+  // а с концом хода снимки больше не нужны
+  const attack = CONFLICT.includes(before) || CONFLICT.includes(s.phase) || entries.some((e) => e.ev === 'warStart');
+  if (move.type === 'discard' || attack || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
+  if (g.clock && s.cur !== meta.cur) g.clock.turnUsed = 0;
+  g.confirmBy = null;
+  return entries;
+}
+
+function applyLegal(t, s, move, rng, now) {
+  const entries = step(t, s, move, rng, now);
+  const g = t.game;
+  if (!s.over && s.phase === 'confirm') {
+    // отменять нечего (сброс, нападение, бот): ход завершается сразу, без окна
+    if (!g.undo.length) entries.push(...step(t, s, { type: 'confirm' }, rng, now));
+    else g.confirmBy = (Number.isFinite(now) ? now : 0) + timing(t).confirmMs;
+  }
   if (s.over) finish(t, s, now);
   touch(t, now);
   return { entries };
+}
+
+/** Можно ли ходящему отменить последнее действие этого хода. */
+export function canUndo(t) {
+  if (t.status !== 'playing' || !t.game?.undo?.length) return false;
+  const s = stateFromJSON(t.game.state);
+  return !s.over && s.toMove === s.cur && UNDO_PHASES.includes(s.phase);
+}
+
+/** Отменить последнее действие своего хода: поле, рука и журнал как до него. */
+export function undo(t, userId, { version } = {}, { now } = {}) {
+  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  const seat = needSeated(t, userId);
+  if (version !== t.version) fail('stale', 'Стол уже изменился, обновите', 409);
+  const g = t.game;
+  const s = stateFromJSON(g.state);
+  if (g.order[s.cur] !== seat.id || !canUndo(t)) fail('no-undo', 'Отменить нечего', 409);
+  spend(t, s, seat.id, now);
+  const snap = g.undo.pop();
+  const back = stateFromJSON(snap.state);
+  g.state = snap.state;
+  g.log.length = snap.logLen;
+  g.log.push({ ev: 'undo', turn: back.turn, actor: seat.id, action: back.actionNo });
+  g.logEpoch = (g.logEpoch || 0) + 1;
+  g.toMove = g.order[back.toMove];
+  g.confirmBy = null;
+  touch(t, now);
+}
+
+/** Окно подтверждения истекло: ход пора завершить за игрока. */
+export function confirmDue(t, now) {
+  return t.status === 'playing' && t.game?.confirmBy != null && now >= t.game.confirmBy;
+}
+
+/** Завершить ход за игрока, если окно подтверждения истекло; иначе false. */
+export function autoConfirm(t, { rng = cryptoRng(), now } = {}) {
+  if (!confirmDue(t, now)) return false;
+  const s = stateFromJSON(t.game.state);
+  if (s.phase !== 'confirm') return false;
+  applyLegal(t, s, { type: 'confirm' }, rng, now);
+  return true;
 }
 
 function finish(t, s, now) {

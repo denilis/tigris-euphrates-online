@@ -9,6 +9,7 @@ import { fakeUpstash } from './fake-upstash.js';
 import { stateFromJSON, stateToJSON } from '../game/serialize.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
 import { botDue } from '../game/table.js';
+import { legalMoves, applyMove } from '../game/vendor/engine/engine.js';
 
 const ENV = { SESSION_SECRET: 'test-secret', CODE_PEPPER: 'test-pepper', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
 
@@ -186,6 +187,12 @@ test('бот: замок не даёт думать дважды; без бот�
   assert.equal((await req('POST', `tables/${code}/bot-tick`, { token: P.denis.token })).body.moved, 0);
 });
 
+// часы сервера в виде стола меняются от запроса к запросу, остальное должно совпасть
+const noNow = (v) => {
+  if (v?.game?.clock) v.game.clock.now = null;
+  return v;
+};
+
 test('новый экземпляр сервера на той же базе продолжает партию (A5)', async () => {
   const store = memoryStore();
   const s1 = setup(store);
@@ -194,7 +201,7 @@ test('новый экземпляр сервера на той же базе п�
   const before = (await s1.req('GET', `tables/${code}`, { token: P.andrey.token })).body;
   const s2 = setup(store);
   const after = (await s2.req('GET', `tables/${code}`, { token: P.andrey.token })).body;
-  assert.deepEqual(after, before);
+  assert.deepEqual(noNow(after), noNow(before));
 });
 
 test('скрытое не влияет на ответы сервера игроку: вид, мои столы, опрос', async () => {
@@ -212,7 +219,7 @@ test('скрытое не влияет на ответы сервера игро
     await req('POST', `tables/${code}`, { body: { action: 'move', version: mine.version, index: Math.floor(r() * mine.game.legal.length) }, token: p.token });
   }
   const answers = async (p) => JSON.stringify([
-    (await req('GET', `tables/${code}`, { token: p.token })).body,
+    noNow((await req('GET', `tables/${code}`, { token: p.token })).body),
     (await req('GET', 'tables', { token: p.token })).body,
     (await req('GET', `tables/${code}/poll`, { token: p.token })).body,
   ]);
@@ -236,4 +243,64 @@ test('скрытое не влияет на ответы сервера игро
     assert.equal(await answers(viewer), before, `смотрит ${viewer.user.name}`);
     assert.equal(await store.putTable(doc, version, meta), true);
   }
+});
+
+test('отмена и окно подтверждения через API: срок вышел, опрос зовет тик, тик завершает ход', async () => {
+  const store = memoryStore();
+  let at = 1_800_000_000_000;
+  const app = createApp({ store, env: ENV, now: () => at, botOptions: { timeCap: 20 } });
+  const req = async (method, path, { body, token, query } = {}) => app.call({ method, path, body, token, query });
+  const P = await people(req);
+  const code = await startedTable(req, P);
+  const who = { 0: P.denis, 1: P.andrey, 2: P.vlad };
+  // до хода человека: ботов прокручиваем тиком
+  for (let k = 0; k < 20 && (await req('GET', `tables/${code}/poll`, { token: P.denis.token })).body.botDue; k++) {
+    await req('POST', `tables/${code}/bot-tick`, { token: P.denis.token });
+  }
+  // ход, после которого тот же игрок снова выбирает действие или подтверждает ход
+  const cleanMove = async () => {
+    const { doc } = await store.getTable(code);
+    const s = stateFromJSON(doc.game.state);
+    const legal = legalMoves(s);
+    for (let i = 0; i < legal.length; i++) {
+      if (legal[i].type !== 'tile') continue;
+      const a = stateFromJSON(doc.game.state);
+      applyMove(a, legal[i], makeRng(1));
+      if (['action', 'confirm'].includes(a.phase) && a.cur === s.cur) return i;
+    }
+    return -1;
+  };
+  let v = (await req('GET', `tables/${code}`, { token: P.denis.token })).body;
+  const p = who[v.game.toMove];
+  const move = async () => {
+    const mine = (await req('GET', `tables/${code}`, { token: p.token })).body;
+    const r = await req('POST', `tables/${code}`, { body: { action: 'move', version: mine.version, index: await cleanMove() }, token: p.token });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return r.body;
+  };
+  await move();
+  at += 1000;
+  v = await move();
+  assert.equal(v.game.phase, 'confirm');
+  assert.equal(v.game.canUndo, true);
+  assert.equal(v.game.clock.confirmBy, at + 20000);
+  assert.equal(v.game.clock.now, at);
+
+  const u = await req('POST', `tables/${code}`, { body: { action: 'undo', version: v.version }, token: p.token });
+  assert.equal(u.status, 200, JSON.stringify(u.body));
+  assert.equal(u.body.game.phase, 'action');
+  assert.equal(u.body.game.actionNo, 2);
+  assert.equal(u.body.game.logEpoch, 1);
+  assert.equal(u.body.game.log.at(-1).ev, 'undo');
+
+  v = await move();
+  assert.equal(v.game.phase, 'confirm');
+  at += 19999;
+  assert.equal((await req('GET', `tables/${code}/poll`, { token: P.andrey.token })).body.botDue, false, 'окно еще идет');
+  at += 2;
+  assert.equal((await req('GET', `tables/${code}/poll`, { token: P.andrey.token })).body.botDue, true, 'окно вышло');
+  const tick = (await req('POST', `tables/${code}/bot-tick`, { token: P.andrey.token })).body;
+  assert.ok(tick.moved >= 1);
+  const after = (await req('GET', `tables/${code}`, { token: P.denis.token })).body;
+  assert.ok(after.status === 'over' || after.game.cur !== v.game.cur, 'ход перешел');
 });

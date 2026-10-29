@@ -18,7 +18,10 @@ test('новый стол: хост на первом месте, по умол�
   assert.deepEqual(t.seats.map((s) => s.kind), ['human', 'human', 'human', 'bot']);
   assert.equal(t.seats[0].userId, USERS.denis.userId);
   assert.equal(t.seats[0].name, 'Денис');
-  assert.deepEqual(t.options, { board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser' });
+  assert.deepEqual(t.options, {
+    board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
+    turnSeconds: 30, confirmSeconds: 20,
+  });
   assert.equal(t.seats[3].bot.style, 'universal');
   assert.ok(t.seats[3].hero, 'боту сразу назначен герой');
   assert.equal(t.version, 0);

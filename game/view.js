@@ -5,6 +5,7 @@ import { legalMoves } from './vendor/engine/engine.js';
 import { TOTAL_TILES } from './vendor/engine/constants.js';
 import { stateFromJSON } from './serialize.js';
 import { conflictPreview } from './preview.js';
+import { canUndo, timing } from './table.js';
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
 const TILES = sum(TOTAL_TILES);
@@ -47,8 +48,19 @@ function seatPreview(pv, order) {
   };
 }
 
+/**
+ * Время за столом: сколько набрал каждый, сколько сверх времени хода, когда началось текущее
+ * решение и когда ход завершится сам. now — часы сервера, клиент сверяет по ним свои.
+ */
+function clockView(t, now) {
+  const c = t.game.clock;
+  if (!c) return null;
+  const { turnMs, confirmMs } = timing(t);
+  return { now, at: c.at, turnUsed: c.turnUsed, used: { ...c.used }, over: { ...c.over }, turnMs, confirmMs, confirmBy: t.game.confirmBy ?? null };
+}
+
 /** userId — код смотрящего; logFrom — с какой записи журнала отдавать (клиент докачивает хвост). */
-export function viewFor(table, userId, { logFrom = 0 } = {}) {
+export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
   const mine = table.seats.find((x) => x.kind === 'human' && x.userId === userId) || null;
   const v = {
     code: table.code,
@@ -113,6 +125,9 @@ export function viewFor(table, userId, { logFrom = 0 } = {}) {
     preview: decides ? seatPreview(conflictPreview(s, legal), order) : null,
     log: g.log.slice(logFrom),
     logTotal: g.log.length,
+    logEpoch: g.logEpoch || 0,
+    canUndo: decides && myP === s.cur && canUndo(table),
+    clock: clockView(table, now),
     result: g.result || null,
   };
   return v;

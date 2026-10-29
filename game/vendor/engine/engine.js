@@ -20,7 +20,9 @@ import {
 /**
  * Пустое состояние без раздачи тайлов.
  * layout: { river: number[] | Uint8Array(N), temples: number[], special?: number[] }
- * cfg: { englishSupport, buildings, wonder }
+ * cfg: { englishSupport, buildings, wonder, confirmTurn }
+ * confirmTurn — после второго действия (или паса) ход ждет подтверждения (фаза confirm) до
+ * подсчета монументов и добора: сайт дает в это время отменить действие, не открыв новых тайлов.
  */
 export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_MONUMENTS }) {
   const river = new Uint8Array(N);
@@ -33,6 +35,7 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
       englishSupport: !!cfg.englishSupport,
       buildings: !!cfg.buildings,
       wonder: !!cfg.wonder,
+      confirmTurn: !!cfg.confirmTurn,
     },
     np: numPlayers,
     river,
@@ -323,6 +326,8 @@ export function legalMoves(s) {
       return s.ctx.treasure.options.map((pos) => ({ type: 'treasure', pos }));
     case 'wonderPoint':
       return [0, 1, 2, 3].map((color) => ({ type: 'wonderPoint', color }));
+    case 'confirm':
+      return [{ type: 'confirm' }];
     default:
       return [];
   }
@@ -413,6 +418,9 @@ export function applyMove(s, m, rng) {
       s.players[s.cur].score[m.color]++;
       emit(s, { ev: 'score', p: s.cur, c: m.color, n: 1, why: 'wonder' });
       s.ctx.wonderDone = true;
+      break;
+    case 'confirm':
+      s.ctx.confirmed = true;
       break;
     default:
       throw new Error('unexpected phase ' + s.phase);
@@ -550,6 +558,7 @@ function advance(s, rng) {
       case 'monument': done = stepMonument(s); break;
       case 'treasure': done = stepTreasure(s); break;
       case 'endAction': done = endAction(s); break;
+      case 'confirm': done = stepConfirm(s); break;
       case 'monScore': monumentScoring(s); done = true; break;
       case 'wonder': done = stepWonderPoint(s); break;
       case 'refill': refillAll(s, rng); done = true; break;
@@ -871,12 +880,20 @@ function endAction(s) {
   const ctx = s.ctx;
   // ctx заменяется целиком, поэтому advance() не сдвигает старую очередь
   if (ctx.pass || s.actionNo >= 2) {
-    s.ctx = { kind: 'endTurn', queue: ['monScore', 'wonder', 'refill', 'nextTurn'] };
+    const confirm = s.cfg.confirmTurn ? ['confirm'] : [];
+    s.ctx = { kind: 'endTurn', queue: [...confirm, 'monScore', 'wonder', 'refill', 'nextTurn'] };
   } else {
     s.actionNo++;
     s.ctx = null;
   }
   return true;
+}
+
+function stepConfirm(s) {
+  if (s.ctx.confirmed) return true;
+  s.phase = 'confirm';
+  s.toMove = s.cur;
+  return false;
 }
 
 function monumentScoring(s) {

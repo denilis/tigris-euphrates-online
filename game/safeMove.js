@@ -11,6 +11,8 @@ export function safeMove(s) {
       return { type: 'treasure', pos: s.ctx.treasure.options[0] };
     case 'wonderPoint':
       return { type: 'wonderPoint', color: 0 };
+    case 'confirm':
+      return { type: 'confirm' };
     default:
       return { type: 'pass' };
   }

@@ -24,6 +24,8 @@ export function botView(t, seatId, counting, rng) {
   const view = makeView(s, p, counting, rng);
   const own = s.players[p].discarded;
   view.state.removed = publicRemoved(s).map((v, c) => v + own[c]);
+  // окно подтверждения хода только для людей: бот считает ходы вперед без него
+  view.state.cfg = { ...view.state.cfg, confirmTurn: false };
   return view;
 }
 

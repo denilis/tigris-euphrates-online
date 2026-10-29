@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, newCode, newTableCode } from './auth.js';
 import {
   createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
-  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError,
+  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { botStep } from '../game/bots.js';
@@ -25,7 +25,10 @@ const http = (status, code, message) => {
 
 const ADMIN_ID = 'u-admin';
 const LOCK_MS = 30000;
-const meta = (t) => (botDue(t) !== null ? 'bot' : '');
+// метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
+// завершит любой клиент через bot-tick, когда срок выйдет
+const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
+const due = (m, at) => m === 'bot' || (m[0] === 'c' && at >= Number(m.slice(1)));
 const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin) });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 
@@ -125,7 +128,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const t = createTable({ code: newTableCode(), host: { userId: u.id, name: u.name }, now: now() });
       if (await store.putTable(t, null, meta(t))) {
         await store.addMyTable(u.id, t.code);
-        return { code: t.code, view: viewFor(t, u.id) };
+        return { code: t.code, view: viewFor(t, u.id, { now: now() }) };
       }
     }
     http(500, 'no-code', 'Не удалось подобрать код стола');
@@ -152,6 +155,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     bot: (t, u, b) => setBot(t, u.id, b.seat, b.settings || {}, now()),
     moveSeat: (t, u, b) => moveSeat(t, u.id, b.seat, b.to, now()),
     move: (t, u, b) => submit(t, u.id, { version: b.version, index: b.index }, { now: now() }),
+    undo: (t, u, b) => undo(t, u.id, { version: b.version }, { now: now() }),
     close: (t, u) => close(t, u.id, now()),
     async start(t, u) {
       const humans = t.seats.filter((s) => s.kind === 'human').map((s) => s.userId);
@@ -180,10 +184,13 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!(await store.putTable(t, version, meta(t)))) http(409, 'stale', 'Стол уже изменился, обновите');
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
-    return viewFor(t, u.id);
+    return viewFor(t, u.id, { now: now() });
   }
 
-  /** Ходы ботов, пока решает бот и есть время; замок не даёт двум вызовам думать за одного бота. */
+  /**
+   * Ходы ботов, пока решает бот и есть время, и завершение хода, у которого вышло окно
+   * подтверждения; замок не даёт двум вызовам думать за одного бота.
+   */
   async function botTick(code) {
     await load(code);
     const token = randomBytes(12).toString('hex');
@@ -193,8 +200,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     try {
       while (now() - t0 < botBudget) {
         const cur = await store.getTable(code);
-        if (!cur || botDue(cur.doc) === null) break;
-        await botStep(cur.doc, { now: now(), ...botOptions });
+        if (!cur) break;
+        if (confirmDue(cur.doc, now())) autoConfirm(cur.doc, { now: now() });
+        else if (botDue(cur.doc) !== null) await botStep(cur.doc, { now: now(), ...botOptions });
+        else break;
         if (!(await store.putTable(cur.doc, cur.version, meta(cur.doc)))) break;
         moved++;
         if (cur.doc.status === 'over') await ensureHistory(cur.doc, cur.doc.version);
@@ -203,7 +212,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       await store.unlock(code, token);
     }
     const p = await store.poll(code);
-    return { moved, locked: false, botDue: p?.meta === 'bot', version: p?.version ?? null };
+    return { moved, locked: false, botDue: due(p?.meta || '', now()), version: p?.version ?? null };
   }
 
   // --- маршрутизация
@@ -219,7 +228,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       await auth(token, { light: true });
       const p = await store.poll(rest[0]);
       if (!p) http(404, 'no-table', 'Нет такого стола');
-      return { version: p.version, botDue: p.meta === 'bot', locked: p.locked };
+      return { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
     }
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
@@ -231,7 +240,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!op && method === 'GET') {
         const { doc, version } = await load(code);
         if (doc.status === 'over') await ensureHistory(doc, version);
-        return viewFor(doc, u.id, { logFrom: int(query.logFrom) });
+        return viewFor(doc, u.id, { logFrom: int(query.logFrom), now: now() });
       }
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);

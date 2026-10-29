@@ -381,3 +381,50 @@ test('событие боя: стороны, поле и поддержка из
   }
   assert.ok(kinds.war > 10 && kinds.revolt > 10, JSON.stringify(kinds));
 });
+
+// три сокровища на поле, иначе партия кончается после первого же хода
+const withTreasures = (s) => { for (const c of ['N9', 'N10', 'N11']) put(s, c, RED, { treasure: true }); return s; };
+
+test('подтверждение хода: после второго действия ход ждет, добора еще нет', () => {
+  const s = withTreasures(bare(2, { confirmTurn: true }));
+  setHand(s, 0, [3, 0, 0, 3]);
+  setHand(s, 1, [3, 0, 0, 3]);
+  play(s, { type: 'tile', color: RED, pos: at('B2') });
+  assert.equal(s.phase, 'action');
+  play(s, { type: 'tile', color: RED, pos: at('D2') });
+  assert.equal(s.phase, 'confirm');
+  assert.equal(s.toMove, 0);
+  assert.deepEqual(legalMoves(s), [{ type: 'confirm' }]);
+  assert.equal(s.players[0].hand[RED], 1, 'рука не добрана до подтверждения');
+  play(s, { type: 'confirm' });
+  assert.equal(s.cur, 1);
+  assert.equal(s.phase, 'action');
+  assert.equal(s.players[0].hand.reduce((a, b) => a + b, 0), 6, 'после подтверждения добор');
+});
+
+test('подтверждение хода: пас тоже ждет, а без настройки фазы нет', () => {
+  const s = withTreasures(bare(2, { confirmTurn: true }));
+  play(s, { type: 'pass' });
+  assert.equal(s.phase, 'confirm');
+  const t = withTreasures(bare(2));
+  play(t, { type: 'pass' });
+  assert.equal(t.phase, 'action');
+  assert.equal(t.cur, 1);
+});
+
+test('подтверждение хода: случайные партии доигрываются без нарушений', () => {
+  let confirms = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const r = makeRng(seed);
+    const s = createGame({ layout: BOARDS.advanced, numPlayers: 3, cfg: { englishSupport: true, buildings: true, wonder: true, confirmTurn: true } }, r);
+    let k = 0;
+    for (; k < 3000 && !s.over; k++) {
+      if (s.phase === 'confirm') { confirms++; assert.equal(s.toMove, s.cur); }
+      const legal = legalMoves(s);
+      applyMove(s, legal[Math.floor(r() * legal.length)], r);
+      assert.deepEqual(validate(s), []);
+    }
+    assert.ok(s.over, `партия ${seed} закончилась`);
+  }
+  assert.ok(confirms > 300, `подтверждений ${confirms}`);
+});

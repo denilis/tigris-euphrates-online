@@ -105,7 +105,7 @@ test('безопасный ход допустим в любой фазе', () =
       applyMove(s, legal[Math.floor(r() * legal.length)], r);
     }
   }
-  for (const ph of ['action', 'warSupport', 'revoltSupport', 'build', 'monument', 'treasure']) assert.ok(phases.has(ph), `не встретилась фаза ${ph}`);
+  for (const ph of ['action', 'warSupport', 'revoltSupport', 'build', 'monument', 'treasure', 'confirm']) assert.ok(phases.has(ph), `не встретилась фаза ${ph}`);
 });
 
 test('потолок времени: бот на силе 100 укладывается', async () => {
