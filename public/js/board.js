@@ -211,7 +211,7 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     if (gy === 0 || lab[i - W] !== l) edges += `M${x} ${y}h${C}`;
     if (gy === H - 1 || lab[i + W] !== l) edges += `M${x} ${y + C}h${C}`;
   }
-  s += `<path d="${edges}" stroke="#fff3cf" stroke-opacity=".85" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+  s += `<path d="${edges}" stroke="#fff3cf" stroke-opacity=".8" stroke-width=".8" fill="none" stroke-linecap="round"/>`;
 
   for (let i = 0; i < W * H; i++) {
     const v = b.leader[i];
