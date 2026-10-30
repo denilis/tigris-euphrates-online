@@ -229,6 +229,8 @@ test('реванш: двое нажали, стол один; он у всех �
     const mine = (await req('GET', 'tables', { token: p.token })).body;
     assert.ok(mine.some((x) => x.code === a.next && x.status === 'playing'));
   }
+  const title = (await req('GET', `tables/${a.next}`, { token: P.denis.token })).body.title;
+  assert.match(title, /^\d\d\.\d\d\.\d{4}\.2$/, 'реванш в тот же день: следующий номер');
 });
 
 test('реванш: одновременное нажатие троих оставляет один стол, проигравшие гонку убирают свой', async () => {

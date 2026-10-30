@@ -5,13 +5,15 @@ import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
 import { battlesIn, battleCard } from './battle.js';
 import { fmt, fmtTotal, clockNow } from './clock.js';
+import { pickableLeader, hitCells, squareCells } from './pick.js';
+import { trailMarks, ageMarks } from './trail.js';
 import {
   HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
   unitePos, toast,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
-const ui = { key: null, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false, flash: null, owners: loadOwners() };
+const ui = { key: null, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false, flash: null, owners: loadOwners(), trail: [], trailSeen: new Map(), trailCode: null };
 
 // метки владельца на тайлах: включены по умолчанию, выбор помнит браузер
 function loadOwners() {
@@ -32,7 +34,7 @@ const SKELETON = `<div class="app" id="game">
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
     <div class="meta"><span>мешок <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span></div>
-    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/">Мои столы</a></nav>
+    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <aside class="side">
@@ -101,13 +103,23 @@ async function move(index) {
 
 // --- клики по полю
 
-function inSquare(tl, i) {
-  return i === tl || i === tl + 1 || i === tl + 16 || i === tl + 17;
+/** Лидер на клетке i, которого можно взять щелчком по полю: те же условия, что в нижней панели. */
+function leaderAt(i) {
+  const { g, myP, legal, decides } = D();
+  if (!decides || g.phase !== 'action' || ui.discard || ui.confirmPass) return null;
+  return pickableLeader(g.players[myP], legal, i);
+}
+
+function pickLeader(c) {
+  ui.sel = ui.sel?.kind === 'leader' && ui.sel.color === c ? null : { kind: 'leader', color: c };
+  draw();
 }
 
 function onCell(i) {
   const { g, legal, decides } = D();
   if (!decides || warActive(current)) return;
+  const c = leaderAt(i);
+  if (c != null) return pickLeader(c);
   let idx = -1;
   if (g.phase === 'action' && ui.sel) {
     const type = { tile: 'tile', leader: 'leader', cat: 'catastrophe' }[ui.sel.kind];
@@ -120,14 +132,14 @@ function onCell(i) {
     idx = legal.findIndex((m) => m.type === 'wonder' && m.center === i);
   } else if (g.phase === 'monument' && ui.monSel != null) {
     idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && m.tl === i);
-    if (idx < 0) idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && inSquare(m.tl, i));
+    if (idx < 0) idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && squareCells(m.tl).includes(i));
   }
   if (idx >= 0) move(idx);
 }
 
 function boardOpts() {
-  const { g, me, legal, decides } = D();
-  const o = { flash: ui.flash, owners: ui.owners, unite: unitePos(g) };
+  const { g, me, myP, legal, decides } = D();
+  const o = { flash: ui.flash, owners: ui.owners, unite: unitePos(g), trail: ui.trail };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
@@ -140,15 +152,24 @@ function boardOpts() {
   else if (g.phase === 'treasure') o.targets = legal.filter((m) => m.type === 'treasure').map((m) => m.pos);
   else if (g.phase === 'monument' && ui.monSel === 'wonder') o.crosses = legal.filter((m) => m.type === 'wonder').map((m) => m.center);
   else if (g.phase === 'monument' && ui.monSel != null) o.squares = legal.filter((m) => m.type === 'monument' && m.id === ui.monSel).map((m) => m.tl);
+  o.hit = hitCells(o, g.players[myP].leaders.filter((i) => leaderAt(i) != null));
   return o;
 }
 
 // --- отрисовка
 
+/** След хода соперника; при открытии стола уже стоящий след показывается без вспышки. */
+function updateTrail({ view, g, seat }) {
+  const first = ui.trailCode !== view.code;
+  ui.trailCode = view.code;
+  ui.trail = ageMarks(trailMarks(g.log, view.me), ui.trailSeen, Date.now(), first).map((m) => ({ ...m, hero: seat(m.actor)?.hero }));
+}
+
 function draw() {
   const d = D();
   const { view, g, root = ctl.root } = { ...d, root: ctl.root };
-  root.querySelector('#gCode').innerHTML = `стол <b>${esc(view.code)}</b>`;
+  updateTrail(d);
+  root.querySelector('#gCode').innerHTML = `стол <b>${esc(view.title || view.code)}</b>`;
   const o = view.options;
   root.querySelector('#gBadges').innerHTML = [
     o.board === 'advanced' ? 'Продвинутое поле' : 'Обычное поле',
@@ -245,10 +266,8 @@ function drawPlayers({ view, g, me, seat }) {
   }).join('');
 }
 
-function waitingText({ g, name, seat }) {
-  const who = g.toMove;
-  const s = seat(who);
-  const n = s?.kind === 'bot' ? 'Бот' : name(who);
+function waitingText({ g, name }) {
+  const n = name(g.toMove);
   const k = g.ctx?.war || g.ctx?.revolt;
   switch (g.phase) {
     case 'action': return `Ходит ${n}, действие ${g.actionNo} из 2.`;
@@ -294,7 +313,7 @@ function drawNow(d) {
       if (ui.sel.kind === 'leader' && legal.some((m) => m.type === 'withdraw' && m.color === ui.sel.color)) buttons += btn('withdraw', `Вернуть ${LEADERACC[ui.sel.color]} в руку`);
       buttons += btn('cancel', 'Отмена');
     } else {
-      body = `<p>Действие ${g.actionNo} из 2. Выберите внизу тайл, лидера или катастрофу.</p>`;
+      body = `<p>Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.</p>`;
       if (g.canUndo) buttons = btn('undo', 'Отменить действие');
     }
   } else if (g.phase === 'build') {
@@ -380,7 +399,7 @@ function drawHand(d) {
   let hint = '';
   if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
   else if (warActive(view)) hint = 'Идет конфликт: решите в окне справа.';
-  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите справа.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера или катастрофу.`;
+  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите справа.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
   else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие справа.';
   else hint = 'Решите в панели справа.';
   el.className = 'hand' + (acting ? '' : ' locked');
@@ -407,8 +426,7 @@ function drawHand(d) {
   el.querySelectorAll('[data-leader]').forEach((b) => b.addEventListener('click', () => {
     const c = +b.dataset.leader;
     if (!acting || ui.discard || !(has('leader', c) || has('withdraw', c))) return;
-    ui.sel = ui.sel?.kind === 'leader' && ui.sel.color === c ? null : { kind: 'leader', color: c };
-    draw();
+    pickLeader(c);
   }));
   el.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
     if (!acting || ui.discard || !has('catastrophe')) return;

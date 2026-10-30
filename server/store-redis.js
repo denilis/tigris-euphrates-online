@@ -91,7 +91,14 @@ export function redisStore({ exec, prefix = '' }) {
     },
 
     async addHistory(entry) {
-      return (await exec(['SET', k(`hist:${entry.id}`), JSON.stringify(entry), 'NX'])) === 'OK';
+      const first = (await exec(['SET', k(`hist:${entry.id}`), JSON.stringify(entry), 'NX'])) === 'OK';
+      await exec(['SADD', k('hist:ids'), entry.id]); // повторяем и при повторе: первая запись могла оборваться здесь
+      return first;
+    },
+    async listHistory() {
+      const ids = await exec(['SMEMBERS', k('hist:ids')]);
+      if (!ids.length) return [];
+      return (await exec(['MGET', ...ids.map((id) => k(`hist:${id}`))])).map(parse).filter(Boolean);
     },
     async setCompanyLast(entry) {
       const prev = parse(await exec(['GET', k(`company:${entry.company}`)]));

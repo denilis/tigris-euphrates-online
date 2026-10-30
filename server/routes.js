@@ -5,11 +5,12 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, newCode, newTableCode } from './auth.js';
 import {
   createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
-  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm,
+  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
+import { seasonGames, SEASON_PLAYERS } from './stats.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -28,6 +29,7 @@ const LOCK_MS = 30000;
 const SESSION_MAX_MS = 90 * 24 * 3600 * 1000; // потом нужен код снова
 const ACTIVATE_LIMIT = 20; // попыток входа с одного адреса
 const ACTIVATE_WINDOW_MS = 10 * 60 * 1000; // за это время
+const TITLE_DAY_MS = 3 * 24 * 3600 * 1000; // счетчик столов за день живет дольше самого дня
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
@@ -135,9 +137,16 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!(await store.putTable(t, version, meta(t)))) t.version = version; // не вышло: допишет следующий запрос
   }
 
+  /** Название стола: дата по Москве и номер стола за этот день (30.10.2026.1). */
+  async function tableTitle() {
+    const day = tableDay(now());
+    return `${day}.${await store.hit(`day:${day}`, TITLE_DAY_MS)}`;
+  }
+
   async function newTable(u) {
+    const title = await tableTitle();
     for (let k = 0; k < 5; k++) {
-      const t = createTable({ code: newTableCode(), host: { userId: u.id, name: u.name }, now: now() });
+      const t = createTable({ code: newTableCode(), title, host: { userId: u.id, name: u.name }, now: now() });
       if (await store.putTable(t, null, meta(t))) {
         await store.addMyTable(u.id, t.code);
         return { code: t.code, view: viewFor(t, u.id, { now: now() }) };
@@ -150,7 +159,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
     return docs.filter(Boolean).map((t) => ({
-      code: t.code, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
+      code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
       me: seatOfUser(t, u.id)?.id ?? null,
       toMove: t.game?.toMove ?? null,
       seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero })),
@@ -182,7 +191,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
         if (!(await store.getTable(c))) code = c;
       }
       if (!code) http(500, 'no-code', 'Не удалось подобрать код стола');
-      const { created } = rematch(t, u.id, { code, now: now() });
+      // отказ rematch не должен расходовать номер стола за день
+      const title = t.status === 'over' && seatOfUser(t, u.id) ? await tableTitle() : null;
+      const { created } = rematch(t, u.id, { code, title, now: now() });
       if (!(await store.putTable(created, null, meta(created)))) http(409, 'stale', 'Реванш уже создан, обновите');
       // в списки игроков новый стол попадает, только если старый записался по версии; кто проиграл
       // гонку (нажали несколько человек), убирает свой стол, и лишних партий в списках не остаётся
@@ -256,6 +267,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     }
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
+    if (method === 'GET' && head === 'stats') return { players: SEASON_PLAYERS, games: seasonGames(await store.listHistory()) };
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
     if (head === 'tables') {
       if (!rest.length && method === 'POST') return newTable(u);

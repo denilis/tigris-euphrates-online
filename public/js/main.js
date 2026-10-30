@@ -1,8 +1,9 @@
 // Точка входа: окно активации, мои столы, стол (лобби или партия), коды игроков.
-// Адреса: #/ — мои столы, #/t/КОД — стол, #/admin — коды (только Денис).
+// Адреса: #/ — мои столы, #/t/КОД — стол, #/stats — статистика, #/admin — коды (только Денис).
 import { api, session, watchTable } from './api.js';
 import { renderLobby } from './lobby.js';
 import { renderGame } from './game.js';
+import { renderStats } from './stats.js';
 import { esc, toast, copy } from './util.js';
 
 const app = document.getElementById('app');
@@ -15,6 +16,7 @@ function topbar(active) {
   return `<header class="bar">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <nav>
+      <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
       ${u?.admin ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
       <span class="me">${esc(u?.name || '')}</span>
@@ -91,7 +93,7 @@ async function renderHome() {
     el.innerHTML = list.length ? list.map((t) => {
       const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
       return `<a class="titem${myTurn ? ' turn' : ''}" href="#/t/${esc(t.code)}">
-        <b>${esc(t.code)}</b>
+        <b>${esc(t.title || t.code)}</b>
         <span>${t.seats.map((s) => esc(s.name || (s.kind === 'bot' ? 'Бот' : 'свободно'))).join(', ')}</span>
         <small>${STATUS[t.status] || ''}${myTurn ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
       </a>`;
@@ -187,6 +189,7 @@ function route() {
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'admin') return renderAdmin();
+  if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
   return renderHome();
 }
 

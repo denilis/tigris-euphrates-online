@@ -64,6 +64,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
   const mine = table.seats.find((x) => x.kind === 'human' && x.userId === userId) || null;
   const v = {
     code: table.code,
+    title: table.title || null,
     version: table.version,
     status: table.status,
     options: { ...table.options },

@@ -25,7 +25,7 @@ export function renderLobby(root, view, { act }) {
       return `<button class="hero${on ? ' on' : ''}${taken ? ' taken' : ''}" data-hero="${h}" data-seat="${s.id}" ${editHero && !taken ? '' : 'disabled'} title="${taken ? `занят: ${esc(owner.name || 'бот')}` : HERONAME[h]}"><i style="background-image:url(${tokenImg(h, on ? 0 : 3)})"></i>${HERONAME[h]}</button>`;
     }).join('');
     let who;
-    if (s.kind === 'bot') who = '<b>Бот</b>';
+    if (s.kind === 'bot') who = `<b>${esc(s.name || 'Бот')}</b>`;
     else if (s.taken) who = `<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}`;
     else who = me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : '<span class="muted">Свободно</span>';
     const kindSwitch = host && !(s.kind === 'human' && s.taken)
@@ -55,7 +55,7 @@ export function renderLobby(root, view, { act }) {
   const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.' : '';
   root.innerHTML = `<div class="lobby">
     <div class="lcard">
-      <div class="lhead"><h1>Стол ${esc(view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
+      <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button></div>
 

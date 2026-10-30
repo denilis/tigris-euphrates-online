@@ -60,7 +60,12 @@ export function memoryStore() {
     async addHistory(entry) {
       if (alive(`hist:${entry.id}`) !== null) return false;
       set(`hist:${entry.id}`, JSON.stringify(entry));
+      lists.set('hist', [...(lists.get('hist') || []), entry.id]);
       return true;
+    },
+    /** Все записанные партии в любом порядке. */
+    async listHistory() {
+      return (lists.get('hist') || []).map((id) => JSON.parse(alive(`hist:${id}`)));
     },
     async setCompanyLast(entry) {
       const prev = alive(`company:${entry.company}`);

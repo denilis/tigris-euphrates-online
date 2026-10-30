@@ -68,25 +68,40 @@ const needSeated = (t, userId) => seatOfUser(t, userId) || fail('not-seated', '�
 function botHero(t) {
   return BOT_HEROES.find((h) => !t.seats.some((s) => s.hero === h)) || null;
 }
-function botName(t) {
-  const n = t.seats.filter((s) => s.kind === 'bot').length;
-  return n ? `Бот ${n + 1}` : 'Бот';
+// бот называется своим стилем (просьба Дениса 30.10), люди с большой буквы, стили с маленькой
+const BOT_NAMES = { universal: 'универсальный', base: 'базовый', top: 'топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
+
+/** Имена ботов по стилям; второй бот того же стиля за столом получает номер. */
+function nameBots(t) {
+  const seen = new Map();
+  for (const s of t.seats) {
+    if (s.kind !== 'bot') continue;
+    const n = (seen.get(s.bot.style) || 0) + 1;
+    seen.set(s.bot.style, n);
+    s.name = `Бот ${BOT_NAMES[s.bot.style]}${n > 1 ? ` ${n}` : ''}`;
+  }
 }
 const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, hero: null });
 function makeBot(t, id) {
-  return { id, kind: 'bot', userId: null, name: botName(t), hero: botHero(t), bot: { ...DEFAULT_BOT } };
+  return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
+
+const DAY_FORMAT = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric' });
+
+/** День для названия стола по Москве: 30.10.2026. */
+export const tableDay = (now) => DAY_FORMAT.format(now);
 
 // --- Лобби
 
-/** Новый стол: хост на первом месте, ещё два места для людей и бот. */
-export function createTable({ code, host, now }) {
+/** Новый стол: хост на первом месте, ещё два места для людей и бот. title показывается вместо кода. */
+export function createTable({ code, title = null, host, now }) {
   const t = {
-    code, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
+    code, title, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
     hostUserId: host.userId, options: { ...DEFAULT_OPTIONS }, seats: [], game: null, next: null,
   };
   t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, hero: null }, emptyHuman(1), emptyHuman(2));
   t.seats.push(makeBot(t, 3));
+  nameBots(t);
   return t;
 }
 
@@ -161,6 +176,7 @@ export function setSeatKind(t, userId, seatId, kind, now) {
   if (seat.kind === 'human' && seat.userId) fail('seat-occupied', 'Место занято человеком', 409);
   const i = t.seats.indexOf(seat);
   t.seats[i] = kind === 'bot' ? makeBot(t, seat.id) : emptyHuman(seat.id);
+  nameBots(t);
   touch(t, now);
 }
 
@@ -173,6 +189,7 @@ export function setBot(t, userId, seatId, settings, now) {
     if (!Object.hasOwn(BOT_CHECKS, k) || !BOT_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка бота ${k}`);
   }
   Object.assign(seat.bot, settings);
+  nameBots(t);
   touch(t, now);
 }
 
@@ -393,6 +410,7 @@ export function historyEntry(t) {
   const r = t.game.result;
   return {
     id: t.game.id,
+    title: t.title || null,
     finishedAt: r.finishedAt,
     company: companyKey(t.seats.filter((s) => s.kind === 'human').map((s) => s.userId)),
     board: t.options.board,
@@ -410,12 +428,12 @@ export function historyEntry(t) {
  * «Ещё партию»: тот же состав, герои и правила, первым ходит последнее место.
  * Если реванш уже создан (нажали двое), возвращает его код и created = null.
  */
-export function rematch(t, userId, { code, rng = cryptoRng(), now }) {
+export function rematch(t, userId, { code, title = null, rng = cryptoRng(), now }) {
   if (t.status !== 'over') fail('not-over', 'Партия ещё не закончена', 409);
   needSeated(t, userId);
   if (t.next) return { code: t.next, created: null };
   const n = {
-    code, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
+    code, title, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
     hostUserId: t.hostUserId, options: { ...t.options }, seats: structuredClone(t.seats), game: null, next: null,
   };
   start(n, userId, { last: historyEntry(t), rng, now, orderMode: 'loser' });

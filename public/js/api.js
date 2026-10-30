@@ -60,6 +60,7 @@ export function watchTable(code, onView, onError) {
   let view = null, version = -1, stopped = false, timer = null, ticking = false, busy = false;
 
   const merge = (v, appendLog) => {
+    if (stopped) return; // ответ дошел, когда ушли со стола: на другой странице рисовать нечего
     if (appendLog && view?.game && v.game) v.game.log = [...view.game.log, ...v.game.log];
     // часы сервера против своих: таймеры считаем по серверу
     if (v.game?.clock?.now) v.game.clock.skew = v.game.clock.now - Date.now();

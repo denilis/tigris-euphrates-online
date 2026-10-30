@@ -2,6 +2,7 @@
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
 import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
+import { TRAIL_FRESH_MS, TRAIL_LAND_MS } from './trail.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -61,6 +62,50 @@ export function sealIcon(c1, c2, size = 46) {
   return `<svg viewBox="0 0 120 120" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${sealSVG(c1, c2, 0, 0, p)}</svg>`;
 }
 
+// --- здание «Малая печать» (выбор Дениса 30.10): плитка на клетку в золотой раме, как монумент,
+// у каждого цвета свой силуэт. Прежний значок в углу на тайле своего цвета не читался.
+const BUILDING_SIL = [
+  'M15 44H45V38H41V32H37V26H33V20H27V26H23V32H19V38H15Z', // храм: зиккурат
+  'M17 44V30A13 13 0 0 1 43 30V44H34V35H26V44Z', // ферма: амбар
+  'M14 31L30 18L46 31H43V44H35V34H25V44H17V31Z', // рынок
+  'M16 44V23H20V27H24V23H28V27H32V23H36V27H40V23H44V44H34V36H26V44Z', // поселение: крепость
+];
+
+/** Здание цвета c в клетке с левым верхним углом (x, y), p — префикс id в defs. */
+export function buildingSVG(c, x, y, p) {
+  let g = `<rect x="1" y="1" width="58" height="58" rx="6" fill="url(#${p}vg)" stroke="#1c120a" stroke-opacity=".6"/>`;
+  g += `<rect x="5" y="5" width="50" height="50" fill="url(#${p}v${c})"/><rect x="5" y="5" width="50" height="50" fill="url(#${p}br)"/>`;
+  g += `<circle cx="30" cy="30" r="21" fill="#f0e2bf" stroke="${GD.d}" stroke-width="2.4"/>`;
+  g += `<path transform="translate(30 31) scale(.96) translate(-30 -31)" d="${BUILDING_SIL[c]}" fill="#3a2614"/>`;
+  for (const [rx, ry] of [[5, 5], [55, 5], [5, 55], [55, 55]]) g += rosette(rx, ry, 3.6);
+  return `<g transform="translate(${x},${y})" filter="url(#shadow2)">${g}</g>`;
+}
+
+/**
+ * След хода соперника (просьба Дениса 30.10): рамка с номером действия держится до следующего
+ * хода, первые секунды пульсирует, тайл или лидер садится на клетку, у перестановки стрелка.
+ * Перерисовка не сбивает анимацию: отрицательная задержка равна возрасту отметки.
+ */
+export function trailSVG(marks) {
+  let s = '';
+  for (const m of marks) {
+    const x = cx(m.pos), y = cy(m.pos), side = m.size * C;
+    const delay = ` style="animation-delay:-${m.age}ms"`;
+    if (m.age < TRAIL_LAND_MS && m.ev === 'tile') s += `<use class="land" href="#tl${m.c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${delay}/>`;
+    if (m.age < TRAIL_LAND_MS && m.ev === 'leader') s += `<use class="land" href="#tk_${m.hero || 'pot'}_${m.c}" x="${x + 8}" y="${y + 8}"${delay}/>`;
+    if (m.from != null) {
+      const fx = cx(m.from) + C / 2, fy = cy(m.from) + C / 2, tx = x + C / 2, ty = y + C / 2;
+      const len = Math.hypot(tx - fx, ty - fy), ux = (tx - fx) / len, uy = (ty - fy) / len;
+      const d = `M${f1(fx + ux * 8)} ${f1(fy + uy * 8)}L${f1(tx - ux * 30)} ${f1(ty - uy * 30)}`;
+      s += `<path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${fx}" cy="${fy}" r="6"/>`;
+    }
+    s += `<rect class="trail-back" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"/>`;
+    s += `<rect class="trail${m.age < TRAIL_FRESH_MS ? ' fresh' : ''}" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"${delay}/>`;
+    s += `<g class="trail-no" transform="translate(${x + side - 12},${y + side - 12})"><circle r="9.5"/><text y="4.4" text-anchor="middle">${m.action}</text></g>`;
+  }
+  return s;
+}
+
 // --- статичный слой: рамка, подписи, песок, река, сетка (меняется только с картой)
 let staticKey = null, staticSvg = '';
 function staticLayer(river) {
@@ -86,6 +131,7 @@ function staticLayer(river) {
     <radialGradient id="gold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
+    <marker id="trailArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ffe08a" stroke="#1b1309" stroke-width=".8"/></marker>
     ${monDefs('b')}
     ${[0, 1, 2, 3].map((c) => `<image id="tl${c}" width="${C - 6}" height="${C - 6}" href="${tileImg(c)}" preserveAspectRatio="xMidYMid slice"/>`).join('')}
     <image id="tlcat" width="${C - 6}" height="${C - 6}" href="${catImg}" preserveAspectRatio="xMidYMid slice"/>
@@ -127,7 +173,8 @@ function uniteMark(x, y) {
 /**
  * Нарисовать поле. g — view.game, heroOf(p) — герой игрока движка p.
  * opts: targets (клетки для хода), squares (левые верхние клетки монументов 2x2),
- * crosses (центры чуда), conflict { k, kind, myExtra, me }, flash (клетка из журнала),
+ * crosses (центры чуда), hit (клетки, где щелчок сработает), trail (след хода соперника),
+ * conflict { k, kind, myExtra, me }, flash (клетка из журнала),
  * unite (тайл объединения, пока идут войны: не входит ни в одно царство, рисуется тайлом объединения).
  */
 export function renderBoard(svg, g, heroOf, opts = {}) {
@@ -167,6 +214,11 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
   }
   s += `<g filter="url(#shadow)">${tiles}</g>`;
 
+  // здания под метками владельца: кому идет тайл, видно и на здании
+  for (let i = 0; i < W * H; i++) {
+    if (b.building[i] >= 0) s += buildingSVG(b.building[i], cx(i), cy(i), 'b');
+  }
+
   // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;
   // полупрозрачный черный жетон — своего лидера нет, тайл идет царю
   const kl = opts.owners ? kingdomLeaders(b, up) : null;
@@ -181,10 +233,6 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     s += `<g filter="url(#shadow)">${m}</g>`;
   }
 
-  for (let i = 0; i < W * H; i++) {
-    const bc = b.building[i];
-    if (bc >= 0) s += `<rect x="${cx(i) + 2}" y="${cy(i) + 2}" width="${C - 4}" height="${C - 4}" rx="6" fill="none" stroke="${HEX[bc]}" stroke-width="4"/><rect x="${cx(i) + C - 22}" y="${cy(i) + C - 16}" width="18" height="12" rx="2" fill="${HEX[bc]}" stroke="#e8dcc4" stroke-width=".8"/>`;
-  }
   for (let i = 0; i < W * H; i++) {
     if (!b.treasure[i]) continue;
     const x = cx(i) + C - 15, y = cy(i) + 15;
@@ -250,12 +298,13 @@ export function renderBoard(svg, g, heroOf, opts = {}) {
     }
   }
   if (up >= 0) s += uniteMark(cx(up), cy(up));
+  s += trailSVG(opts.trail || []);
 
   for (const i of opts.targets || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;
   for (const i of opts.crosses || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="22"/>`;
   if (opts.flash != null) s += `<rect class="flash" x="${cx(opts.flash)}" y="${cy(opts.flash)}" width="${C}" height="${C}" rx="4"/>`;
-  for (let i = 0; i < W * H; i++) s += `<rect class="cell-hit" data-i="${i}" x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}"><title>${cellName(i)}</title></rect>`;
+  for (let i = 0; i < W * H; i++) s += `<rect class="cell-hit${opts.hit?.has(i) ? ' on' : ''}" data-i="${i}" x="${cx(i)}" y="${cy(i)}" width="${C}" height="${C}"><title>${cellName(i)}</title></rect>`;
 
   svg.querySelector('.dyn').innerHTML = s;
 }

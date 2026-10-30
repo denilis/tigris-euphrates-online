@@ -49,7 +49,7 @@ input,select{font:inherit;color:var(--text)}
 .join{display:flex;gap:8px;flex-wrap:wrap}
 .join input{background:#14110e;border:1px solid var(--line);border-radius:8px;padding:0 12px;min-height:44px;min-width:0;flex:1 1 160px}
 .tables{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-.titem{display:grid;grid-template-columns:90px 1fr auto;gap:4px 12px;align-items:center;background:var(--card);border:1px solid transparent;border-radius:10px;padding:10px 14px;text-decoration:none;color:var(--text)}
+.titem{display:grid;grid-template-columns:128px 1fr auto;gap:4px 12px;align-items:center;background:var(--card);border:1px solid transparent;border-radius:10px;padding:10px 14px;text-decoration:none;color:var(--text)}
 .titem:hover{border-color:var(--gold2)}
 .titem.turn{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
 .titem b{color:var(--gold);letter-spacing:.1em}
@@ -58,6 +58,36 @@ input,select{font:inherit;color:var(--text)}
 .titem .acts{display:flex;gap:6px}
 .codebox{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#3b2a12;border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin:12px 0}
 .codebox code{font-size:20px;letter-spacing:.12em;color:#f3d99a}
+
+/* ---------- статистика ---------- */
+.pcard.stats{width:min(1040px,calc(100% - 32px))}
+.stats h2{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+.stats .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stats .pl{background:var(--card);border-radius:10px;border-top:3px solid var(--tone);padding:12px 14px}
+.stats .rank{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--tone)}
+.stats .who{font-family:Cinzel,Georgia,serif;font-size:19px;margin-top:2px}
+.stats .score{font-size:42px;font-weight:300;line-height:1.1;color:var(--tone);font-variant-numeric:tabular-nums}
+.stats .places{display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.stats .places div{flex:1}
+.stats .places b{display:block;font-weight:500}
+.stats .places span{font-size:11px;color:var(--muted)}
+.stats .dates{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
+.stats .dates label{display:flex;gap:6px;align-items:center;color:var(--muted)}
+.stats .dates input{background:#14110e;border:1px solid var(--line);border-radius:8px;padding:0 8px;min-height:34px}
+.stats .charts{display:grid;grid-template-columns:1.35fr 1fr;gap:10px}
+.stats .panel{background:var(--card);border-radius:10px;padding:12px 14px;min-width:0}
+.stats .panel h2{margin:2px 0 12px}
+.stats .panel svg{display:block;width:100%;height:auto}
+.stats .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+.stats .legend i{display:inline-block;width:14px;height:3px;margin-right:6px;vertical-align:middle;border-radius:1px}
+.stats .tw{overflow-x:auto;background:var(--card);border-radius:10px}
+.stats .games{width:100%;min-width:560px;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.stats .games th{text-align:left;font-size:11px;letter-spacing:.06em;font-weight:600;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.stats .games td{padding:7px 12px;border-bottom:1px solid #3a2e22;white-space:nowrap}
+.stats .games tr:last-child td{border-bottom:0}
+.stats .games b{color:var(--gold);font-weight:600}
+.stats .games a{text-decoration:none}
+@media (max-width:760px){.stats .podium,.stats .charts{grid-template-columns:1fr}}
 
 /* ---------- лобби ---------- */
 .lobby{padding:24px 16px 40px;display:flex;justify-content:center}
@@ -115,12 +145,25 @@ input,select{font:inherit;color:var(--text)}
 .navbtn:hover{border-color:var(--gold2)}
 .boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
 #board{width:100%;height:100%;display:block}
-.cell-hit{fill:transparent;cursor:pointer}
-.cell-hit:hover{fill:rgba(255,236,190,.18)}
+.cell-hit{fill:transparent}
+.cell-hit.on{cursor:pointer}
+.cell-hit.on:hover{fill:rgba(255,236,190,.18)}
 .target{fill:rgba(255,228,150,.2);stroke:rgba(240,200,110,.95);stroke-width:1.6;stroke-dasharray:5 4;animation:breathe 1.8s ease-in-out infinite;pointer-events:none}
 .target.sq{stroke-width:2.4}
 @keyframes breathe{50%{fill:rgba(255,228,150,.34)}}
 .flash{fill:rgba(255,224,138,.55);pointer-events:none}
+.trail,.trail-back,.trail-arrow,.trail-from,.trail-no,.land{pointer-events:none}
+.trail-back{fill:none;stroke:#1b1309;stroke-opacity:.8;stroke-width:4.5}
+.trail{fill:none;stroke:#ffe08a;stroke-width:2.2}
+.trail.fresh{animation:trailPulse 1s ease-in-out 3}
+.trail-arrow{fill:none;stroke:#ffe08a;stroke-width:2.6;stroke-dasharray:7 5}
+.trail-from{fill:#ffe08a;stroke:#1b1309;stroke-width:1.5}
+.trail-no circle{fill:#1b1713;stroke:#ffe08a;stroke-width:1.6}
+.trail-no text{fill:#ffe08a;font-size:13px;font-weight:700}
+.land{transform-box:fill-box;transform-origin:center;animation:land .45s ease-out forwards}
+@keyframes trailPulse{50%{stroke-width:7;stroke-opacity:.6}}
+@keyframes land{0%{transform:scale(1.5);opacity:.3}80%{transform:scale(1);opacity:1}100%{transform:scale(1);opacity:0}}
+@media (prefers-reduced-motion:reduce){.trail.fresh{animation:none}.land{display:none}}
 .pulse{animation:pulse 1.1s ease-in-out infinite}
 @keyframes pulse{50%{stroke-width:7;stroke-opacity:.35}}
 .side{grid-area:side;min-height:0;overflow-y:auto;display:flex;flex-direction:column;background:var(--frame);border-left:1px solid var(--line)}
@@ -184,7 +227,7 @@ input,select{font:inherit;color:var(--text)}
 .ht.sel{transform:translateY(-8px);box-shadow:0 0 0 3px var(--gold),0 8px 14px rgba(0,0,0,.6)}
 .hl{width:52px;height:52px;border-radius:50%;background-size:cover;border:3px solid;padding:0;position:relative;box-shadow:0 2px 5px rgba(0,0,0,.6)}
 .hl.sel{box-shadow:0 0 0 3px var(--gold),0 0 14px rgba(224,182,90,.6)}
-.hl.onb{filter:grayscale(.6) brightness(.75)}
+.hl.onb.idle{filter:grayscale(.6) brightness(.75)}
 .hl.onb::after{content:"на поле";position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);font-size:9.5px;background:#000c;color:#ddd;padding:0 4px;border-radius:3px;white-space:nowrap}
 .ht.used{filter:grayscale(1) brightness(.45)}
 .idle{cursor:default}
