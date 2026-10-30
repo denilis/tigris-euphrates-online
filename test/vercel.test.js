@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { makeHandler } from '../api/index.js';
+import { makeHandler, ipKey } from '../api/index.js';
 import { memoryStore } from '../server/store-memory.js';
 
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345' };
@@ -55,6 +55,38 @@ test('слишком большое тело запроса отклоняетс
   assert.equal(byStream.body.error, 'too-big');
   const ok = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, body: JSON.stringify({ x: 'y'.repeat(1000) }) });
   assert.equal(ok.status, 200, 'обычное тело проходит');
+});
+
+test('тело, которое платформа уже разобрала (без Content-Length), тоже ограничено', async () => {
+  const h = makeHandler(ENV, memoryStore());
+  const a = await call(h, 'POST', '/api/index?route=activate', { body: JSON.stringify({ code: 'ADMN-TEST-2345' }) });
+  const parsed = { action: 'options', options: { constructor: 'x'.repeat(40 * 1024) } };
+  const r = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, parsed });
+  assert.equal(r.status, 413);
+  assert.equal(r.body.error, 'too-big');
+  const str = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, parsed: JSON.stringify(parsed) });
+  assert.equal(str.status, 413, 'тело строкой тоже');
+});
+
+test('ключ адреса для лимита: IPv6 считается по сети /64, IPv4 по адресу', () => {
+  assert.equal(ipKey('1.2.3.4'), '1.2.3.4');
+  assert.equal(ipKey(''), '');
+  assert.equal(ipKey('::ffff:1.2.3.4'), '1.2.3.4', 'IPv4 внутри IPv6');
+  const net = ipKey('2001:db8:1:2:aaaa:bbbb:cccc:dddd');
+  assert.equal(ipKey('2001:DB8:1:2::1'), net, 'тот же /64, записи разные');
+  assert.equal(ipKey('2001:db8:1:2:ffff:ffff:ffff:ffff'), net);
+  assert.notEqual(ipKey('2001:db8:1:3::1'), net, 'другая сеть');
+  assert.equal(ipKey('::1'), '0000:0000:0000:0000::/64');
+});
+
+test('лимит входа: адреса из одной IPv6-сети делят счётчик, запросы без адреса тоже считаются', async () => {
+  const h = makeHandler(ENV, memoryStore());
+  const bad = (headers) => call(h, 'POST', '/api/index?route=activate', { body: JSON.stringify({ code: 'ZZZZ-ZZZZ-ZZZZ' }), headers });
+  for (let k = 0; k < 20; k++) assert.equal((await bad({ 'x-real-ip': `2001:db8:5:5:${k + 1}::1` })).status, 401);
+  assert.equal((await bad({ 'x-real-ip': '2001:db8:5:5:ffff::9' })).status, 429, 'смена хвоста адреса лимит не обходит');
+  assert.equal((await bad({ 'x-real-ip': '2001:db8:5:6::1' })).status, 401, 'соседняя сеть считается отдельно');
+  for (let k = 0; k < 20; k++) assert.equal((await bad({})).status, 401);
+  assert.equal((await bad({})).status, 429, 'без адреса общая группа');
 });
 
 test('адрес клиента берется из заголовков Vercel и считается в лимите входа', async () => {

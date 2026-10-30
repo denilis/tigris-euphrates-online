@@ -23,6 +23,8 @@ test('ввод кода прощает регистр, пробелы, дефи�
   assert.equal(normalizeCode('АВСЕ НКМР ТХ23'), 'ABCEHKMPTX23'); // кириллица
   assert.equal(normalizeCode('abcd efgh jk2'), null, 'короткий код');
   assert.equal(normalizeCode('ABCD-EFGH-JK2!'), null, 'чужой знак');
+  assert.equal(normalizeCode('A'.repeat(5_000_000)), null, 'огромный ввод отбрасывается сразу');
+  assert.equal(normalizeCode(`${' '.repeat(100)}ABCD-EFGH-JK23`), null, 'длиннее любого кода с пробелами');
 });
 
 test('отпечаток кода зависит от соли и одинаков для любой записи кода', () => {

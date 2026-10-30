@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { submit, undo, canUndo, autoConfirm, confirmDue, TableError } from '../game/table.js';
 import { stateFromJSON } from '../game/serialize.js';
+import { viewFor } from '../game/view.js';
 import { legalMoves, applyMove } from '../game/vendor/engine/engine.js';
 import { T0, started, randomStep, makeRng } from './support.js';
 
@@ -120,6 +121,15 @@ test('отмена не работает после срока окна подт
   assert.equal(JSON.stringify(t), snap, 'отказ ничего не меняет');
   undo(t, who.userId, { version: t.version }, { now: T0 + 11999 });
   assert.equal(stateFromJSON(t.game.state).phase, 'action');
+});
+
+test('вид: «Отменить» пропадает, как только срок окна вышел', () => {
+  const t = humanTurn(3);
+  const who = decider(t);
+  submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 1000 });
+  submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 2000 });
+  assert.equal(viewFor(t, who.userId, { now: T0 + 11999 }).game.canUndo, true);
+  assert.equal(viewFor(t, who.userId, { now: T0 + 12000 }).game.canUndo, false, 'срок вышел: сервер откажет');
 });
 
 test('после решения не ходящего места (сокровище, война) откат невозможен: чужой выбор уже виден', () => {

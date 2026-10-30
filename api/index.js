@@ -29,6 +29,20 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+/**
+ * Ключ адреса для лимита попыток. IPv6 считаем по сети /64: у одного клиента их миллиарды,
+ * и смена хвоста адреса не должна давать новый счётчик. IPv4 внутри IPv6 приводится к IPv4.
+ */
+export function ipKey(ip) {
+  if (!ip.includes(':')) return ip;
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1];
+  const [head, tail = ''] = ip.split('::');
+  const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return groups.slice(0, 4).map((g) => g.toLowerCase().padStart(4, '0')).join(':') + '::/64';
+}
+
 /** Обработчик с заданным окружением (тесты подставляют своё). */
 export function makeHandler(env, store) {
   const exec = upstashFromEnv(env);
@@ -50,6 +64,8 @@ export function makeHandler(env, store) {
       if (Number(req.headers['content-length']) > MAX_BODY) return tooBig();
       try {
         body = await readBody(req);
+        // платформа может разобрать тело сама и без Content-Length: размер сверяем и после разбора
+        if (JSON.stringify(body).length > MAX_BODY) return tooBig();
       } catch (e) {
         return e instanceof TooBig ? tooBig() : send(res, 400, { error: 'bad-json', message: 'Неверный запрос' });
       }
@@ -57,7 +73,7 @@ export function makeHandler(env, store) {
     const auth = req.headers.authorization || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     // Vercel сам ставит адрес клиента в эти заголовки; первый в списке — клиент
-    const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const ip = ipKey(String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim());
     const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token, ip });
     send(res, r.status, r.body);
   };

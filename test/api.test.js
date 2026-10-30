@@ -260,6 +260,8 @@ test('реванш: одновременное нажатие троих ост�
   assert.ok(next, 'в старом столе записан реванш');
   const alive = created.filter((c) => !deleted.includes(c));
   assert.deepEqual(alive, [next], 'остался один новый стол, лишние убраны');
+  assert.ok(created.length >= 2, 'гонка настоящая: столов создано несколько');
+  assert.equal(deleted.length, created.length - 1, 'убрано ровно столько, сколько проиграло гонку');
   for (const c of deleted) assert.equal(await base.getTable(c), null, 'убранный стол исчез из базы');
   for (const p of [P.denis, P.andrey, P.vlad]) {
     const mine = (await req('GET', 'tables', { token: p.token })).body;

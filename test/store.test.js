@@ -56,6 +56,15 @@ for (const [name, make] of Object.entries(stores)) {
     assert.deepEqual([await st.hit('a', 1000), await st.hit('a', 1000), await st.hit('b', 1000), await st.hit('a', 1000)], [1, 2, 1, 3]);
   });
 
+  test(`${name}: окно счётчика закрывается по времени и открывается заново`, async () => {
+    const st = make();
+    assert.equal(await st.hit('w', 40), 1);
+    assert.equal(await st.hit('w', 40), 2);
+    await new Promise((r) => setTimeout(r, 90));
+    assert.equal(await st.hit('w', 40), 1, 'окно истекло, счёт с единицы');
+    assert.equal(await st.hit('w', 40), 2, 'окно скользит от первого обращения, а не от каждого');
+  });
+
   test(`${name}: стол можно убрать, остальные остаются`, async () => {
     const st = make();
     await st.putTable({ code: 'DEL001', version: 0 }, null);

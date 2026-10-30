@@ -126,7 +126,8 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     log: g.log.slice(logFrom),
     logTotal: g.log.length,
     logEpoch: g.logEpoch || 0,
-    canUndo: decides && myP === s.cur && canUndo(table),
+    // после срока окна ход завершится сам и сервер откажет в отмене, поэтому кнопку не показываем
+    canUndo: decides && myP === s.cur && canUndo(table) && !(g.confirmBy != null && now != null && now >= g.confirmBy),
     clock: clockView(table, now),
     result: g.result || null,
   };

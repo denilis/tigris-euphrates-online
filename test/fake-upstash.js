@@ -5,7 +5,7 @@ import { upstash, CAS_PUT, UNLOCK, MINE_PUSH, RATE_HIT } from '../server/store-r
 
 /** Поддельный Upstash: принимает тело запроса как настоящий и отвечает { result }. */
 export function fakeUpstash() {
-  const kv = new Map(), sets = new Map(), lists = new Map();
+  const kv = new Map(), sets = new Map(), lists = new Map(), ttl = new Map();
   const commands = [];
   const run = (cmd) => {
     const [name, ...a] = cmd;
@@ -36,8 +36,12 @@ export function fakeUpstash() {
           return 0;
         }
         if (script === RATE_HIT) {
-          const n = Number(kv.get(rest[0]) ?? 0) + 1;
-          kv.set(rest[0], String(n));
+          // как в скрипте: INCR, а PEXPIRE только при первом обращении окна
+          const [key, ms] = rest;
+          if (ttl.has(key) && ttl.get(key) <= Date.now()) { kv.delete(key); ttl.delete(key); }
+          const n = Number(kv.get(key) ?? 0) + 1;
+          kv.set(key, String(n));
+          if (n === 1) ttl.set(key, Date.now() + Number(ms));
           return n;
         }
         if (script === MINE_PUSH) {

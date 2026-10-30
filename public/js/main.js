@@ -37,7 +37,7 @@ function renderActivate() {
   app.innerHTML = `<div class="gate">
     <form class="gcard" id="actForm" autocomplete="off">
       <h1>Тигр и Евфрат</h1>
-      <p>Стол для своей компании. Введите личный код, его выдает Денис. Код нужен один раз на устройстве.</p>
+      <p>Стол для своей компании. Введите личный код, его выдает Денис. Код нужен один раз на устройстве, вход запоминается на 90 дней.</p>
       <input id="actCode" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false" aria-label="Личный код">
       <button class="btn primary" type="submit">Войти</button>
       <p class="err" id="actErr" role="alert"></p>

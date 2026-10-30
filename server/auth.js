@@ -24,7 +24,8 @@ export function newTableCode(rng = cryptoRng()) {
 
 /** Привести ввод к виду кода; null, если это не код. */
 export function normalizeCode(input) {
-  if (typeof input !== 'string') return null;
+  // самый длинный честный ввод: код с дефисами и пробелами; мегабайты не разбираем
+  if (typeof input !== 'string' || input.length > 64) return null;
   const s = [...input.toUpperCase()].map((ch) => CYR[ch] || ch).join('').replace(/[\s-]/g, '');
   return s.length === CODE_LEN && /^[A-Z0-9]+$/.test(s) ? s : null;
 }
