@@ -96,6 +96,8 @@ export function sit(t, user, seatId, now) {
   if (seat.kind === 'bot') fail('seat-is-bot', 'Это место бота', 409);
   if (seatOfUser(t, user.userId)) fail('already-seated', 'Вы уже сидите за этим столом', 409);
   if (seat.userId) fail('seat-taken', 'Место занято', 409);
+  // за столом никого не осталось (хозяин ушёл последним): севший первым берёт стол себе
+  if (!t.seats.some((s) => s.kind === 'human' && s.userId)) t.hostUserId = user.userId;
   seat.userId = user.userId;
   seat.name = user.name;
   touch(t, now);
@@ -299,9 +301,11 @@ function step(t, s, move, rng, now) {
   g.state = stateToJSON(s);
   g.toMove = s.over ? null : g.order[s.toMove];
   // отменять нельзя после сброса (уже видны новые тайлы) и нападения (война, восстание),
+  // после решения другого места (выбор сокровища: ходящий увидел чужой выбор и переиграл бы),
   // а с концом хода снимки больше не нужны
   const attack = CONFLICT.includes(before) || CONFLICT.includes(s.phase) || entries.some((e) => e.ev === 'warStart');
-  if (move.type === 'discard' || attack || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
+  const otherSeat = seatId !== g.order[meta.cur];
+  if (move.type === 'discard' || attack || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
   if (g.clock && s.cur !== meta.cur) g.clock.turnUsed = 0;
   g.confirmBy = null;
   return entries;
@@ -335,6 +339,8 @@ export function undo(t, userId, { version } = {}, { now } = {}) {
   const g = t.game;
   const s = stateFromJSON(g.state);
   if (g.order[s.cur] !== seat.id || !canUndo(t)) fail('no-undo', 'Отменить нечего', 409);
+  // срок окна вышел: ход вот-вот завершится сам, его уже не вернуть
+  if (g.confirmBy != null && Number.isFinite(now) && now >= g.confirmBy) fail('no-undo', 'Время на отмену вышло', 409);
   spend(t, s, seat.id, now);
   const snap = g.undo.pop();
   const back = stateFromJSON(snap.state);
@@ -418,9 +424,13 @@ export function rematch(t, userId, { code, rng = cryptoRng(), now }) {
   return { code, created: n };
 }
 
+/** Стол стоит без движения столько, и любой сидящий за ним может его закрыть (хозяин пропал). */
+export const ABANDON_MS = 2 * 3600 * 1000;
+
 /** Закрыть стол без итога (игрок пропал, передумали): в историю не идёт. */
 export function close(t, userId, now) {
-  needHost(t, userId);
+  const abandoned = Number.isFinite(now) && now - t.updatedAt >= ABANDON_MS && Boolean(seatOfUser(t, userId));
+  if (!abandoned) needHost(t, userId);
   if (t.status === 'over' || t.status === 'closed') fail('not-playing', 'Стол уже закрыт или партия окончена', 409);
   t.status = 'closed';
   touch(t, now);

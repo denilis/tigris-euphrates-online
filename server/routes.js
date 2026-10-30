@@ -184,7 +184,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!code) http(500, 'no-code', 'Не удалось подобрать код стола');
       const { created } = rematch(t, u.id, { code, now: now() });
       if (!(await store.putTable(created, null, meta(created)))) http(409, 'stale', 'Реванш уже создан, обновите');
-      for (const s of created.seats) if (s.kind === 'human') await store.addMyTable(s.userId, created.code);
+      // в списки игроков новый стол попадает, только если старый записался по версии; кто проиграл
+      // гонку (нажали несколько человек), убирает свой стол, и лишних партий в списках не остаётся
+      return {
+        commit: async () => {
+          for (const s of created.seats) if (s.kind === 'human') await store.addMyTable(s.userId, created.code);
+        },
+        rollback: () => store.delTable(created.code),
+      };
     },
   };
 
@@ -193,8 +200,12 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     // действие только из своего списка: constructor, toString и прочее из прототипа не в счет
     const fn = typeof body.action === 'string' && Object.hasOwn(ACTIONS, body.action) ? ACTIONS[body.action] : null;
     if (!fn) http(400, 'bad-action', 'Неизвестное действие');
-    await fn(t, u, body);
-    if (!(await store.putTable(t, version, meta(t)))) http(409, 'stale', 'Стол уже изменился, обновите');
+    const hooks = await fn(t, u, body); // действие может вернуть { commit, rollback } для побочных записей
+    if (!(await store.putTable(t, version, meta(t)))) {
+      await hooks?.rollback?.();
+      http(409, 'stale', 'Стол уже изменился, обновите');
+    }
+    await hooks?.commit?.();
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
     return viewFor(t, u.id, { now: now() });

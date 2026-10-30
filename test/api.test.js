@@ -231,6 +231,42 @@ test('реванш: двое нажали, стол один; он у всех �
   }
 });
 
+test('реванш: одновременное нажатие троих оставляет один стол, проигравшие гонку убирают свой', async () => {
+  const base = memoryStore();
+  const created = [], deleted = [];
+  let watch = false;
+  const store = {
+    ...base,
+    async putTable(doc, expected, meta) {
+      const ok = await base.putTable(doc, expected, meta);
+      if (ok && expected === null && watch) created.push(doc.code);
+      return ok;
+    },
+    async delTable(c) {
+      deleted.push(c);
+      return base.delTable(c);
+    },
+  };
+  const { req } = setup(store);
+  const P = await people(req);
+  const code = await startedTable(req, P);
+  await playToEnd(req, P, code, 8);
+  watch = true;
+  const press = (p) => req('POST', `tables/${code}`, { body: { action: 'rematch' }, token: p.token });
+  const results = await Promise.all([press(P.andrey), press(P.vlad), press(P.denis)]);
+  assert.ok(results.some((r) => r.status === 200), 'кто-то создал реванш');
+  for (const r of results) assert.ok([200, 409].includes(r.status), `ответ ${r.status}`);
+  const next = (await req('GET', `tables/${code}`, { token: P.denis.token })).body.next;
+  assert.ok(next, 'в старом столе записан реванш');
+  const alive = created.filter((c) => !deleted.includes(c));
+  assert.deepEqual(alive, [next], 'остался один новый стол, лишние убраны');
+  for (const c of deleted) assert.equal(await base.getTable(c), null, 'убранный стол исчез из базы');
+  for (const p of [P.denis, P.andrey, P.vlad]) {
+    const mine = (await req('GET', 'tables', { token: p.token })).body;
+    assert.deepEqual(mine.filter((x) => x.code !== code).map((x) => x.code), [next], 'в списке игрока один новый стол');
+  }
+});
+
 test('бот: замок не даёт думать дважды; без бота bot-tick ничего не делает', async () => {
   const { req, store } = setup();
   const P = await people(req);

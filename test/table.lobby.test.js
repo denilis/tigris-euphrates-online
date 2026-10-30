@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat, start, close, TableError,
 } from '../game/table.js';
-import { USERS, T0, lobby, makeRng } from './support.js';
+import { USERS, T0, lobby, started, makeRng } from './support.js';
 
 const code = (fn) => {
   try { fn(); } catch (e) { assert.ok(e instanceof TableError, `ожидалась TableError, а не ${e}`); return e.code; }
@@ -25,6 +25,43 @@ test('новый стол: хост на первом месте, по умол�
   assert.equal(t.seats[3].bot.style, 'universal');
   assert.ok(t.seats[3].hero, 'боту сразу назначен герой');
   assert.equal(t.version, 0);
+});
+
+test('пустой стол: ушел хозяин и никого нет, севший первым становится хозяином', () => {
+  const t = createTable({ code: 'EMPTY1', host: USERS.denis, now: T0 });
+  leave(t, USERS.denis.userId, T0);
+  assert.equal(t.seats.filter((s) => s.userId).length, 0);
+  sit(t, USERS.andrey, 1, T0);
+  assert.equal(t.hostUserId, USERS.andrey.userId);
+  sit(t, USERS.vlad, 2, T0);
+  assert.equal(t.hostUserId, USERS.andrey.userId, 'второй севший хозяином не становится');
+  leave(t, USERS.andrey.userId, T0);
+  assert.equal(t.hostUserId, USERS.vlad.userId, 'ушел хозяин: стол у оставшегося');
+});
+
+test('закрыть стол: хозяин всегда, другой сидящий только если стол стоит 2 часа', () => {
+  const HOUR = 3600 * 1000;
+  const t = started(1);
+  const sitter = USERS.andrey.userId;
+  assert.equal(code(() => close(t, sitter, T0 + 2 * HOUR - 1)), 'not-host', 'рано');
+  assert.equal(code(() => close(t, 'u-stranger', T0 + 5 * HOUR)), 'not-host', 'не сидящий не может никогда');
+  assert.equal(t.status, 'playing');
+  close(t, sitter, T0 + 2 * HOUR);
+  assert.equal(t.status, 'closed');
+
+  const t2 = started(2);
+  close(t2, USERS.denis.userId, T0 + 1000);
+  assert.equal(t2.status, 'closed', 'хозяин закрывает сразу');
+
+  const t3 = started(3);
+  t3.updatedAt = T0 + HOUR; // последний ход час назад
+  assert.equal(code(() => close(t3, sitter, T0 + 2 * HOUR + 1)), 'not-host', 'считается от последнего движения стола');
+  close(t3, sitter, T0 + 3 * HOUR);
+  assert.equal(t3.status, 'closed');
+
+  const lobbyTable = lobby('LOBBY1');
+  close(lobbyTable, USERS.vlad.userId, T0 + 2 * HOUR);
+  assert.equal(lobbyTable.status, 'closed', 'брошенное лобби тоже закрывается');
 });
 
 test('настройки: имена из прототипа (constructor, toString, __proto__) не проходят', () => {

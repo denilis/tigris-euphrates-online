@@ -108,6 +108,41 @@ test('окно подтверждения: ход ждет, в окне можн
   assert.equal(t.game.confirmBy, null);
 });
 
+test('отмена не работает после срока окна подтверждения, до срока работает', () => {
+  const t = humanTurn(3);
+  const who = decider(t);
+  submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 1000 });
+  submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 2000 });
+  assert.equal(t.game.confirmBy, T0 + 12000);
+  const snap = JSON.stringify(t);
+  assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 + 12000 })), 'no-undo', 'срок вышел: ход завершится');
+  assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 + 3_600_000 })), 'no-undo', 'через час тем более');
+  assert.equal(JSON.stringify(t), snap, 'отказ ничего не меняет');
+  undo(t, who.userId, { version: t.version }, { now: T0 + 11999 });
+  assert.equal(stateFromJSON(t.game.state).phase, 'action');
+});
+
+test('после решения не ходящего места (сокровище, война) откат невозможен: чужой выбор уже виден', () => {
+  let offTurn = 0, treasure = 0;
+  for (let seed = 1; seed <= 25; seed++) {
+    const t = started(seed);
+    const r = makeRng(seed + 21), draw = makeRng(seed + 22);
+    for (let k = 0; k < 1500 && t.status === 'playing'; k++) {
+      const s = stateFromJSON(t.game.state);
+      const other = s.toMove !== s.cur;
+      const phase = s.phase;
+      randomStep(t, r, draw);
+      if (!other) continue;
+      offTurn++;
+      if (phase === 'treasure') treasure++;
+      assert.equal(t.game.undo.length, 0, `seed ${seed}, шаг ${k}, фаза ${phase}: снимки отката остались`);
+      assert.equal(canUndo(t), false);
+    }
+  }
+  assert.ok(offTurn > 20, `решений не ходящего места было мало: ${offTurn}`);
+  assert.ok(treasure > 0, 'среди них есть выбор сокровища');
+});
+
 test('сброс тайлов не отменяется, и после него ход проходит без окна', () => {
   const t = humanTurn(4);
   const who = decider(t);
