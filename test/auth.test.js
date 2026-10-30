@@ -34,7 +34,8 @@ test('отпечаток кода зависит от соли и одинако
 
 test('сессия: подпись проверяется, подделка и чужой секрет отклоняются', () => {
   const tok = signSession('u-andrey', SECRET, 1000);
-  assert.deepEqual(readSession(tok, SECRET), { userId: 'u-andrey', iat: 1000 });
+  assert.deepEqual(readSession(tok, SECRET), { userId: 'u-andrey', iat: 1000, epoch: 0 });
+  assert.equal(readSession(signSession('u-andrey', SECRET, 1000, 3), SECRET).epoch, 3, 'номер сессии в токене');
   assert.equal(readSession(tok, 'other-secret'), null);
   const [body, sig] = tok.split('.');
   const forged = Buffer.from(JSON.stringify({ u: 'u-admin', iat: 1000 })).toString('base64url') + '.' + sig;

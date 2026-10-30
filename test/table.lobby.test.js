@@ -27,6 +27,26 @@ test('новый стол: хост на первом месте, по умол�
   assert.equal(t.version, 0);
 });
 
+test('настройки: имена из прототипа (constructor, toString, __proto__) не проходят', () => {
+  const t = lobby();
+  const host = USERS.denis.userId;
+  const own = (key, value) => JSON.parse(`{"${key}": ${JSON.stringify(value)}}`); // как после JSON.parse у запроса
+  for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+    assert.equal(code(() => setOptions(t, host, own(key, 'x'), T0)), 'bad-option', key);
+    assert.equal(code(() => setOptions(t, host, own(key, { big: 'x'.repeat(100) }), T0)), 'bad-option', key);
+    assert.equal(code(() => setBot(t, host, 3, own(key, 5), T0)), 'bad-option', `бот ${key}`);
+  }
+  assert.equal(code(() => setOptions(t, host, { board: 'constructor' }, T0)), 'bad-option', 'поле не из списка');
+  assert.equal(code(() => setOptions(t, host, { board: '__proto__' }, T0)), 'bad-option');
+  assert.equal(code(() => setOptions(t, host, { board: { x: 1 } }, T0)), 'bad-option');
+  assert.equal(code(() => setBot(t, host, 3, { style: 'constructor' }, T0)), 'bad-option', 'стиль не из списка');
+  assert.equal(code(() => setBot(t, host, 3, { style: 'toString' }, T0)), 'bad-option');
+  assert.deepEqual(Object.keys(t.options).sort(), ['board', 'buildings', 'confirmSeconds', 'englishSupport', 'openScore', 'order', 'turnSeconds', 'wonder']);
+  assert.deepEqual(Object.keys(t.seats[3].bot).sort(), ['counting', 'errors', 'risk', 'strength', 'style']);
+  setOptions(t, host, { board: 'standard', turnSeconds: 45 }, T0);
+  assert.equal(t.options.board, 'standard');
+});
+
 test('место: один человек не садится на два места, на бота и на занятое место', () => {
   const t = lobby();
   assert.equal(code(() => sit(t, USERS.andrey, 2, T0)), 'already-seated');

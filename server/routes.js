@@ -1,7 +1,7 @@
 // Все маршруты API. Без привязки к Vercel и Node HTTP: call({ method, path, query, body, token })
 // → { status, body }. Функция Vercel (api/index.js) и локальный сервер (dev/server.js) — тонкие
 // переходники. Запись стола атомарна по версии: два хода в один стол не портят партию.
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, newCode, newTableCode } from './auth.js';
 import {
   createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
@@ -25,6 +25,9 @@ const http = (status, code, message) => {
 
 const ADMIN_ID = 'u-admin';
 const LOCK_MS = 30000;
+const SESSION_MAX_MS = 90 * 24 * 3600 * 1000; // потом нужен код снова
+const ACTIVATE_LIMIT = 20; // попыток входа с одного адреса
+const ACTIVATE_WINDOW_MS = 10 * 60 * 1000; // за это время
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
@@ -35,6 +38,7 @@ const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {} }) {
   const secret = env.SESSION_SECRET, pepper = env.CODE_PEPPER;
   const adminCode = normalizeCode(env.ADMIN_CODE || '');
+  const adminHash = adminCode && pepper ? Buffer.from(codeHash(adminCode, pepper)) : null;
   const botBudget = Number(env.BOT_BUDGET_MS) || 20000;
 
   // --- вход
@@ -43,30 +47,38 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!secret || !pepper) http(500, 'not-configured', 'Сервер не настроен: нет SESSION_SECRET или CODE_PEPPER');
     const s = readSession(token, secret);
     if (!s) http(401, 'no-session', 'Нужен код активации');
+    if (!(now() - s.iat <= SESSION_MAX_MS)) http(401, 'expired', 'Сессия закончилась, введите код снова');
     if (light) return { id: s.userId };
     const u = await store.getUser(s.userId);
     if (!u || u.revoked) http(401, 'revoked', 'Код отозван, попросите новый у Дениса');
+    // отзыв и новый код увеличивают sv: токены, выданные до этого, больше не действуют
+    if ((u.sv || 0) !== s.epoch) http(401, 'replaced', 'Код заменён, введите новый код');
     return u;
   }
   const needAdmin = (u) => u.admin || http(403, 'not-admin', 'Это может сделать только Денис');
 
-  async function activate(body) {
+  async function activate(body, ip) {
     if (!secret || !pepper) http(500, 'not-configured', 'Сервер не настроен');
+    // каждая попытка считается, верная тоже: подбирать код под лимитом не получится
+    if ((await store.hit(`act:${ip || 'unknown'}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) {
+      http(429, 'too-many', 'Слишком много попыток входа, подождите несколько минут');
+    }
     const code = normalizeCode(body.code);
     if (!code) http(401, 'bad-code', 'Код не подошёл');
+    const hash = Buffer.from(codeHash(code, pepper));
     let user;
-    if (adminCode && code === adminCode) {
+    if (adminHash && hash.length === adminHash.length && timingSafeEqual(hash, adminHash)) {
       user = await store.getUser(ADMIN_ID);
       if (!user) {
         user = { id: ADMIN_ID, name: env.ADMIN_NAME || 'Денис', admin: true, revoked: false, createdAt: now() };
         await store.putUser(user);
       }
     } else {
-      const id = await store.userIdByCode(codeHash(code, pepper));
+      const id = await store.userIdByCode(hash.toString());
       user = id && (await store.getUser(id));
       if (!user || user.revoked) http(401, 'bad-code', 'Код не подошёл');
     }
-    return { token: signSession(user.id, secret, now()), user: publicUser(user) };
+    return { token: signSession(user.id, secret, now(), user.sv || 0), user: publicUser(user) };
   }
 
   async function adminUsers(method, rest, body, u) {
@@ -90,7 +102,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!user || user.admin) http(404, 'no-user', 'Нет такого игрока');
     if (method === 'POST' && op === 'revoke') {
       if (user.codeHash) await store.delCode(user.codeHash);
-      await store.putUser({ ...user, revoked: true, codeHash: null });
+      await store.putUser({ ...user, revoked: true, codeHash: null, sv: (user.sv || 0) + 1 });
       return { ok: true };
     }
     if (method === 'POST' && op === 'code') {
@@ -98,7 +110,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const code = newCode();
       const hash = codeHash(code, pepper);
       await store.setCode(hash, id);
-      await store.putUser({ ...user, revoked: false, codeHash: hash });
+      await store.putUser({ ...user, revoked: false, codeHash: hash, sv: (user.sv || 0) + 1 });
       return { code };
     }
     http(404, 'no-route', 'Нет такого адреса');
@@ -178,7 +190,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   async function act(code, u, body) {
     const { doc: t, version } = await load(code);
-    const fn = ACTIONS[body.action];
+    // действие только из своего списка: constructor, toString и прочее из прототипа не в счет
+    const fn = typeof body.action === 'string' && Object.hasOwn(ACTIONS, body.action) ? ACTIONS[body.action] : null;
     if (!fn) http(400, 'bad-action', 'Неизвестное действие');
     await fn(t, u, body);
     if (!(await store.putTable(t, version, meta(t)))) http(409, 'stale', 'Стол уже изменился, обновите');
@@ -217,13 +230,13 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   // --- маршрутизация
 
-  async function dispatch({ method, path, query, body, token }) {
+  async function dispatch({ method, path, query, body, token, ip }) {
     const seg = String(path || '').split('/').filter(Boolean);
     const [head, ...rest] = seg;
     if (method === 'GET' && head === 'ping') {
       return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.commit.slice(0, 7), store: store.kind };
     }
-    if (method === 'POST' && head === 'activate') return activate(body);
+    if (method === 'POST' && head === 'activate') return activate(body, ip);
     if (head === 'tables' && rest.length === 2 && rest[1] === 'poll' && method === 'GET') {
       await auth(token, { light: true });
       const p = await store.poll(rest[0]);
@@ -248,9 +261,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     http(404, 'no-route', 'Нет такого адреса');
   }
 
-  async function call({ method = 'GET', path = '', query = {}, body = {}, token = null } = {}) {
+  async function call({ method = 'GET', path = '', query = {}, body = {}, token = null, ip = '' } = {}) {
     try {
-      return { status: 200, body: await dispatch({ method, path, query: query || {}, body: body || {}, token }) };
+      return { status: 200, body: await dispatch({ method, path, query: query || {}, body: body || {}, token, ip }) };
     } catch (e) {
       if (e instanceof HttpError || e instanceof TableError) return { status: e.status, body: { error: e.code, message: e.message } };
       console.error(e);

@@ -36,12 +36,13 @@ export function codeHash(code, pepper) {
 const b64 = (s) => Buffer.from(s).toString('base64url');
 const sign = (body, secret) => createHmac('sha256', secret).update(body).digest('base64url');
 
-export function signSession(userId, secret, iat = Date.now()) {
-  const body = b64(JSON.stringify({ u: userId, iat }));
+/** epoch — номер сессии пользователя: отзыв и новый код увеличивают его, старые токены гаснут. */
+export function signSession(userId, secret, iat = Date.now(), epoch = 0) {
+  const body = b64(JSON.stringify({ u: userId, iat, e: epoch }));
   return `${body}.${sign(body, secret)}`;
 }
 
-/** { userId, iat } из токена или null, если токен испорчен или подписан чужим секретом. */
+/** { userId, iat, epoch } из токена или null, если токен испорчен или подписан чужим секретом. */
 export function readSession(token, secret) {
   if (typeof token !== 'string') return null;
   const parts = token.split('.');
@@ -50,8 +51,8 @@ export function readSession(token, secret) {
   const got = Buffer.from(parts[1]);
   if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
   try {
-    const { u, iat } = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
-    return typeof u === 'string' ? { userId: u, iat } : null;
+    const { u, iat, e } = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    return typeof u === 'string' ? { userId: u, iat, epoch: Number.isInteger(e) ? e : 0 } : null;
   } catch {
     return null;
   }

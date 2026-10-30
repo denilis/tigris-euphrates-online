@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStore } from '../server/store-memory.js';
-import { redisStore } from '../server/store-redis.js';
+import { redisStore, upstash } from '../server/store-redis.js';
 import { fakeUpstash } from './fake-upstash.js';
 
 const stores = {
@@ -51,6 +51,22 @@ for (const [name, make] of Object.entries(stores)) {
     assert.equal(await st.companyLast('x|y'), null);
   });
 
+  test(`${name}: счётчик попыток растёт отдельно для каждого ключа`, async () => {
+    const st = make();
+    assert.deepEqual([await st.hit('a', 1000), await st.hit('a', 1000), await st.hit('b', 1000), await st.hit('a', 1000)], [1, 2, 1, 3]);
+  });
+
+  test(`${name}: стол можно убрать, остальные остаются`, async () => {
+    const st = make();
+    await st.putTable({ code: 'DEL001', version: 0 }, null);
+    await st.putTable({ code: 'KEEP01', version: 0 }, null);
+    await st.delTable('DEL001');
+    assert.equal(await st.getTable('DEL001'), null);
+    assert.equal(await st.poll('DEL001'), null);
+    assert.ok(await st.getTable('KEEP01'));
+    assert.equal(await st.putTable({ code: 'DEL001', version: 0 }, null), true, 'код снова свободен');
+  });
+
   test(`${name}: люди, коды, мои столы`, async () => {
     const st = make();
     await st.putUser({ id: 'u1', name: 'Андрей' });
@@ -75,6 +91,38 @@ test('Upstash: в Lua-скриптах есть сравнение версии 
   assert.match(CAS_PUT, /if cur ~= ARGV\[1\] then return 0 end/);
   assert.ok(CAS_PUT.indexOf('return 0') < CAS_PUT.indexOf("redis.call('SET'"), 'проверка версии до записи');
   assert.match(UNLOCK, /if redis\.call\('GET', KEYS\[1\]\) == ARGV\[1\] then return redis\.call\('DEL', KEYS\[1\]\) end/);
+});
+
+test('Upstash: зависший запрос обрывается по таймауту, плохой ответ даёт понятную ошибку', async () => {
+  const hang = async (url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason));
+  });
+  const slow = upstash({ url: 'https://fake', token: 't', fetchImpl: hang, timeoutMs: 30 });
+  const t0 = Date.now();
+  await assert.rejects(slow(['GET', 'x']), /time|abort/i);
+  assert.ok(Date.now() - t0 < 2000, 'не ждали минуту');
+
+  const html = async () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); } });
+  await assert.rejects(upstash({ url: 'https://fake', token: 't', fetchImpl: html })(['GET', 'x']), /502/);
+
+  const denied = async () => ({ ok: false, status: 401, json: async () => ({ error: 'WRONGPASS invalid token' }) });
+  await assert.rejects(upstash({ url: 'https://fake', token: 't', fetchImpl: denied })(['GET', 'x']), /WRONGPASS/);
+
+  const noBody = async () => ({ ok: false, status: 429, json: async () => ({}) });
+  await assert.rejects(upstash({ url: 'https://fake', token: 't', fetchImpl: noBody })(['GET', 'x']), /429/);
+
+  const fine = async () => ({ ok: true, status: 200, json: async () => ({ result: 'PONG' }) });
+  assert.equal(await upstash({ url: 'https://fake', token: 't', fetchImpl: fine })(['PING']), 'PONG');
+});
+
+test('Upstash: счётчик попыток — один скрипт, окно открывается первым обращением', async () => {
+  const { RATE_HIT } = await import('../server/store-redis.js');
+  assert.match(RATE_HIT, /redis\.call\('INCR', KEYS\[1\]\)/);
+  assert.match(RATE_HIT, /if n == 1 then redis\.call\('PEXPIRE', KEYS\[1\], ARGV\[1\]\) end/);
+  const fake = fakeUpstash();
+  const st = redisStore({ exec: fake.exec });
+  await st.hit('a', 1000);
+  assert.deepEqual(fake.commands, ['EVAL'], 'одна команда на попытку');
 });
 
 test('Upstash: опрос стола — одна команда Redis', async () => {

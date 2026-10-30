@@ -8,9 +8,9 @@ import { memoryStore } from '../server/store-memory.js';
 
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345' };
 
-function fakeReq(method, url, { body, parsed, token } = {}) {
+function fakeReq(method, url, { body, parsed, token, headers } = {}) {
   const req = Readable.from(body ? [Buffer.from(body)] : []);
-  Object.assign(req, { method, url, headers: token ? { authorization: `Bearer ${token}` } : {} });
+  Object.assign(req, { method, url, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers } });
   if (parsed !== undefined) req.body = parsed;
   return req;
 }
@@ -42,6 +42,30 @@ test('путь из route, тело потоком и разобранное, т
   assert.equal(t.status, 200);
   const v = await call(h, 'GET', `/api/index?route=tables/${t.body.code}&logFrom=0`, { token: a.body.token });
   assert.equal(v.body.code, t.body.code);
+});
+
+test('слишком большое тело запроса отклоняется: по заголовку и по потоку', async () => {
+  const h = makeHandler(ENV, memoryStore());
+  const a = await call(h, 'POST', '/api/index?route=activate', { body: JSON.stringify({ code: 'ADMN-TEST-2345' }) });
+  const big = JSON.stringify({ action: 'options', options: { constructor: 'x'.repeat(40 * 1024) } });
+  const byHeader = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, parsed: {}, headers: { 'content-length': String(big.length) } });
+  assert.equal(byHeader.status, 413);
+  const byStream = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, body: big });
+  assert.equal(byStream.status, 413);
+  assert.equal(byStream.body.error, 'too-big');
+  const ok = await call(h, 'POST', '/api/index?route=tables', { token: a.body.token, body: JSON.stringify({ x: 'y'.repeat(1000) }) });
+  assert.equal(ok.status, 200, 'обычное тело проходит');
+});
+
+test('адрес клиента берется из заголовков Vercel и считается в лимите входа', async () => {
+  const h = makeHandler(ENV, memoryStore());
+  const bad = (ip) => call(h, 'POST', '/api/index?route=activate', { body: JSON.stringify({ code: 'ZZZZ-ZZZZ-ZZZZ' }), headers: { 'x-real-ip': ip } });
+  for (let k = 0; k < 20; k++) assert.equal((await bad('9.9.9.9')).status, 401);
+  assert.equal((await bad('9.9.9.9')).status, 429);
+  assert.equal((await bad('8.8.8.8')).status, 401, 'другой адрес считается отдельно');
+  const viaList = (ip) => call(h, 'POST', '/api/index?route=activate', { body: JSON.stringify({ code: 'ZZZZ-ZZZZ-ZZZZ' }), headers: { 'x-forwarded-for': ip } });
+  for (let k = 0; k < 20; k++) await viaList('7.7.7.7, 10.0.0.1');
+  assert.equal((await viaList('7.7.7.7')).status, 429, 'в списке берется первый адрес');
 });
 
 test('на Vercel без базы отвечает только ping', async () => {

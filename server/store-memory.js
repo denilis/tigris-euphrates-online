@@ -43,6 +43,19 @@ export function memoryStore() {
       if (alive(`lock:${code}`) === token) kv.delete(`lock:${code}`);
     },
 
+    async delTable(code) {
+      for (const p of ['t', 'v', 'm', 'lock']) kv.delete(`${p}:${code}`);
+    },
+
+    /** Счётчик попыток: сколько раз ключ назвали за окно ttlMs (окно открывается первым обращением). */
+    async hit(key, ttlMs) {
+      const e = kv.get(`rl:${key}`);
+      const live = e && e.until >= Date.now() ? e : null;
+      const n = (live ? Number(live.value) : 0) + 1;
+      kv.set(`rl:${key}`, { value: String(n), until: live ? live.until : Date.now() + ttlMs });
+      return n;
+    },
+
     /** Запись истории один раз (повтор ничего не меняет); возвращает true при первой записи. */
     async addHistory(entry) {
       if (alive(`hist:${entry.id}`) !== null) return false;

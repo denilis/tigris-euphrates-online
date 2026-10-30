@@ -1,5 +1,7 @@
 // Запросы к серверу и наблюдение за столом. Сессия хранится в браузере; в режиме
 // разработки (?dev=1 на localhost) — на вкладку, чтобы в одном браузере сидели трое.
+import { pollDelay } from './poll.js';
+
 const DEV = new URLSearchParams(location.search).has('dev') && ['localhost', '127.0.0.1'].includes(location.hostname);
 const box = DEV ? sessionStorage : localStorage;
 const KEY = 'tigris.session';
@@ -50,8 +52,8 @@ export async function api(method, path, body) {
 }
 
 /**
- * Наблюдение за столом: опрос версии (раз в 1,2 с на видимой вкладке, раз в 10 с на
- * скрытой), при изменении докачка вида с хвостом журнала; если решает бот и замка нет,
+ * Наблюдение за столом: опрос версии (темп по состоянию стола, см. poll.js; на скрытой
+ * вкладке реже), при изменении докачка вида с хвостом журнала; если решает бот и замка нет,
  * просим сервер сделать ход бота.
  */
 export function watchTable(code, onView, onError) {
@@ -95,7 +97,7 @@ export function watchTable(code, onView, onError) {
   function schedule() {
     if (stopped) return;
     clearTimeout(timer);
-    timer = setTimeout(tick, document.hidden ? 10000 : 1200);
+    timer = setTimeout(tick, pollDelay(view, document.hidden));
   }
 
   const onVis = () => { if (!document.hidden) { clearTimeout(timer); tick(); } };
@@ -104,7 +106,10 @@ export function watchTable(code, onView, onError) {
 
   return {
     /** Принять вид из ответа на действие (журнал в нём полный). */
-    apply(v) { merge(v, false); },
+    apply(v) {
+      merge(v, false);
+      if (!busy) schedule(); // после своего хода темп опроса другой (бот, чужой ход)
+    },
     refresh() { return fetchView(true).catch((e) => onError?.(e)); },
     stop() {
       stopped = true;

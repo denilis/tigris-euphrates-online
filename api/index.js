@@ -11,11 +11,20 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+// Игре хватает сотен байт; больше только мусор или попытка раздуть стол
+const MAX_BODY = 32 * 1024;
+class TooBig extends Error {}
+
 async function readBody(req) {
   // Vercel сам разбирает JSON в req.body; локальный сервер отдаёт поток
   if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > MAX_BODY) throw new TooBig();
+    chunks.push(c);
+  }
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw ? JSON.parse(raw) : {};
 }
@@ -37,15 +46,19 @@ export function makeHandler(env, store) {
     }
     let body = {};
     if (req.method === 'POST') {
+      const tooBig = () => send(res, 413, { error: 'too-big', message: 'Слишком большой запрос' });
+      if (Number(req.headers['content-length']) > MAX_BODY) return tooBig();
       try {
         body = await readBody(req);
-      } catch {
-        return send(res, 400, { error: 'bad-json', message: 'Неверный запрос' });
+      } catch (e) {
+        return e instanceof TooBig ? tooBig() : send(res, 400, { error: 'bad-json', message: 'Неверный запрос' });
       }
     }
     const auth = req.headers.authorization || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-    const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token });
+    // Vercel сам ставит адрес клиента в эти заголовки; первый в списке — клиент
+    const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token, ip });
     send(res, r.status, r.body);
   };
 }

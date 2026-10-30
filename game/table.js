@@ -32,8 +32,9 @@ export const DEFAULT_OPTIONS = {
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
 
+// ключи словарей проверяем через Object.hasOwn: `in` пропускал constructor, toString и __proto__
 const OPTION_CHECKS = {
-  board: (v) => v in BOARDS,
+  board: (v) => typeof v === 'string' && Object.hasOwn(BOARDS, v),
   englishSupport: (v) => typeof v === 'boolean',
   buildings: (v) => typeof v === 'boolean',
   wonder: (v) => typeof v === 'boolean',
@@ -44,7 +45,7 @@ const OPTION_CHECKS = {
 };
 const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
 const BOT_CHECKS = {
-  style: (v) => v in STYLE_LABELS && v !== 'mix',
+  style: (v) => typeof v === 'string' && Object.hasOwn(STYLE_LABELS, v) && v !== 'mix',
   strength: intIn(0, 100),
   counting: (v) => ['none', 'approx', 'exact'].includes(v),
   risk: intIn(0, 100),
@@ -127,7 +128,7 @@ export function setOptions(t, userId, patch, now) {
   needLobby(t);
   needHost(t, userId);
   for (const [k, v] of Object.entries(patch)) {
-    if (!(k in OPTION_CHECKS) || !OPTION_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка ${k}`);
+    if (!Object.hasOwn(OPTION_CHECKS, k) || !OPTION_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка ${k}`);
   }
   Object.assign(t.options, patch);
   touch(t, now);
@@ -167,7 +168,7 @@ export function setBot(t, userId, seatId, settings, now) {
   const seat = seatById(t, seatId);
   if (seat.kind !== 'bot') fail('not-bot', 'Это место не бота');
   for (const [k, v] of Object.entries(settings)) {
-    if (!(k in BOT_CHECKS) || !BOT_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка бота ${k}`);
+    if (!Object.hasOwn(BOT_CHECKS, k) || !BOT_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка бота ${k}`);
   }
   Object.assign(seat.bot, settings);
   touch(t, now);

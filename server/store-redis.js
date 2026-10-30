@@ -10,6 +10,9 @@ redis.call('SET', KEYS[3], ARGV[4], 'EX', ARGV[5])
 return 1`;
 export const UNLOCK = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
 return 0`;
+export const RATE_HIT = `local n = redis.call('INCR', KEYS[1])
+if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+return n`;
 export const MINE_PUSH = `redis.call('LREM', KEYS[1], 0, ARGV[1])
 redis.call('LPUSH', KEYS[1], ARGV[1])
 redis.call('LTRIM', KEYS[1], 0, 19)
@@ -17,16 +20,27 @@ return 1`;
 
 const TABLE_TTL = 90 * 24 * 3600; // законченные и брошенные столы живут 90 дней
 
-/** Клиент Upstash REST: exec(['GET', 'key']) → result. */
-export function upstash({ url, token, fetchImpl = fetch }) {
+/**
+ * Клиент Upstash REST: exec(['GET', 'key']) → result. Запрос обрывается через timeoutMs
+ * (зависший сокет иначе держит функцию Vercel до конца её времени), ответ не в JSON или с
+ * ошибочным статусом даёт ошибку с кодом HTTP.
+ */
+export function upstash({ url, token, fetchImpl = fetch, timeoutMs = 8000 }) {
   return async function exec(cmd) {
     const r = await fetchImpl(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(cmd.map(String)),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-    const d = await r.json();
+    let d;
+    try {
+      d = await r.json();
+    } catch {
+      throw new Error(`Redis: ответ не разобрать (HTTP ${r.status})`);
+    }
     if (d.error) throw new Error('Redis: ' + d.error);
+    if (r.ok === false) throw new Error(`Redis: HTTP ${r.status}`);
     return d.result;
   };
 }
@@ -67,6 +81,13 @@ export function redisStore({ exec, prefix = '' }) {
     },
     async unlock(code, token) {
       await exec(['EVAL', UNLOCK, 1, k(`lock:${code}`), token]);
+    },
+
+    async delTable(code) {
+      await exec(['DEL', k(`t:${code}`), k(`v:${code}`), k(`m:${code}`), k(`lock:${code}`)]);
+    },
+    async hit(key, ttlMs) {
+      return Number(await exec(['EVAL', RATE_HIT, 1, k(`rl:${key}`), ttlMs]));
     },
 
     async addHistory(entry) {

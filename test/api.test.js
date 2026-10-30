@@ -98,6 +98,64 @@ test('админ выдаёт и отзывает коды; не админ не
   assert.equal(again.body.user.id, P.andrey.user.id, 'тот же игрок с новым кодом');
 });
 
+test('действие с именем из прототипа не выполняется: 400 вместо 500 и холостых записей', async () => {
+  const { req } = setup();
+  const P = await people(req);
+  const { body: { code } } = await req('POST', 'tables', { token: P.denis.token });
+  const before = (await req('GET', `tables/${code}/poll`, { token: P.denis.token })).body.version;
+  for (const action of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf', ['sit'], { a: 1 }, null]) {
+    const r = await req('POST', `tables/${code}`, { body: { action }, token: P.denis.token });
+    assert.equal(r.status, 400, String(action));
+    assert.equal(r.body.error, 'bad-action');
+  }
+  const after = (await req('GET', `tables/${code}/poll`, { token: P.denis.token })).body.version;
+  assert.equal(after, before, 'стол не менялся');
+});
+
+test('вход: попыток 20 за 10 минут с одного адреса, чужой адрес не страдает', async () => {
+  const { app } = setup();
+  const act = (code, ip) => app.call({ method: 'POST', path: 'activate', body: { code }, ip });
+  for (let k = 0; k < 20; k++) assert.equal((await act('ZZZZ-ZZZZ-ZZZZ', '1.1.1.1')).status, 401);
+  const blocked = await act('ADMN-TEST-2345', '1.1.1.1');
+  assert.equal(blocked.status, 429, 'после лимита даже верный код ждет');
+  assert.equal(blocked.body.error, 'too-many');
+  assert.equal((await act('ADMN-TEST-2345', '2.2.2.2')).status, 200);
+});
+
+test('сессия: отзыв и новый код гасят все старые токены, в том числе после возвращения доступа', async () => {
+  const { req } = setup();
+  const P = await people(req);
+  const id = P.andrey.user.id;
+  const old = P.andrey.token;
+  assert.equal((await req('GET', 'me', { token: old })).status, 200);
+  await req('POST', `admin/users/${id}/revoke`, { token: P.denis.token });
+  const nc = (await req('POST', `admin/users/${id}/code`, { token: P.denis.token })).body.code;
+  assert.equal((await req('GET', 'me', { token: old })).status, 401, 'украденный токен не оживает вместе с новым кодом');
+  const fresh = await req('POST', 'activate', { body: { code: nc } });
+  assert.equal((await req('GET', 'me', { token: fresh.body.token })).status, 200);
+  // новый код без отзыва тоже выкидывает прежние устройства
+  await req('POST', `admin/users/${id}/code`, { token: P.denis.token });
+  assert.equal((await req('GET', 'me', { token: fresh.body.token })).status, 401);
+  // остальные игроки не затронуты
+  assert.equal((await req('GET', 'me', { token: P.vlad.token })).status, 200);
+});
+
+test('сессия живет 90 дней, потом нужен код снова', async () => {
+  const DAY = 24 * 3600 * 1000;
+  let at = 1_800_000_000_000;
+  const app = createApp({ store: memoryStore(), env: ENV, now: () => at });
+  const req = async (method, path, { body, token } = {}) => app.call({ method, path, body, token });
+  const a = (await req('POST', 'activate', { body: { code: 'ADMN-TEST-2345' } })).body;
+  at += 89 * DAY;
+  assert.equal((await req('GET', 'me', { token: a.token })).status, 200);
+  at += 2 * DAY;
+  const late = await req('GET', 'me', { token: a.token });
+  assert.equal(late.status, 401);
+  assert.equal(late.body.error, 'expired');
+  assert.equal((await req('GET', 'tables/ABCDEF/poll', { token: a.token })).status, 401, 'опрос тоже не пускает с истёкшей сессией');
+  assert.equal((await req('POST', 'activate', { body: { code: 'ADMN-TEST-2345' } })).status, 200, 'по коду входят снова');
+});
+
 test('стол: лобби, ход только из списка, устаревшая версия и гонка двух ходов', async () => {
   const { req } = setup();
   const P = await people(req);

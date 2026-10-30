@@ -1,7 +1,7 @@
 // Поддельный Upstash для тестов: принимает тело запроса как настоящий REST API и
 // исполняет команды так же, как Redis (включая наши Lua-скрипты).
 import assert from 'node:assert/strict';
-import { upstash, CAS_PUT, UNLOCK, MINE_PUSH } from '../server/store-redis.js';
+import { upstash, CAS_PUT, UNLOCK, MINE_PUSH, RATE_HIT } from '../server/store-redis.js';
 
 /** Поддельный Upstash: принимает тело запроса как настоящий и отвечает { result }. */
 export function fakeUpstash() {
@@ -19,7 +19,7 @@ export function fakeUpstash() {
         kv.set(a[0], a[1]);
         return 'OK';
       }
-      case 'DEL': return kv.delete(a[0]) ? 1 : 0;
+      case 'DEL': return a.reduce((n, key) => n + (kv.delete(key) ? 1 : 0), 0);
       case 'SADD': { const s = sets.get(a[0]) || new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
       case 'SMEMBERS': return [...(sets.get(a[0]) || [])];
       case 'LRANGE': return (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1);
@@ -35,6 +35,11 @@ export function fakeUpstash() {
           if (kv.get(rest[0]) === rest[1]) { kv.delete(rest[0]); return 1; }
           return 0;
         }
+        if (script === RATE_HIT) {
+          const n = Number(kv.get(rest[0]) ?? 0) + 1;
+          kv.set(rest[0], String(n));
+          return n;
+        }
         if (script === MINE_PUSH) {
           const l = (lists.get(rest[0]) || []).filter((x) => x !== rest[1]);
           lists.set(rest[0], [rest[1], ...l].slice(0, 20));
@@ -49,7 +54,7 @@ export function fakeUpstash() {
     assert.equal(headers.Authorization, 'Bearer tok');
     const cmd = JSON.parse(body);
     for (const x of cmd) assert.equal(typeof x, 'string', 'все аргументы строками');
-    return { json: async () => ({ result: run(cmd) }) };
+    return { ok: true, status: 200, json: async () => ({ result: run(cmd) }) };
   };
   return { exec: upstash({ url: 'https://fake', token: 'tok', fetchImpl }), commands };
 }
