@@ -3,8 +3,14 @@
 // подтверждения. В свой ход чужие ничего не меняют, а свои действия возвращают вид сразу.
 // Без DOM, чтобы проверять тестами.
 
-/** Пауза до следующего опроса в мс. view — последний вид стола (или null), hidden — вкладка скрыта. */
-export function pollDelay(view, hidden) {
+const HIDDEN_LIMIT_MS = 30 * 60 * 1000; // забытая вкладка за месяц съела бы половину лимита базы
+
+/**
+ * Пауза до следующего опроса в мс, null: не опрашивать, пока вкладку не откроют.
+ * view — последний вид стола (или null), hidden — вкладка скрыта, hiddenMs — сколько она скрыта.
+ */
+export function pollDelay(view, hidden, hiddenMs = 0) {
+  if (hidden && hiddenMs >= HIDDEN_LIMIT_MS) return null;
   if (!view) return hidden ? 10000 : 1200;
   if (view.status === 'closed') return hidden ? 60000 : 30000;
   if (view.status === 'over') return hidden ? 60000 : (view.next ? 30000 : 5000); // 5 с: вдруг кто-то нажал «Ещё партию»

@@ -83,7 +83,8 @@ for (const [name, make] of Object.entries(stores)) {
     await st.putUser({ id: 'u1', name: 'Андрей', revoked: true });
     assert.equal((await st.getUser('u1')).revoked, true);
     assert.deepEqual((await st.listUsers()).map((u) => u.id).sort(), ['u1', 'u2']);
-    await st.setCode('h1', 'u1');
+    assert.equal(await st.claimCode('h1', 'u1'), true);
+    assert.equal(await st.claimCode('h1', 'u2'), false, 'занятый код не отдается другому');
     assert.equal(await st.userIdByCode('h1'), 'u1');
     await st.delCode('h1');
     assert.equal(await st.userIdByCode('h1'), null);

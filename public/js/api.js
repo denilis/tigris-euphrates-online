@@ -58,6 +58,7 @@ export async function api(method, path, body) {
  */
 export function watchTable(code, onView, onError) {
   let view = null, version = -1, stopped = false, timer = null, ticking = false, busy = false;
+  let hiddenAt = document.hidden ? Date.now() : null;
 
   const merge = (v, appendLog) => {
     if (stopped) return; // ответ дошел, когда ушли со стола: на другой странице рисовать нечего
@@ -98,10 +99,14 @@ export function watchTable(code, onView, onError) {
   function schedule() {
     if (stopped) return;
     clearTimeout(timer);
-    timer = setTimeout(tick, pollDelay(view, document.hidden));
+    const wait = pollDelay(view, document.hidden, hiddenAt === null ? 0 : Date.now() - hiddenAt);
+    if (wait !== null) timer = setTimeout(tick, wait);
   }
 
-  const onVis = () => { if (!document.hidden) { clearTimeout(timer); tick(); } };
+  const onVis = () => {
+    hiddenAt = document.hidden ? Date.now() : null;
+    if (!document.hidden) { clearTimeout(timer); tick(); }
+  };
   document.addEventListener('visibilitychange', onVis);
   fetchView(true).catch((e) => onError?.(e)).finally(schedule);
 

@@ -6,6 +6,12 @@ import { pollDelay } from '../public/js/poll.js';
 const seats = [{ id: 0, kind: 'human' }, { id: 1, kind: 'human' }, { id: 2, kind: 'human' }, { id: 3, kind: 'bot' }];
 const playing = (toMove, me, extra = {}) => ({ status: 'playing', me, seats, game: { toMove, clock: {}, ...extra } });
 
+test('опрос: забытая скрытая вкладка через полчаса замолкает, иначе она съест лимит базы', () => {
+  assert.equal(pollDelay(playing(1, 0), true, 29 * 60_000), 10000);
+  assert.equal(pollDelay(playing(1, 0), true, 30 * 60_000), null);
+  assert.equal(pollDelay(playing(1, 0), false, 30 * 60_000), 2000, 'на виду срок не считается');
+});
+
 test('опрос: пока вида нет, обычный темп', () => {
   assert.equal(pollDelay(null, false), 1200);
   assert.equal(pollDelay(null, true), 10000);

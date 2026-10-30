@@ -6,6 +6,7 @@ import { cryptoRng } from '../game/random.js';
 // без похожих знаков: нет 0/O, 1/I/L
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 12;
+const CODE_MIN = 8, CODE_MAX = 20; // границы для кода, вписанного вручную
 // русские буквы, которые на клавиатуре выглядят как латинские в коде
 const CYR = { А: 'A', В: 'B', С: 'C', Е: 'E', Н: 'H', К: 'K', М: 'M', О: 'O', Р: 'P', Т: 'T', Х: 'X', У: 'Y' };
 
@@ -27,7 +28,7 @@ export function normalizeCode(input) {
   // самый длинный честный ввод: код с дефисами и пробелами; мегабайты не разбираем
   if (typeof input !== 'string' || input.length > 64) return null;
   const s = [...input.toUpperCase()].map((ch) => CYR[ch] || ch).join('').replace(/[\s-]/g, '');
-  return s.length === CODE_LEN && /^[A-Z0-9]+$/.test(s) ? s : null;
+  return s.length >= CODE_MIN && s.length <= CODE_MAX && /^[A-Z0-9]+$/.test(s) ? s : null;
 }
 
 export function codeHash(code, pepper) {

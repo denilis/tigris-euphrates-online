@@ -20,6 +20,8 @@ export function fakeUpstash() {
         return 'OK';
       }
       case 'DEL': return a.reduce((n, key) => n + (kv.delete(key) ? 1 : 0), 0);
+      case 'APPEND': { kv.set(a[0], (kv.get(a[0]) ?? '') + a[1]); return kv.get(a[0]).length; }
+      case 'PEXPIRE': return kv.has(a[0]) ? 1 : 0;
       case 'SADD': { const s = sets.get(a[0]) || new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
       case 'SMEMBERS': return [...(sets.get(a[0]) || [])];
       case 'LRANGE': return (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1);

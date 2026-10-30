@@ -21,7 +21,7 @@ test('код: 12 знаков без похожих букв, по 4 через 
 test('ввод кода прощает регистр, пробелы, дефисы и русские буквы-двойники', () => {
   assert.equal(normalizeCode(' abcd-efgh-jk23 '), 'ABCDEFGHJK23');
   assert.equal(normalizeCode('АВСЕ НКМР ТХ23'), 'ABCEHKMPTX23'); // кириллица
-  assert.equal(normalizeCode('abcd efgh jk2'), null, 'короткий код');
+  assert.equal(normalizeCode('abcd efg'), null, 'короткий код');
   assert.equal(normalizeCode('ABCD-EFGH-JK2!'), null, 'чужой знак');
   assert.equal(normalizeCode('A'.repeat(5_000_000)), null, 'огромный ввод отбрасывается сразу');
   assert.equal(normalizeCode(`${' '.repeat(100)}ABCD-EFGH-JK23`), null, 'длиннее любого кода с пробелами');

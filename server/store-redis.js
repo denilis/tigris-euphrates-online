@@ -55,6 +55,7 @@ export function upstashFromEnv(env) {
 export function redisStore({ exec, prefix = '' }) {
   const k = (s) => prefix + s;
   const parse = (s) => (s === null || s === undefined ? null : JSON.parse(s));
+  const lines = (s) => (s ? s.trim().split('\n').map((x) => JSON.parse(x)) : []);
 
   return {
     kind: 'redis',
@@ -124,8 +125,8 @@ export function redisStore({ exec, prefix = '' }) {
     async userIdByCode(hash) {
       return exec(['GET', k(`code:${hash}`)]);
     },
-    async setCode(hash, userId) {
-      await exec(['SET', k(`code:${hash}`), userId]);
+    async claimCode(hash, userId) {
+      return (await exec(['SET', k(`code:${hash}`), userId, 'NX'])) === 'OK';
     },
     async delCode(hash) {
       await exec(['DEL', k(`code:${hash}`)]);
@@ -136,6 +137,26 @@ export function redisStore({ exec, prefix = '' }) {
     },
     async myTables(userId) {
       return exec(['LRANGE', k(`mine:${userId}`), 0, 19]);
+    },
+
+    async setPresence(id, value, ttlMs) {
+      await exec(['SET', k(`pres:${id}`), JSON.stringify(value), 'PX', ttlMs]);
+    },
+    // пульс идет часто: читаем одним MGET, без скрипта (Upstash считает каждый вызов внутри скрипта)
+    async readPresence(ids, me) {
+      const r = await exec(['MGET', ...ids.map((id) => k(`pres:${id}`)), k(`inbox:${me}`)]);
+      return { marks: r.slice(0, -1).map(parse), letters: lines(r[r.length - 1]) };
+    },
+    // письма лежат строкой: только строку читает тот же MGET, и они остаются до ответа,
+    // поэтому их не теряют скрытая вкладка, второе устройство и обновление страницы
+    async pushInbox(id, value, ttlMs) {
+      await exec(['APPEND', k(`inbox:${id}`), JSON.stringify(value) + '\n']);
+      await exec(['PEXPIRE', k(`inbox:${id}`), ttlMs]);
+    },
+    async dropLetter(me, letterId, ttlMs) {
+      const rest = lines(await exec(['GET', k(`inbox:${me}`)])).filter((m) => m.id !== letterId);
+      if (rest.length) await exec(['SET', k(`inbox:${me}`), rest.map((m) => JSON.stringify(m) + '\n').join(''), 'PX', ttlMs]);
+      else await exec(['DEL', k(`inbox:${me}`)]);
     },
   };
 }

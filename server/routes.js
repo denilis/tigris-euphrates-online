@@ -30,12 +30,19 @@ const SESSION_MAX_MS = 90 * 24 * 3600 * 1000; // потом нужен код с
 const ACTIVATE_LIMIT = 20; // попыток входа с одного адреса
 const ACTIVATE_WINDOW_MS = 10 * 60 * 1000; // за это время
 const TITLE_DAY_MS = 3 * 24 * 3600 * 1000; // счетчик столов за день живет дольше самого дня
+// кто на сайте. Пульс идет часто, а скрипт Upstash считает команду за каждый вызов внутри, поэтому
+// чтение это один MGET, а отметка обновляется реже: 10 человек укладываются в бесплатный лимит
+const ONLINE_MS = 90 * 1000; // без отметки дольше человек уже не на сайте
+const MARK_EVERY_MS = 45 * 1000;
+const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульса, чтобы не читать его каждый раз
+const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
 const due = (m, at) => m === 'bot' || (m[0] === 'c' && at >= Number(m.slice(1)));
-const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin) });
+const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
+const letterId = () => randomBytes(6).toString('hex');
 
 export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {} }) {
   const secret = env.SESSION_SECRET, pepper = env.CODE_PEPPER;
@@ -50,14 +57,18 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const s = readSession(token, secret);
     if (!s) http(401, 'no-session', 'Нужен код активации');
     if (!(now() - s.iat <= SESSION_MAX_MS)) http(401, 'expired', 'Сессия закончилась, введите код снова');
-    if (light) return { id: s.userId };
+    if (light) return { id: s.userId, epoch: s.epoch };
     const u = await store.getUser(s.userId);
-    if (!u || u.revoked) http(401, 'revoked', 'Код отозван, попросите новый у Дениса');
-    // отзыв и новый код увеличивают sv: токены, выданные до этого, больше не действуют
-    if ((u.sv || 0) !== s.epoch) http(401, 'replaced', 'Код заменён, введите новый код');
+    checkUser(u, s.epoch);
     return u;
   }
-  const needAdmin = (u) => u.admin || http(403, 'not-admin', 'Это может сделать только Денис');
+  function checkUser(u, epoch) {
+    if (!u || u.revoked) http(401, 'revoked', 'Код отозван, попросите новый у администратора');
+    // отзыв и новый код увеличивают sv: токены, выданные до этого, больше не действуют
+    if ((u.sv || 0) !== epoch) http(401, 'replaced', 'Код заменён, введите новый код');
+  }
+  const needAdmin = (u) => u.admin || http(403, 'not-admin', 'Это может сделать только администратор');
+  const needMain = (u) => u.id === ADMIN_ID || http(403, 'not-main', 'Это может сделать только главный администратор');
 
   async function activate(body, ip) {
     if (!secret || !pepper) http(500, 'not-configured', 'Сервер не настроен');
@@ -83,6 +94,21 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { token: signSession(user.id, secret, now(), user.sv || 0), user: publicUser(user) };
   }
 
+  /** Занять код за человеком: свой из формы или случайный. Занятый отклоняем: вход молча перешел бы к другому. */
+  async function claimCode(raw, id, u) {
+    const text = String(raw ?? '').trim();
+    // ответ «занят» подтверждает чужой код, поэтому подбор ограничен так же, как при входе
+    if (text && (await store.hit(`claim:${u.id}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) {
+      http(429, 'too-many', 'Слишком много попыток, подождите несколько минут');
+    }
+    const code = text ? normalizeCode(text) : newCode();
+    if (!code) http(400, 'bad-code-format', 'Код: от 8 до 20 латинских букв и цифр');
+    const hash = codeHash(code, pepper);
+    const isMainCode = adminHash && timingSafeEqual(Buffer.from(hash), adminHash);
+    if (isMainCode || !(await store.claimCode(hash, id))) http(409, 'code-taken', 'Этот код уже занят');
+    return { code, hash };
+  }
+
   async function adminUsers(method, rest, body, u) {
     needAdmin(u);
     if (method === 'GET' && !rest.length) {
@@ -91,31 +117,101 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && !rest.length) {
       const name = String(body.name || '').trim();
       if (!name || name.length > 30) http(400, 'bad-name', 'Имя от 1 до 30 знаков');
+      if (body.admin) needMain(u);
+      // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы
+      const same = (await store.listUsers()).some((x) => x.name.trim().toLowerCase() === name.toLowerCase());
+      if (same) http(409, 'name-taken', 'Такое имя уже есть');
       const id = 'u-' + randomBytes(6).toString('hex');
-      const code = newCode();
-      const hash = codeHash(code, pepper);
-      await store.setCode(hash, id);
-      const user = { id, name, admin: false, revoked: false, codeHash: hash, createdAt: now() };
+      const { code, hash } = await claimCode(body.code, id, u);
+      const user = { id, name, admin: Boolean(body.admin), revoked: false, codeHash: hash, createdAt: now() };
       await store.putUser(user);
+      forgetPeople();
       return { user: publicUser(user), code };
     }
     const [id, op] = rest;
     const user = await store.getUser(id);
-    if (!user || user.admin) http(404, 'no-user', 'Нет такого игрока');
+    if (!user) http(404, 'no-user', 'Нет такого игрока');
+    // главного не трогает никто, назначенных администраторов только главный
+    if (user.id === ADMIN_ID) http(403, 'not-main', 'Главного администратора менять нельзя');
+    if (user.admin) needMain(u);
     if (method === 'POST' && op === 'revoke') {
       if (user.codeHash) await store.delCode(user.codeHash);
       await store.putUser({ ...user, revoked: true, codeHash: null, sv: (user.sv || 0) + 1 });
+      forgetPeople();
       return { ok: true };
     }
     if (method === 'POST' && op === 'code') {
+      const { code, hash } = await claimCode(body.code, id, u);
       if (user.codeHash) await store.delCode(user.codeHash);
-      const code = newCode();
-      const hash = codeHash(code, pepper);
-      await store.setCode(hash, id);
       await store.putUser({ ...user, revoked: false, codeHash: hash, sv: (user.sv || 0) + 1 });
+      forgetPeople();
       return { code };
     }
+    if (method === 'POST' && op === 'admin') {
+      needMain(u);
+      await store.putUser({ ...user, admin: Boolean(body.admin) });
+      forgetPeople();
+      return { ok: true };
+    }
     http(404, 'no-route', 'Нет такого адреса');
+  }
+
+  // --- кто на сайте и приглашения
+
+  let people = { at: -Infinity, byId: new Map() };
+  const forgetPeople = () => { people = { at: -Infinity, byId: new Map() }; };
+
+  async function knownPeople(fresh = false) {
+    if (fresh || now() - people.at > PEOPLE_CACHE_MS) {
+      people = { at: now(), byId: new Map((await store.listUsers()).map((x) => [x.id, x])) };
+    }
+    return people.byId;
+  }
+
+  /** Пульс: кто на сайте и письма мне. Обычный пульс это одна команда базы. */
+  async function beat(s, body) {
+    let u = (await knownPeople()).get(s.id);
+    // код мог смениться на другом экземпляре функции: перед отказом смотрим свежий список,
+    // иначе честного игрока выбросит с сайта. Отозванный код на чужом экземпляре живет до минуты
+    if (!u || u.revoked || (u.sv || 0) !== s.epoch) u = (await knownPeople(true)).get(s.id);
+    checkUser(u, s.epoch);
+    const ids = [...(await knownPeople()).values()].filter((x) => !x.revoked).map((x) => x.id);
+    const { marks, letters } = await store.readPresence(ids, u.id);
+    const t = now(), busy = Boolean(body.busy);
+    const mine = marks.find((m) => m?.id === u.id);
+    if (!mine || mine.busy !== busy || t - mine.at >= MARK_EVERY_MS) {
+      await store.setPresence(u.id, { id: u.id, name: u.name, busy, at: t }, ONLINE_MS);
+    }
+    return {
+      me: publicUser(u),
+      online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, busy: b }) => ({ id, name, busy: b })),
+      inbox: letters.filter((m) => t - m.at <= INVITE_MS),
+    };
+  }
+
+  async function invite(u, body) {
+    if (!Array.isArray(body.to) || !body.to.length || body.to.length > 12) http(400, 'bad-invite', 'Выберите, кого пригласить');
+    const { doc: t } = await load(String(body.code));
+    if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
+    if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Пригласить может только тот, кто за столом');
+    const known = await knownPeople(true);
+    const ids = [...new Set(body.to)].filter((id) => id !== u.id && known.get(id) && !known.get(id).revoked);
+    for (const id of ids) {
+      await store.pushInbox(id, { id: letterId(), kind: 'invite', from: u.name, fromId: u.id, code: t.code, title: t.title || t.code, at: now() }, INVITE_MS);
+    }
+    return { sent: ids.length };
+  }
+
+  /** Ответ на письмо из своего ящика: чужое или уже отвеченное не считается. Отказ уходит пригласившему. */
+  async function answer(u, body) {
+    const { letters } = await store.readPresence([], u.id);
+    const m = letters.find((x) => x.id === body.id);
+    if (!m) return { ok: false };
+    await store.dropLetter(u.id, m.id, INVITE_MS);
+    if (m.kind === 'invite' && !body.accept) {
+      await store.pushInbox(m.fromId, { id: letterId(), kind: 'declined', from: u.name, title: m.title, at: now() }, INVITE_MS);
+    }
+    return { ok: true };
   }
 
   // --- столы
@@ -265,8 +361,11 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!p) http(404, 'no-table', 'Нет такого стола');
       return { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
     }
+    if (method === 'POST' && head === 'beat') return beat(await auth(token, { light: true }), body);
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
+    if (method === 'POST' && head === 'invite') return invite(u, body);
+    if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
     if (method === 'GET' && head === 'stats') return { players: SEASON_PLAYERS, games: seasonGames(await store.listHistory()) };
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
     if (head === 'tables') {

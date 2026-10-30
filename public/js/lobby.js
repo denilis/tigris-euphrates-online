@@ -1,6 +1,8 @@
 // Лобби стола: места, герои, боты, очередность и правила. Менять правила, места и ботов
 // может хозяин стола; героя выбирает тот, кто сидит; начать может любой сидящий.
-import { HEROES, HERONAME, STYLES, tokenImg, esc, copy } from './util.js';
+import { HEROES, HERONAME, STYLES, tokenImg, esc, copy, toast } from './util.js';
+import { api } from './api.js';
+import { mountOnline } from './presence.js';
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -9,8 +11,13 @@ const ORDER = [
 ];
 const COUNTING = { none: 'не считает', approx: 'примерно', exact: 'точно' };
 
+// выбранные для приглашения: лобби перерисовывается с каждым опросом, выбор должен пережить это
+const picked = new Set();
+
 export function renderLobby(root, view, { act }) {
   const host = view.isHost, me = view.me;
+  const freeSeats = view.seats.filter((s) => !s.taken).length;
+  const canInvite = (me != null || host) && freeSeats > 0;
   const ready = view.seats.every((s) => s.taken && s.hero);
   const canStart = ready && (me != null || host);
   const heroOwner = (h) => view.seats.find((s) => s.hero === h);
@@ -58,6 +65,7 @@ export function renderLobby(root, view, { act }) {
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button></div>
+      ${canInvite ? `<h2>Пригласить (свободно мест: ${freeSeats})</h2><section class="online" id="lInvite"></section>` : ''}
 
       <h2>Места и герои</h2>
       ${host ? `<div class="opts"><span class="muted">Мест за столом</span><span class="seg">${[2, 3, 4].map((n) => `<button data-count="${n}" class="${view.seats.length === n ? 'on' : ''}">${n}</button>`).join('')}</span></div>` : ''}
@@ -92,6 +100,17 @@ export function renderLobby(root, view, { act }) {
 
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
+  if (canInvite) {
+    mountOnline(root.querySelector('#lInvite'), {
+      button: 'Пригласить',
+      selected: picked,
+      exclude: (p) => view.seats.some((s) => s.name === p.name), // уже за столом
+      onSend: async (ids) => {
+        const r = await api('POST', 'invite', { code: view.code, to: ids });
+        toast(r.sent ? `Приглашений отправлено: ${r.sent}` : 'Некого приглашать');
+      },
+    });
+  }
   on('[data-sit]', 'click', (el) => act({ action: 'sit', seat: +el.dataset.sit }));
   on('[data-leave]', 'click', () => act({ action: 'leave' }));
   on('[data-hero]', 'click', (el) => act({ action: 'hero', seat: +el.dataset.seat, hero: el.dataset.hero }));

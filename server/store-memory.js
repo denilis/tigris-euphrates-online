@@ -9,6 +9,7 @@ export function memoryStore() {
     return kv.get(k)?.value ?? null;
   };
   const set = (k, value, ttlMs) => kv.set(k, { value, until: ttlMs ? Date.now() + ttlMs : 0 });
+  const lines = (s) => (s ? s.trim().split('\n').map((x) => JSON.parse(x)) : []);
 
   return {
     kind: 'memory',
@@ -92,8 +93,11 @@ export function memoryStore() {
     async userIdByCode(hash) {
       return alive(`code:${hash}`);
     },
-    async setCode(hash, userId) {
+    /** Занять код за человеком; false, если код уже чей-то. */
+    async claimCode(hash, userId) {
+      if (alive(`code:${hash}`) !== null) return false;
       set(`code:${hash}`, userId);
+      return true;
     },
     async delCode(hash) {
       kv.delete(`code:${hash}`);
@@ -105,6 +109,26 @@ export function memoryStore() {
     },
     async myTables(userId) {
       return lists.get(`mine:${userId}`) || [];
+    },
+
+    /** Отметка «на сайте» живет ttlMs. */
+    async setPresence(id, value, ttlMs) {
+      set(`pres:${id}`, JSON.stringify(value), ttlMs);
+    },
+    /** Отметки людей ids (null, если нет) и письма me; одна команда на все. */
+    async readPresence(ids, me) {
+      const marks = ids.map((id) => alive(`pres:${id}`)).map((v) => (v === null ? null : JSON.parse(v)));
+      return { marks, letters: lines(alive(`inbox:${me}`)) };
+    },
+    /** Письмо человеку: приглашение или ответ на него. Лежит, пока не ответят или не выйдет срок. */
+    async pushInbox(id, value, ttlMs) {
+      set(`inbox:${id}`, (alive(`inbox:${id}`) || '') + JSON.stringify(value) + '\n', ttlMs);
+    },
+    /** Убрать одно письмо. */
+    async dropLetter(me, letterId, ttlMs) {
+      const rest = lines(alive(`inbox:${me}`)).filter((m) => m.id !== letterId);
+      if (rest.length) set(`inbox:${me}`, rest.map((m) => JSON.stringify(m) + '\n').join(''), ttlMs);
+      else kv.delete(`inbox:${me}`);
     },
   };
 }
