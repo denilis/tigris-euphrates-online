@@ -81,6 +81,12 @@ export function buildingSVG(c, x, y, p) {
   return `<g transform="translate(${x},${y})" filter="url(#shadow2)">${g}</g>`;
 }
 
+/** Маленькое здание для блока «Запас» (свой svg со своими defs). */
+export function buildingIcon(c, size = 28) {
+  const p = `bi${c}`;
+  return `<svg viewBox="0 0 60 60" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${buildingSVG(c, 0, 0, p)}</svg>`;
+}
+
 /**
  * След хода соперника (просьба Дениса 30.10): рамка с номером действия держится до следующего
  * хода, первые секунды пульсирует, тайл или лидер садится на клетку, у перестановки стрелка.

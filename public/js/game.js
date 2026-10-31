@@ -1,12 +1,13 @@
 // Экран партии: поле, рука, карточки игроков, панель «Сейчас», журнал. Клиент только
 // рисует вид от сервера: допустимые ходы приходят списком legal, ход уходит номером в нём.
-import { renderBoard, sealIcon } from './board.js';
+import { renderBoard, sealIcon, buildingIcon } from './board.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
 import { battlesIn, battleCard } from './battle.js';
 import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
 import { trailMarks, ageMarks } from './trail.js';
+import { stockItems } from './stock.js';
 import {
   HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
   unitePos, toast,
@@ -34,11 +35,12 @@ const SKELETON = `<div class="app" id="game">
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
     <div class="meta"><span>мешок <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span></div>
-    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
+    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <aside class="side">
     <section><h3>Игроки</h3><div class="players" id="gPlayers"></div></section>
+    <section><h3>Запас</h3><div class="stock" id="gStock"></div></section>
     <section class="now" id="gNow"></section>
     <section class="log"><h3>Журнал</h3><ol id="gLog"></ol></section>
   </aside>
@@ -165,6 +167,22 @@ function updateTrail({ view, g, seat }) {
   ui.trail = ageMarks(trailMarks(g.log, view.me), ui.trailSeen, Date.now(), first).map((m) => ({ ...m, hero: seat(m.actor)?.hero }));
 }
 
+/** Запас: что еще можно построить. Перерисовывается, только когда что-то построили. */
+function drawStock({ view, g }) {
+  const el = ctl.root.querySelector('#gStock');
+  const s = stockItems(g, view.options);
+  const key = JSON.stringify(s);
+  if (key === ui.stockKey && el.firstChild) return;
+  ui.stockKey = key;
+  const item = (x, icon) => `<span class="sit${x.built ? ' built' : ''}" title="${esc(x.title)}">${icon}</span>`;
+  const row = (label, items) => `<div class="row"><span class="lbl">${label}</span>${items}</div>`;
+  el.innerHTML = row('Монументы', s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 28))).join(''))
+    + (s.buildings || s.wonder ? row('Здания', [
+      ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c))),
+      s.wonder ? item(s.wonder, '<span class="wonderico"></span>') : '',
+    ].join('')) : '');
+}
+
 function draw() {
   const d = D();
   const { view, g, root = ctl.root } = { ...d, root: ctl.root };
@@ -183,6 +201,7 @@ function draw() {
   ob.setAttribute('aria-pressed', String(ui.owners));
   renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts());
   drawPlayers(d);
+  drawStock(d);
   drawNow(d);
   drawLog(d);
   drawHand(d);

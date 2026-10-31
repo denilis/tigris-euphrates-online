@@ -1,15 +1,25 @@
 // Точка входа: окно активации, мои столы, стол (лобби или партия), коды игроков.
-// Адреса: #/ — мои столы, #/t/КОД — стол, #/stats — статистика, #/admin — коды (только Денис).
+// Адреса: #/ — мои столы, #/t/КОД — стол, #/rules — правила (без входа), #/stats — статистика,
+// #/admin — коды (администраторы).
 import { api, session, watchTable } from './api.js';
 import { renderLobby } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
+import { renderRules } from './rules.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat } from './online.js';
 import { esc, toast, copy } from './util.js';
 
 const app = document.getElementById('app');
+const backdrop = document.getElementById('backdrop');
 let watcher = null;
+
+/** Ролик-заставка на всех экранах, кроме партии. Не запустился, остается картинка из poster. */
+function setBackdrop(on) {
+  backdrop.hidden = !on;
+  if (!on || matchMedia('(prefers-reduced-motion: reduce)').matches) backdrop.pause();
+  else backdrop.play().catch(() => {});
+}
 
 const go = (hash) => { location.hash = hash; };
 
@@ -18,6 +28,7 @@ function topbar(active) {
   return `<header class="bar">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <nav>
+      <a href="#/rules" class="${active === 'rules' ? 'on' : ''}">Правила</a>
       <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
       ${u?.admin ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
@@ -26,6 +37,9 @@ function topbar(active) {
     </nav>
   </header>`;
 }
+
+// шапка для тех, кто читает правила без входа
+const GUEST_BAR = `<header class="bar"><a class="brand" href="#/">Тигр и Евфрат</a><nav><a href="#/">Войти</a></nav></header>`;
 
 function bindTopbar() {
   app.querySelector('#logout')?.addEventListener('click', () => {
@@ -45,6 +59,7 @@ function renderActivate() {
       <input id="actCode" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false" aria-label="Личный код">
       <button class="btn primary" type="submit">Войти</button>
       <p class="err" id="actErr" role="alert"></p>
+      <a class="glink" href="#/rules">Правила игры</a>
     </form>
   </div>`;
   const input = app.querySelector('#actCode');
@@ -140,6 +155,7 @@ function openTable(code) {
     const m = v.status === 'lobby' ? 'lobby' : 'game';
     if (m !== mode) { app.innerHTML = ''; mode = m; }
     setBusy(v.status === 'playing' && v.me != null);
+    setBackdrop(m === 'lobby');
     if (m === 'lobby') renderLobby(app, v, { act, go });
     else renderGame(app, v, { act, go });
     if (takeAccepted(code)) sitInvited(v);
@@ -220,14 +236,17 @@ async function renderAdmin() {
 function route() {
   watcher?.stop();
   watcher = null;
+  setBackdrop(true);
   const s = session.get();
+  const h = location.hash.replace(/^#\/?/, '');
   if (!s?.token) {
     stopPresence();
+    if (h === 'rules') return renderRules(app, GUEST_BAR, bindTopbar);
     return renderActivate();
   }
   startPresence();
   setBusy(false);
-  const h = location.hash.replace(/^#\/?/, '');
+  if (h === 'rules') return renderRules(app, topbar('rules'), bindTopbar);
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'admin') return renderAdmin();

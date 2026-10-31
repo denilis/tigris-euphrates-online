@@ -29,7 +29,10 @@ input,select{font:inherit;color:var(--text)}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
 /* ---------- окно активации и страницы ---------- */
-.gate,.page,.lobby{min-height:100dvh;background:linear-gradient(180deg,rgba(20,15,10,.55),rgba(20,15,10,.92) 65%),url(/img/lobby-bg.jpg) center/cover fixed,var(--bg)}
+#backdrop{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+#app{position:relative;z-index:1}
+.gate,.page,.lobby{min-height:100dvh;background:linear-gradient(180deg,rgba(20,15,10,.55),rgba(20,15,10,.92) 65%) fixed}
+.glink{color:var(--muted);text-align:center;font-size:13px}
 .gate{display:grid;place-items:center;padding:16px}
 .gcard{width:min(420px,100%);background:rgba(20,17,14,.9);border:1px solid var(--gold2);border-radius:16px;padding:26px 24px;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:12px}
 .gcard h1{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0;font-size:30px;letter-spacing:.05em;text-align:center}
@@ -73,6 +76,21 @@ label.oitem{cursor:pointer}
 #invBar:empty{display:none}
 .inv{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#3b2a12;border:1px solid var(--gold);border-radius:10px;padding:10px 14px;box-shadow:0 12px 30px rgba(0,0,0,.6);color:#f3d99a}
 .inv span{flex:1 1 220px}
+
+/* ---------- правила ---------- */
+.pcard.rules{width:min(900px,calc(100% - 32px))}
+.rsearch{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.rsearch input{flex:1 1 220px;min-width:0;background:#14110e;border:1px solid var(--line);border-radius:8px;padding:0 12px;min-height:44px}
+.rmedia{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.rmedia figure{margin:0;min-width:0}
+.rmedia video,.rmedia img{display:block;width:100%;height:auto;border-radius:10px;background:#000}
+.rmedia figcaption{font-size:12.5px;color:var(--muted);margin-top:6px}
+.rnav{display:flex;flex-wrap:wrap;gap:2px 6px;margin-bottom:6px}
+.rsec{scroll-margin-top:12px}
+.rsec h2{font-family:Cinzel,Georgia,serif;font-weight:500;color:var(--gold);font-size:19px;margin:20px 0 8px}
+.rsec p{margin:0 0 9px;line-height:1.55}
+mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
+@media (max-width:760px){.rmedia{grid-template-columns:1fr}}
 
 /* ---------- статистика ---------- */
 .pcard.stats{width:min(1040px,calc(100% - 32px))}
@@ -156,7 +174,7 @@ label.oitem{cursor:pointer}
 .meta{margin-left:auto;display:flex;gap:14px;white-space:nowrap;color:var(--muted)}
 .meta b{color:var(--text)}
 .nav{display:flex;gap:6px}
-.navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px}
+.navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
 .boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
 #board{width:100%;height:100%;display:block}
@@ -185,6 +203,13 @@ label.oitem{cursor:pointer}
 .side section{border-bottom:1px solid var(--line);padding:10px 12px}
 .side h3{margin:0 0 7px;font:600 11px/1 "Segoe UI",sans-serif;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
 .players{display:flex;flex-direction:column;gap:6px}
+.stock{display:flex;flex-direction:column;gap:5px}
+.stock .row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.stock .lbl{flex:0 0 72px;font-size:12px;color:var(--muted)}
+.stock .sit{display:inline-flex}
+.stock .sit.built{opacity:.28;filter:grayscale(.7)}
+.stock .wonderico{width:26px;height:26px;margin-left:8px}
+@media (max-width:1200px){.stock .lbl{flex-basis:100%}}
 .pc{background:var(--card);border:1px solid transparent;border-radius:8px;padding:7px 9px;display:grid;grid-template-columns:34px 1fr auto;gap:2px 8px;align-items:center}
 .pc.active{border-color:var(--gold2)}
 .pc.deciding{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 0 14px rgba(224,182,90,.25)}
@@ -365,6 +390,8 @@ label.oitem{cursor:pointer}
   .app.conflict{grid-template-columns:minmax(0,1fr)}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
   .meta{margin-left:0}
+  .nav{flex-wrap:wrap}
+  .navbtn{padding:7px 8px}
   .boardwrap{padding:6px}
   #board{height:auto}
   .hrow{flex-wrap:wrap;gap:10px}
