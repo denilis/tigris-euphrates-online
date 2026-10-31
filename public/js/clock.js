@@ -14,12 +14,12 @@ export const fmtTotal = (ms) => {
 
 /**
  * Время сейчас: сколько осталось решающему, сколько у каждого всего и сверх. live = false —
- * партия кончилась: время игроков стоит, таймера хода нет.
+ * партия кончилась или ее завершил организатор: время игроков стоит, таймера хода нет.
  */
 export function clockNow(g, at = Date.now()) {
   const c = g.clock;
   if (!c) return null;
-  const live = !g.over && g.toMove != null;
+  const live = !g.over && !g.stopped && g.toMove != null;
   const now = at + (c.skew || 0);
   const confirm = g.phase === 'confirm';
   const run = !live || confirm ? 0 : Math.max(0, now - c.at);

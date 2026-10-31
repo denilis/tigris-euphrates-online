@@ -267,8 +267,8 @@ function drawPlayers({ view, g, me, seat }) {
   const el = ctl.root.querySelector('#gPlayers');
   el.innerHTML = g.players.map((pl, p) => {
     const s = seat(pl.seat) || {};
-    const deciding = pl.seat === g.toMove;
-    const active = pl.seat === g.cur;
+    const deciding = !g.stopped && pl.seat === g.toMove;
+    const active = !g.stopped && pl.seat === g.cur;
     const tag = deciding && !active ? '<span class="tag gold">решает</span>' : active && !g.over ? `<span class="tag gold">${g.actionNo}/2</span>` : '';
     const dots = [0, 1, 2, 3].map((c) => `<i class="dot" title="${LEADER[c]}${pl.leaders[c] >= 0 ? ' на поле' : ' в руке'}" style="border-color:${RING[c]};background:${pl.leaders[c] >= 0 ? HEX[c] : 'transparent'}"></i>`).join('');
     const sc = pl.score
@@ -307,7 +307,10 @@ function drawNow(d) {
   const el = ctl.root.querySelector('#gNow');
   const btn = (id, label, cls = '') => `<button class="btn ${cls}" data-act="${id}">${label}</button>`;
   let title = 'Сейчас', body = '', buttons = '';
-  if (g.over) {
+  if (g.stopped) {
+    title = 'Партия завершена';
+    body = '<p>Организатор завершил партию досрочно. Итога нет, в статистику она не идет.</p>';
+  } else if (g.over) {
     title = 'Партия окончена';
     body = `<p>${g.endReason === 'bag' ? 'В мешке кончились тайлы.' : 'На поле осталось два сокровища.'}</p>`;
   } else if (!decides) {
@@ -362,8 +365,10 @@ function drawNow(d) {
     body = '<p>Выберите цвет, в который получите очко.</p>';
     buttons = legal.map((m, i) => `<button class="btn colorbtn" data-idx="${i}" style="border-color:${RING[m.color]}"><i style="background:${HEX[m.color]}"></i>${COLNAME[m.color]}</button>`).join('');
   }
-  const clk = g.clock && !g.over ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
-  el.innerHTML = `<h3>${title}${clk}</h3>${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
+  const live = !g.over && !g.stopped;
+  const clk = g.clock && live ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
+  const stop = view.isHost && live ? '<button class="linkbtn stopgame" data-act="stopGame">Завершить партию</button>' : '';
+  el.innerHTML = `<h3>${title}${clk}</h3>${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}${stop}`;
   el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.act)));
   el.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', () => {
     ui.monSel = b.dataset.mon === 'wonder' ? 'wonder' : +b.dataset.mon;
@@ -380,7 +385,9 @@ function onNow(a) {
   else if (a === 'withdraw') move(legal.findIndex((m) => m.type === 'withdraw' && m.color === ui.sel.color));
   else if (a === 'confirm') move(legal.findIndex((m) => m.type === 'confirm'));
   else if (a === 'undo') ctl.act({ action: 'undo', version: view.version });
-  else if (a === 'discardYes') {
+  else if (a === 'stopGame') {
+    if (confirm('Завершить партию для всех игроков? Итога не будет, в статистику партия не пойдет. Вернуть ее нельзя.')) ctl.act({ action: 'close' });
+  } else if (a === 'discardYes') {
     const counts = [0, 0, 0, 0];
     for (const k of ui.discard) counts[handColors(view)[k]]++;
     move(legal.findIndex((m) => m.type === 'discard' && m.counts.every((v, c) => v === counts[c])));

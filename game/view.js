@@ -130,6 +130,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     // после срока окна ход завершится сам и сервер откажет в отмене, поэтому кнопку не показываем
     canUndo: decides && myP === s.cur && canUndo(table) && !(g.confirmBy != null && now != null && now >= g.confirmBy),
     clock: clockView(table, now),
+    stopped: table.status === 'closed', // организатор завершил партию досрочно: итога нет
     result: g.result || null,
   };
   return v;

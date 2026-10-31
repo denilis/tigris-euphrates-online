@@ -89,6 +89,22 @@ label.oitem{cursor:pointer}
 .rsec{scroll-margin-top:12px}
 .rsec h2{font-family:Cinzel,Georgia,serif;font-weight:500;color:var(--gold);font-size:19px;margin:20px 0 8px}
 .rsec p{margin:0 0 9px;line-height:1.55}
+.rsec h3{font-size:15px;font-weight:600;color:var(--text);margin:14px 0 4px}
+.rsec ul,.rsec ol{margin:0 0 10px;padding-left:22px;line-height:1.55}
+.rsec li{margin-bottom:4px}
+.rlinks{display:flex;flex-wrap:wrap;gap:6px 18px}
+.rlinks a{color:var(--gold)}
+.rfig{margin:12px 0 14px}
+.rpanels{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.rfig svg{display:block;flex:1 1 0;min-width:0;width:100%;height:auto;max-width:calc(var(--n)*56px);border-radius:6px}
+.rfig:not(.two) svg{flex:none}
+.rarrow{flex:none;width:0;height:0;border:9px solid transparent;border-left:14px solid var(--gold)}
+.rfig figcaption{font-size:13px;line-height:1.45;color:var(--muted);margin-top:7px}
+@media (max-width:760px){
+  .rpanels{flex-direction:column;align-items:stretch}
+  .rfig svg{flex:none;max-width:none}
+  .rarrow{align-self:center;border-left-color:transparent;border-top:14px solid var(--gold);border-bottom-width:0}
+}
 mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @media (max-width:760px){.rmedia{grid-template-columns:1fr}}
 
@@ -232,6 +248,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .now p{margin:0 0 6px;font-size:13px}
 .nowbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .nowbtns .btn{min-height:38px;padding:0 12px;font-size:13px}
+.stopgame{display:block;margin-top:8px;padding:2px 0;font-size:12px}
 /* таймер хода: золотой, последние 10 с янтарный, в минусе красный и пульсирует */
 .now h3{display:flex;align-items:center;gap:8px}
 .clk{margin-left:auto;font:700 17px/1 Cinzel,Georgia,serif;letter-spacing:.02em;color:var(--gold);font-variant-numeric:tabular-nums;text-transform:none}

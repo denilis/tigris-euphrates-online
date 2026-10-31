@@ -402,3 +402,35 @@ test('отмена и окно подтверждения через API: сро
   const after = (await req('GET', `tables/${code}`, { token: P.denis.token })).body;
   assert.ok(after.status === 'over' || after.game.cur !== v.game.cur, 'ход перешел');
 });
+
+test('организатор завершает партию: для всех она стоит, ходов нет, в историю не идет', async () => {
+  const { req, store } = setup();
+  const P = await people(req);
+  const code = await startedTable(req, P);
+  const post = (who, body) => req('POST', `tables/${code}`, { body, token: who.token });
+  assert.equal((await post(P.andrey, { action: 'close' })).status, 403, 'игрок за столом не может');
+
+  const done = await post(P.denis, { action: 'close' });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.status, 'closed');
+  assert.equal(done.body.game.stopped, true);
+
+  const seen = (await req('GET', `tables/${code}`, { token: P.andrey.token })).body;
+  assert.equal(seen.status, 'closed', 'соперник видит завершение');
+  assert.equal(seen.game.stopped, true);
+  assert.equal(seen.game.legal, null);
+  const mine = (await req('GET', `tables/${code}`, { token: P.denis.token })).body;
+  assert.equal((await post(P.denis, { action: 'move', version: mine.version, index: 0 })).status, 409, 'ход больше нельзя');
+  assert.equal((await post(P.denis, { action: 'close' })).status, 409, 'второй раз не завершить');
+  assert.equal((await req('GET', `tables/${code}/poll`, { token: P.denis.token })).body.botDue, false, 'бот не ходит');
+  assert.equal((await store.listHistory()).length, 0, 'итога нет, в зачет не идет');
+  const list = (await req('GET', 'tables', { token: P.vlad.token })).body;
+  assert.equal(list.find((t) => t.code === code).status, 'closed', 'стол остается в списке игрока');
+});
+
+test('идущая партия не помечена завершенной', async () => {
+  const { req } = setup();
+  const P = await people(req);
+  const code = await startedTable(req, P);
+  assert.equal((await req('GET', `tables/${code}`, { token: P.denis.token })).body.game.stopped, false);
+});

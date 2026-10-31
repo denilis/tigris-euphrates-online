@@ -80,7 +80,7 @@ function renderActivate() {
 
 // --- мои столы
 
-const STATUS = { lobby: 'собирается', playing: 'идет партия', over: 'партия окончена', closed: 'закрыт' };
+const STATUS = { lobby: 'собирается', playing: 'идет партия', over: 'партия окончена', closed: 'партия завершена досрочно' };
 
 async function renderHome() {
   app.innerHTML = `<div class="page">${topbar('home')}<main class="pcard">

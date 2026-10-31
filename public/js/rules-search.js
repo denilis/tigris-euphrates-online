@@ -13,12 +13,18 @@ export function stem(word) {
 
 const stems = (query) => norm(query).split(/[^a-zа-я0-9]+/).filter((w) => w.length >= 2).map(stem);
 
+/** Текст блока раздела: абзац, подзаголовок, список, подпись к схеме или ссылки. */
+export function blockText(b) {
+  if (typeof b === 'string') return b;
+  return [b.h, b.cap, ...(b.list || []), ...(b.links || []).map((l) => l.text)].filter(Boolean).join(' ');
+}
+
 /** Разделы, где есть все слова запроса; пустой запрос оставляет все. */
 export function searchRules(sections, query) {
   const list = stems(query);
   if (!list.length) return sections;
   return sections.filter((s) => {
-    const text = norm([s.title, ...s.body].join(' '));
+    const text = norm([s.title, ...s.body.map(blockText)].join(' '));
     return list.every((w) => text.includes(w));
   });
 }

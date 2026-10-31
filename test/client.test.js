@@ -209,3 +209,10 @@ test('часы: ходящему время на весь ход, сверх у�
   assert.equal(end.used(0), 50000, 'после конца время стоит');
   assert.equal(clockNow({ ...g, clock: null }), null, 'старый сервер без часов');
 });
+
+test('часы: партия, завершенная организатором, стоит', () => {
+  const clock = { at: 1000, turnUsed: 0, used: { 0: 5000 }, over: {}, turnMs: 30000, confirmBy: null };
+  const k = clockNow({ toMove: 0, cur: 0, phase: 'action', stopped: true, clock }, 61000);
+  assert.equal(k.live, false);
+  assert.equal(k.used(0), 5000, 'время игрока больше не копится');
+});

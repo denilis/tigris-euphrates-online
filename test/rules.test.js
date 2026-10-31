@@ -2,14 +2,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RULES } from '../public/js/rules-text.js';
-import { searchRules, stem, markParts } from '../public/js/rules-search.js';
+import { searchRules, stem, markParts, blockText } from '../public/js/rules-search.js';
 
 const titles = (query) => searchRules(RULES, query).map((s) => s.title);
 
-test('разделы как в одобренной схеме, у каждого есть текст', () => {
+test('полные правила: все разделы на месте, у каждого есть текст', () => {
   assert.deepEqual(RULES.map((s) => s.title), [
-    'Главное правило', 'Поле и тайлы', 'Царства', 'Ход и очки', 'Лидеры', 'Восстание', 'Война',
-    'Монумент', 'Сокровища', 'Катастрофа', 'Конец партии', 'Здания и чудо', 'Наш сайт',
+    'Главное правило', 'Что в игре', 'Поле', 'Подготовка', 'Регионы и царства', 'Ход', 'Лидеры',
+    'Тайлы и очки', 'Катастрофа', 'Обмен тайлов', 'Восстание', 'Война', 'Монумент', 'Сокровища',
+    'Конец хода', 'Конец партии', 'Вариант: английская поддержка', 'Вариант: продвинутое поле',
+    'Вариант: здания', 'Вариант: чудо', 'Вариант: открытый счет', 'Частые вопросы', 'Наш сайт',
+    'Откуда эти правила',
   ]);
   for (const s of RULES) {
     assert.ok(s.id && s.body.length, s.title);
@@ -17,8 +20,16 @@ test('разделы как в одобренной схеме, у каждог�
   }
 });
 
+test('поиск видит списки, подзаголовки и подписи к схемам', () => {
+  assert.equal(blockText({ list: ['один', 'два'] }), 'один два');
+  assert.equal(blockText({ h: 'заголовок' }), 'заголовок');
+  assert.equal(blockText({ fig: 'war', cap: 'подпись' }), 'подпись');
+  assert.ok(titles('сокровищами').includes('Поле'), 'слово только в подписи к схеме');
+  assert.ok(titles('153').includes('Что в игре'), 'число из списка');
+});
+
 test('текст без следов машинной верстки', () => {
-  const text = RULES.flatMap((s) => [s.title, ...s.body]).join('\n');
+  const text = RULES.flatMap((s) => [s.title, ...s.body.map(blockText)]).join('\n');
   for (const [name, ch] of [['длинное тире', '—'], ['многоточие', '…'], ['неразрывный пробел', ' '], ['средняя точка', '·']]) {
     assert.ok(!text.includes(ch), name);
   }
@@ -43,7 +54,7 @@ test('поиск находит другие формы слова', () => {
 });
 
 test('несколько слов: раздел должен содержать все', () => {
-  assert.deepEqual(titles('ферма река').slice(0, 1), ['Поле и тайлы']);
+  assert.ok(titles('ферма река').includes('Поле'));
   assert.deepEqual(titles('катастрофа абракадабра'), []);
 });
 

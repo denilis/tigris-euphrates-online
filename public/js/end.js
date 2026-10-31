@@ -1,10 +1,12 @@
 // Итог партии: места, очки по цветам и сокровища, «Еще партию» (реванш: тот же состав,
-// первым ходит последнее место) и возврат к столам.
+// первым ходит последнее место) и возврат к столам. Партия, завершенная организатором
+// досрочно, итога не имеет: только сообщение и те же выходы.
 import { HEX, HERONAME, COLNAME, tokenImg, esc } from './util.js';
 
 export function renderEnd(box, view, { act, go }) {
   const g = view.game;
-  const show = view.status === 'over' && g?.result;
+  const stopped = Boolean(g?.stopped);
+  const show = stopped || (view.status === 'over' && g?.result);
   box.hidden = !show;
   if (!show) return;
   if (box.dataset.closed === view.code) {
@@ -13,12 +15,22 @@ export function renderEnd(box, view, { act, go }) {
     const btn = document.createElement('button');
     btn.id = 'gReopen';
     btn.className = 'btn primary reopen';
-    btn.textContent = 'Итог партии';
+    btn.textContent = stopped ? 'Партия завершена' : 'Итог партии';
     btn.addEventListener('click', () => { delete box.dataset.closed; renderEnd(box, view, { act, go }); });
     box.parentElement.append(btn);
     return;
   }
   box.parentElement.querySelector('#gReopen')?.remove();
+  if (stopped) {
+    box.innerHTML = `<div class="endcard" role="dialog" aria-label="Партия завершена">
+      <h2>Партия завершена</h2>
+      <p class="msub">Организатор завершил партию досрочно. Итога нет, в статистику она не идет.</p>
+      <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn primary" id="eHome">К столам</button></div>
+    </div>`;
+    box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
+    box.querySelector('#eHome').addEventListener('click', () => go('#/'));
+    return;
+  }
   const seat = (id) => view.seats.find((s) => s.id === id);
   const rows = [...g.result.seats].sort((a, b) => a.place - b.place).map((r) => {
     const s = seat(r.seatId) || {};
