@@ -103,6 +103,25 @@ export function memoryStore() {
       kv.delete(`code:${hash}`);
     },
 
+    /** Настройки экрана партии у игрока. */
+    async getPrefs(id) {
+      const p = alive(`prefs:${id}`);
+      return p ? JSON.parse(p) : null;
+    },
+    async setPrefs(id, value) {
+      set(`prefs:${id}`, JSON.stringify(value));
+    },
+
+    /** Турниры, кроме встроенного сезона. */
+    async putTour(t) {
+      set(`tour:${t.id}`, JSON.stringify(t));
+      const ids = lists.get('tours') || [];
+      if (!ids.includes(t.id)) lists.set('tours', [...ids, t.id]);
+    },
+    async listTours() {
+      return (lists.get('tours') || []).map((id) => JSON.parse(alive(`tour:${id}`)));
+    },
+
     async addMyTable(userId, code) {
       const l = (lists.get(`mine:${userId}`) || []).filter((c) => c !== code);
       lists.set(`mine:${userId}`, [code, ...l].slice(0, 20));

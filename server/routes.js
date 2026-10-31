@@ -10,7 +10,8 @@ import {
 import { viewFor } from '../game/view.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
-import { seasonGames, SEASON_PLAYERS } from './stats.js';
+import { SEASON, tourGames, publicTour } from './stats.js';
+import { cleanPrefs } from './prefs.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -36,6 +37,7 @@ const ONLINE_MS = 90 * 1000; // без отметки дольше челове�
 const MARK_EVERY_MS = 45 * 1000;
 const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульса, чтобы не читать его каждый раз
 const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
+const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
@@ -154,6 +156,38 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true };
     }
     http(404, 'no-route', 'Нет такого адреса');
+  }
+
+  // --- турниры
+
+  /** Все турниры от старых к новым: порядок решает, в какой идет партия, подходящая к двум. */
+  const allTours = async () => [SEASON, ...(await store.listTours()).sort((a, b) => a.createdAt - b.createdAt)];
+
+  async function toursInfo() {
+    const users = (await store.listUsers()).filter((x) => !x.revoked);
+    return { tours: (await allTours()).map(publicTour), people: users.map((x) => ({ id: x.id, name: x.name })) };
+  }
+
+  async function newTour(u, body) {
+    const name = String(body.name ?? '').trim();
+    if (!name || name.length > TOUR_NAME_MAX) http(400, 'bad-name', `Название от 1 до ${TOUR_NAME_MAX} знаков`);
+    const list = Array.isArray(body.players) ? body.players.map(String) : [];
+    const ids = [...new Set(list)];
+    if (ids.length !== list.length || ids.length < 2 || ids.length > 4) http(400, 'bad-players', 'В турнире от 2 до 4 разных участников');
+    const tours = await allTours();
+    if (tours.length >= TOURS_MAX) http(409, 'too-many', 'Турниров слишком много');
+    if (tours.some((t) => t.name.toLowerCase() === name.toLowerCase())) http(409, 'name-taken', 'Такой турнир уже есть');
+    const users = await Promise.all(ids.map((id) => store.getUser(id)));
+    if (users.some((x) => !x || x.revoked)) http(400, 'bad-players', 'Участником может быть только игрок с действующим кодом');
+    const t = { id: 't-' + randomBytes(5).toString('hex'), name, ownerId: u.id, players: users.map((x) => ({ id: x.id, name: x.name })), createdAt: now() };
+    await store.putTour(t);
+    return publicTour(t);
+  }
+
+  async function stats(query) {
+    const tours = await allTours();
+    const tour = tours.find((t) => t.id === query.tour) || SEASON;
+    return { tour: publicTour(tour), players: tour.players.map((p) => p.name), games: tourGames(tour, tours, await store.listHistory()) };
   }
 
   // --- кто на сайте и приглашения
@@ -366,7 +400,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'GET' && head === 'me') return publicUser(u);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
-    if (method === 'GET' && head === 'stats') return { players: SEASON_PLAYERS, games: seasonGames(await store.listHistory()) };
+    if (method === 'GET' && head === 'stats') return stats(query);
+    if (method === 'GET' && head === 'tournaments') return toursInfo();
+    if (method === 'POST' && head === 'tournaments') return newTour(u, body);
+    if (method === 'GET' && head === 'prefs') return (await store.getPrefs(u.id)) || {};
+    if (method === 'POST' && head === 'prefs') {
+      await store.setPrefs(u.id, cleanPrefs(body));
+      return { ok: true };
+    }
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
     if (head === 'tables') {
       if (!rest.length && method === 'POST') return newTable(u);

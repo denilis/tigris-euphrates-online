@@ -132,6 +132,23 @@ export function redisStore({ exec, prefix = '' }) {
       await exec(['DEL', k(`code:${hash}`)]);
     },
 
+    async getPrefs(id) {
+      return parse(await exec(['GET', k(`prefs:${id}`)]));
+    },
+    async setPrefs(id, value) {
+      await exec(['SET', k(`prefs:${id}`), JSON.stringify(value)]);
+    },
+
+    async putTour(t) {
+      await exec(['SET', k(`tour:${t.id}`), JSON.stringify(t)]);
+      await exec(['SADD', k('tours'), t.id]);
+    },
+    async listTours() {
+      const ids = await exec(['SMEMBERS', k('tours')]);
+      if (!ids.length) return [];
+      return (await exec(['MGET', ...ids.map((id) => k(`tour:${id}`))])).map(parse).filter(Boolean);
+    },
+
     async addMyTable(userId, code) {
       await exec(['EVAL', MINE_PUSH, 1, k(`mine:${userId}`), code]);
     },

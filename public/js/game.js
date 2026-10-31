@@ -8,6 +8,8 @@ import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
 import { trailMarks, ageMarks } from './trail.js';
 import { stockItems } from './stock.js';
+import { initPanels, holdNowOpen } from './panels.js';
+import { stopLabel } from './layout-core.js';
 import {
   HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
   unitePos, toast,
@@ -29,6 +31,8 @@ function resetFor(view) {
   Object.assign(ui, { key, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false });
 }
 
+const FOLD = '<button class="fold" aria-label="Свернуть или развернуть блок" title="Свернуть или развернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>';
+
 const SKELETON = `<div class="app" id="game">
   <header class="top">
     <a class="brand" href="#/">Тигр и Евфрат</a>
@@ -38,11 +42,13 @@ const SKELETON = `<div class="app" id="game">
     <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
-  <aside class="side">
-    <section><h3>Игроки</h3><div class="players" id="gPlayers"></div></section>
-    <section><h3>Запас</h3><div class="stock" id="gStock"></div></section>
-    <section class="now" id="gNow"></section>
-    <section class="log"><h3>Журнал</h3><ol id="gLog"></ol></section>
+  <div class="sizer" id="gSizer" role="separator" aria-orientation="vertical" title="Потяните, чтобы изменить ширину панели. Двойной щелчок вернет ширину по умолчанию"></div>
+  <aside class="side" id="gSide">
+    <section data-block="players"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Игроки</h3>${FOLD}</div><div class="bbody"><div class="players" id="gPlayers"></div></div></section>
+    <section data-block="stock"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Запас</h3>${FOLD}</div><div class="bbody"><div class="stock" id="gStock"></div></div></section>
+    <section class="now" data-block="now"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3 id="gNowHead"></h3>${FOLD}</div><div class="bbody" id="gNow"></div></section>
+    <section class="log" data-block="log"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Журнал</h3>${FOLD}</div><div class="bbody"><ol id="gLog"></ol></div></section>
+    <div class="sidefoot"><button class="linkbtn" id="gSideMove"></button><button class="linkbtn" id="gLayoutReset">Сбросить вид</button></div>
   </aside>
   <footer class="hand" id="gHand"></footer>
   <div class="modal" id="gDock" hidden></div>
@@ -54,6 +60,7 @@ const SKELETON = `<div class="app" id="game">
 export function renderGame(root, view, { act, go }) {
   if (!root.querySelector('#game')) {
     root.innerHTML = SKELETON;
+    initPanels(root);
     root.querySelector('#board').addEventListener('click', (e) => {
       const r = e.target.closest('.cell-hit');
       if (r) onCell(+r.dataset.i);
@@ -318,7 +325,7 @@ function drawNow(d) {
     body = `<p>${waitingText(d)}</p>${bot ? '<p class="wait">Бот думает<i></i><i></i><i></i></p>' : ''}`;
   } else if (warActive(view)) {
     title = 'Решаете вы';
-    body = '<p>Открыто окно справа, партия ждет вашего решения.</p>';
+    body = '<p>Открыто окно конфликта, партия ждет вашего решения.</p>';
   } else if (g.phase === 'action') {
     title = 'Ваш ход';
     if (ui.confirmPass) {
@@ -365,10 +372,10 @@ function drawNow(d) {
     body = '<p>Выберите цвет, в который получите очко.</p>';
     buttons = legal.map((m, i) => `<button class="btn colorbtn" data-idx="${i}" style="border-color:${RING[m.color]}"><i style="background:${HEX[m.color]}"></i>${COLNAME[m.color]}</button>`).join('');
   }
-  const live = !g.over && !g.stopped;
-  const clk = g.clock && live ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
-  const stop = view.isHost && live ? '<button class="linkbtn stopgame" data-act="stopGame">Завершить партию</button>' : '';
-  el.innerHTML = `<h3>${title}${clk}</h3>${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}${stop}`;
+  const clk = g.clock && !g.over && !g.stopped ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
+  ctl.root.querySelector('#gNowHead').innerHTML = title + clk;
+  el.innerHTML = `${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
+  holdNowOpen(decides);
   el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.act)));
   el.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', () => {
     ui.monSel = b.dataset.mon === 'wonder' ? 'wonder' : +b.dataset.mon;
@@ -385,9 +392,7 @@ function onNow(a) {
   else if (a === 'withdraw') move(legal.findIndex((m) => m.type === 'withdraw' && m.color === ui.sel.color));
   else if (a === 'confirm') move(legal.findIndex((m) => m.type === 'confirm'));
   else if (a === 'undo') ctl.act({ action: 'undo', version: view.version });
-  else if (a === 'stopGame') {
-    if (confirm('Завершить партию для всех игроков? Итога не будет, в статистику партия не пойдет. Вернуть ее нельзя.')) ctl.act({ action: 'close' });
-  } else if (a === 'discardYes') {
+  else if (a === 'discardYes') {
     const counts = [0, 0, 0, 0];
     for (const k of ui.discard) counts[handColors(view)[k]]++;
     move(legal.findIndex((m) => m.type === 'discard' && m.counts.every((v, c) => v === counts[c])));
@@ -400,8 +405,16 @@ const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
 function drawHand(d) {
   const { view, g, myP, legal, decides } = d;
   const el = ctl.root.querySelector('#gHand');
+  // сдаться или завершить партию может только организатор, кнопка видна и в чужой ход
+  const label = view.isHost && !g.over && !g.stopped ? stopLabel(view.seats, view.me) : null;
+  const stop = label ? `<button class="btn" data-stop>${label}</button>` : '';
+  const bindStop = () => el.querySelector('[data-stop]')?.addEventListener('click', () => {
+    const q = label === 'Сдаться' ? 'Сдаться? Партия закончится, итога не будет, в статистику она не пойдет.' : 'Завершить партию для всех игроков? Итога не будет, в статистику она не пойдет. Вернуть ее нельзя.';
+    if (confirm(q)) ctl.act({ action: 'close' });
+  });
   if (myP < 0) {
-    el.innerHTML = '<div class="hint">Вы смотрите партию со стороны.</div>';
+    el.innerHTML = `<div class="hint">Вы смотрите партию со стороны.</div><div class="hrow"><div class="acts">${stop}</div></div>`;
+    bindStop();
     return;
   }
   const acting = decides && g.phase === 'action' && !ui.confirmPass;
@@ -424,10 +437,10 @@ function drawHand(d) {
   }).join('');
   let hint = '';
   if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
-  else if (warActive(view)) hint = 'Идет конфликт: решите в окне справа.';
-  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите справа.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
-  else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие справа.';
-  else hint = 'Решите в панели справа.';
+  else if (warActive(view)) hint = 'Идет конфликт: решите в его окне.';
+  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите на панели.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
+  else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие на панели.';
+  else hint = 'Решите на панели.';
   el.className = 'hand' + (acting ? '' : ' locked');
   el.innerHTML = `<div class="hint">${hint}</div>
     <div class="hrow">
@@ -435,10 +448,12 @@ function drawHand(d) {
       <div class="grp"><span>Лидеры</span><div class="items">${leaders}</div></div>
       <div class="grp"><span>Катастрофы</span><div class="items">${cats}</div></div>
       <div class="acts">
+        ${stop}
         ${acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : ''}
         ${acting && has('pass') ? '<button class="btn" data-hand="pass">Пас</button>' : ''}
       </div>
     </div>`;
+  bindStop();
   el.querySelectorAll('[data-tile]').forEach((b) => b.addEventListener('click', () => {
     if (!acting) return;
     const k = +b.dataset.tile, c = +b.dataset.c;

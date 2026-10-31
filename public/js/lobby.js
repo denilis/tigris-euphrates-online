@@ -3,6 +3,7 @@
 import { HEROES, HERONAME, STYLES, tokenImg, esc, copy, toast } from './util.js';
 import { api } from './api.js';
 import { mountOnline } from './presence.js';
+import { fitTours, tourChoice } from './season.js';
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -13,6 +14,41 @@ const COUNTING = { none: 'не считает', approx: 'примерно', exac
 
 // выбранные для приглашения: лобби перерисовывается с каждым опросом, выбор должен пережить это
 const picked = new Set();
+
+// турниры меняются редко: лобби перерисовывается часто, а список обновляем раз в 20 секунд
+const TOURS_MS = 20000;
+let tours = null, toursAt = 0;
+
+function tourLine(view, fit) {
+  const on = tourChoice(fit, view.options.tournament);
+  const dis = view.isHost ? '' : 'disabled';
+  const name = fit.length > 1
+    ? `<select id="lTourPick" aria-label="Турнир" ${dis}>${fit.map((t) => `<option value="${esc(t.id)}" ${t === on ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>`
+    : `<b>${esc(fit[0].name)}</b>`;
+  return `<span class="muted">Турнир</span>${name}<label><input type="checkbox" id="lTourOn" ${on ? 'checked' : ''} ${dis}> партия идет в зачет</label>`;
+}
+
+/** Строка турнира: появляется, когда люди за столом совпали с составом турнира. */
+function mountTour(box, view, act) {
+  const paint = () => {
+    const fit = fitTours(tours || [], view.seats);
+    box.hidden = !fit.length;
+    if (!fit.length) return;
+    box.innerHTML = tourLine(view, fit);
+    const pick = box.querySelector('#lTourPick');
+    pick?.addEventListener('change', () => act({ action: 'options', options: { tournament: pick.value } }));
+    box.querySelector('#lTourOn').addEventListener('change', (e) => {
+      act({ action: 'options', options: { tournament: e.target.checked ? pick?.value || fit[0].id : 'none' } });
+    });
+  };
+  paint();
+  if (tours && Date.now() - toursAt < TOURS_MS) return;
+  toursAt = Date.now();
+  api('GET', 'tournaments').then((r) => {
+    tours = r.tours;
+    if (box.isConnected) paint();
+  }).catch(() => {});
+}
 
 export function renderLobby(root, view, { act }) {
   const host = view.isHost, me = view.me;
@@ -82,6 +118,7 @@ export function renderLobby(root, view, { act }) {
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
         <label><input type="checkbox" data-opt="openScore" ${o.openScore ? 'checked' : ''} ${dis}> Открытый счет (видны очки соперников)</label>
       </div>
+      <div class="opts" id="lTour" hidden></div>
       <h2>Время</h2>
       <div class="opts">
         <span class="muted">На ход</span><span class="seg">${[20, 30, 45, 60, 90].map((n) => `<button data-time="turnSeconds" data-val="${n}" class="${(o.turnSeconds ?? 30) === n ? 'on' : ''}" ${dis}>${n} с</button>`).join('')}</span>
@@ -100,6 +137,7 @@ export function renderLobby(root, view, { act }) {
 
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
+  mountTour(root.querySelector('#lTour'), view, act);
   if (canInvite) {
     mountOnline(root.querySelector('#lInvite'), {
       button: 'Пригласить',
