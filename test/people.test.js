@@ -48,6 +48,26 @@ test('свой код: с ним можно войти, случайный ос�
   assert.equal(auto.body.code.length, 14, 'пустое поле: случайный код с дефисами');
 });
 
+test('код из мессенджера: вставка всего сообщения с именем не мешает входу', async () => {
+  const s = setup();
+  const denis = await s.login('ADMN-TEST-2345');
+  const { code } = (await s.req('POST', 'admin/users', { body: { name: 'Петя' }, token: denis.token })).body;
+  // поле ввода выбрасывает переводы строк, поэтому имя прилипает к коду
+  for (const text of [`${code}\nПетя\nКод входа`, `${code}ПетяКод входа`, `Код входа: ${code}`]) {
+    assert.equal((await s.login(text)).user?.name, 'Петя', text);
+  }
+  assert.equal((await s.req('POST', 'activate', { body: { code: 'Петя Код входа' } })).status, 401, 'без кода не войти');
+});
+
+test('код из мессенджера: годится и для поля «свой код», длинный свой код не обрезается', async () => {
+  const s = setup();
+  const denis = await s.login('ADMN-TEST-2345');
+  const add = (body) => s.req('POST', 'admin/users', { body, token: denis.token });
+  assert.equal((await add({ name: 'Андрей', code: 'ABCD-EFGH-JK23\nАндрей\nКод входа' })).body.code, 'ABCDEFGHJK23');
+  assert.equal((await s.login('ABCD-EFGH-JK23')).user.name, 'Андрей');
+  assert.equal(normalizeCode('ABCD-EFGH-JKMN-PQRS'), 'ABCDEFGHJKMNPQRS', 'четыре группы не режем до трех');
+});
+
 test('свой код: занятый или кривой код отклоняется и никого не создает', async () => {
   const s = setup();
   const { denis } = await withPlayer(s, 'Петя', { code: 'PETYA2026' });

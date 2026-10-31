@@ -9,6 +9,8 @@ const CODE_LEN = 12;
 const CODE_MIN = 8, CODE_MAX = 20; // границы для кода, вписанного вручную
 // русские буквы, которые на клавиатуре выглядят как латинские в коде
 const CYR = { А: 'A', В: 'B', С: 'C', Е: 'E', Н: 'H', К: 'K', М: 'M', О: 'O', Р: 'P', Т: 'T', Х: 'X', У: 'Y' };
+// код ABCD-EFGH-JK23 внутри текста: мессенджер копирует сообщение целиком, вместе с именем
+const CODE_IN_TEXT = /(?<![A-Z0-9-])[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}(?![A-Z0-9-])/i;
 
 const pick = (alphabet, n, rng) => Array.from({ length: n }, () => alphabet[Math.floor(rng() * alphabet.length)]).join('');
 
@@ -27,7 +29,8 @@ export function newTableCode(rng = cryptoRng()) {
 export function normalizeCode(input) {
   // самый длинный честный ввод: код с дефисами и пробелами; мегабайты не разбираем
   if (typeof input !== 'string' || input.length > 64) return null;
-  const s = [...input.toUpperCase()].map((ch) => CYR[ch] || ch).join('').replace(/[\s-]/g, '');
+  const text = CODE_IN_TEXT.exec(input)?.[0] ?? input;
+  const s = [...text.toUpperCase()].map((ch) => CYR[ch] || ch).join('').replace(/[\s-]/g, '');
   return s.length >= CODE_MIN && s.length <= CODE_MAX && /^[A-Z0-9]+$/.test(s) ? s : null;
 }
 
