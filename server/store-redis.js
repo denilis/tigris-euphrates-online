@@ -8,6 +8,9 @@ redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[5])
 redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[5])
 redis.call('SET', KEYS[3], ARGV[4], 'EX', ARGV[5])
 return 1`;
+export const CAS_USER = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2])
+return 1`;
 export const UNLOCK = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
 return 0`;
 export const RATE_HIT = `local n = redis.call('INCR', KEYS[1])
@@ -117,6 +120,9 @@ export function redisStore({ exec, prefix = '' }) {
       await exec(['SET', k(`user:${user.id}`), JSON.stringify(user)]);
       await exec(['SADD', k('users'), user.id]);
     },
+    async casUser(before, after) {
+      return Number(await exec(['EVAL', CAS_USER, 1, k(`user:${before.id}`), JSON.stringify(before), JSON.stringify(after)])) === 1;
+    },
     async listUsers() {
       const ids = await exec(['SMEMBERS', k('users')]);
       if (!ids.length) return [];
@@ -130,6 +136,16 @@ export function redisStore({ exec, prefix = '' }) {
     },
     async delCode(hash) {
       await exec(['DEL', k(`code:${hash}`)]);
+    },
+
+    async getAvatar(token) {
+      return parse(await exec(['GET', k(`ava:${token}`)]));
+    },
+    async setAvatar(token, value) {
+      await exec(['SET', k(`ava:${token}`), JSON.stringify(value)]);
+    },
+    async delAvatar(token) {
+      await exec(['DEL', k(`ava:${token}`)]);
     },
 
     async getPrefs(id) {

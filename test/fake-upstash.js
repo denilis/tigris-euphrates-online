@@ -1,7 +1,7 @@
 // Поддельный Upstash для тестов: принимает тело запроса как настоящий REST API и
 // исполняет команды так же, как Redis (включая наши Lua-скрипты).
 import assert from 'node:assert/strict';
-import { upstash, CAS_PUT, UNLOCK, MINE_PUSH, RATE_HIT } from '../server/store-redis.js';
+import { upstash, CAS_PUT, CAS_USER, UNLOCK, MINE_PUSH, RATE_HIT } from '../server/store-redis.js';
 
 /** Поддельный Upstash: принимает тело запроса как настоящий и отвечает { result }. */
 export function fakeUpstash() {
@@ -31,6 +31,11 @@ export function fakeUpstash() {
           const [kv1, kt, km, expected, ver, doc, meta] = rest;
           if ((kv.get(kv1) ?? '') !== expected) return 0;
           kv.set(kt, doc); kv.set(kv1, ver); kv.set(km, meta);
+          return 1;
+        }
+        if (script === CAS_USER) {
+          if (kv.get(rest[0]) !== rest[1]) return 0;
+          kv.set(rest[0], rest[2]);
           return 1;
         }
         if (script === UNLOCK) {

@@ -72,7 +72,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     isHost: userId === table.hostUserId,
     me: mine ? mine.id : null,
     seats: table.seats.map((x) => ({
-      id: x.id, kind: x.kind, name: x.name, hero: x.hero, taken: x.kind === 'bot' || Boolean(x.userId),
+      id: x.id, kind: x.kind, name: x.name, avatar: x.avatar || null, hero: x.hero, taken: x.kind === 'bot' || Boolean(x.userId),
       ...(x.kind === 'bot' ? { bot: { ...x.bot } } : {}),
     })),
     game: null,

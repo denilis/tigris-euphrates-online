@@ -12,6 +12,7 @@ import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
 import { cleanPrefs } from './prefs.js';
+import { parseAvatar } from './avatar.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -42,7 +43,7 @@ const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
 const due = (m, at) => m === 'bot' || (m[0] === 'c' && at >= Number(m.slice(1)));
-const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID });
+const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const letterId = () => randomBytes(6).toString('hex');
 
@@ -158,6 +159,42 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     http(404, 'no-route', 'Нет такого адреса');
   }
 
+  // --- фото игрока
+
+  /**
+   * Новое фото или null, чтобы убрать. Номер случайный и новый: браузер хранит картинку вечно.
+   * Запись игрока сверяется с базой: одновременный отзыв кода или смена прав не должны потеряться.
+   * Старый файл стирается последним, чтобы при сбое запись не указывала на пустое место.
+   */
+  async function setAvatar(u, body) {
+    if ((await store.hit(`ava:${u.id}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) http(429, 'too-many', 'Слишком часто, подождите несколько минут');
+    let avatar = null;
+    if (body.image !== null) {
+      const pic = parseAvatar(body.image);
+      if (!pic) http(400, 'bad-image', 'Фото не подошло, попробуйте другое');
+      avatar = randomBytes(16).toString('hex');
+      await store.setAvatar(avatar, pic);
+    }
+    for (let k = 0; k < 4; k++) {
+      const cur = await store.getUser(u.id);
+      if (!cur || cur.revoked) break;
+      const user = { ...cur, avatar };
+      if (await store.casUser(cur, user)) {
+        if (cur.avatar) await store.delAvatar(cur.avatar);
+        forgetPeople();
+        return { user: publicUser(user) };
+      }
+    }
+    if (avatar) await store.delAvatar(avatar);
+    http(409, 'stale', 'Не получилось сохранить фото, попробуйте еще раз');
+  }
+
+  async function avatarFile(token) {
+    const file = /^[0-9a-f]{32}$/.test(token || '') ? await store.getAvatar(token) : null;
+    if (!file) http(404, 'no-avatar', 'Нет такого фото');
+    return { file };
+  }
+
   // --- турниры
 
   /** Все турниры от старых к новым: порядок решает, в какой идет партия, подходящая к двум. */
@@ -187,7 +224,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function stats(query) {
     const tours = await allTours();
     const tour = tours.find((t) => t.id === query.tour) || SEASON;
-    return { tour: publicTour(tour), players: tour.players.map((p) => p.name), games: tourGames(tour, tours, await store.listHistory()) };
+    const users = await store.listUsers();
+    const face = (p) => users.find((x) => (p.id ? x.id === p.id : x.name.trim().toLowerCase() === p.name.toLowerCase()))?.avatar || null;
+    return { tour: publicTour(tour), players: tour.players.map((p) => p.name), avatars: tour.players.map(face), games: tourGames(tour, tours, await store.listHistory()) };
   }
 
   // --- кто на сайте и приглашения
@@ -213,12 +252,13 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const { marks, letters } = await store.readPresence(ids, u.id);
     const t = now(), busy = Boolean(body.busy);
     const mine = marks.find((m) => m?.id === u.id);
-    if (!mine || mine.busy !== busy || t - mine.at >= MARK_EVERY_MS) {
-      await store.setPresence(u.id, { id: u.id, name: u.name, busy, at: t }, ONLINE_MS);
+    const avatar = u.avatar || null;
+    if (!mine || mine.busy !== busy || mine.avatar !== avatar || t - mine.at >= MARK_EVERY_MS) {
+      await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, ONLINE_MS);
     }
     return {
       me: publicUser(u),
-      online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, busy: b }) => ({ id, name, busy: b })),
+      online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, avatar: a, busy: b }) => ({ id, name, avatar: a || null, busy: b })),
       inbox: letters.filter((m) => t - m.at <= INVITE_MS),
     };
   }
@@ -276,7 +316,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function newTable(u) {
     const title = await tableTitle();
     for (let k = 0; k < 5; k++) {
-      const t = createTable({ code: newTableCode(), title, host: { userId: u.id, name: u.name }, now: now() });
+      const t = createTable({ code: newTableCode(), title, host: { userId: u.id, name: u.name, avatar: u.avatar }, now: now() });
       if (await store.putTable(t, null, meta(t))) {
         await store.addMyTable(u.id, t.code);
         return { code: t.code, view: viewFor(t, u.id, { now: now() }) };
@@ -297,7 +337,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   const ACTIONS = {
-    sit: (t, u, b) => sit(t, { userId: u.id, name: u.name }, b.seat, now()),
+    sit: (t, u, b) => sit(t, { userId: u.id, name: u.name, avatar: u.avatar }, b.seat, now()),
     leave: (t, u) => leave(t, u.id, now()),
     hero: (t, u, b) => setHero(t, u.id, b.seat, b.hero, now()),
     options: (t, u, b) => setOptions(t, u.id, b.options || {}, now()),
@@ -389,6 +429,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.commit.slice(0, 7), store: store.kind };
     }
     if (method === 'POST' && head === 'activate') return activate(body, ip);
+    if (method === 'GET' && head === 'avatar') return avatarFile(rest.join('/'));
     if (head === 'tables' && rest.length === 2 && rest[1] === 'poll' && method === 'GET') {
       await auth(token, { light: true });
       const p = await store.poll(rest[0]);
@@ -398,6 +439,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'beat') return beat(await auth(token, { light: true }), body);
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
+    if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
     if (method === 'GET' && head === 'stats') return stats(query);

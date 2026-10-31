@@ -1,7 +1,7 @@
 // Страница «Статистика»: свой зачет у каждого турнира, по образцу Сверка_Тигрис.html. Партии отдает
 // сервер после входа, поэтому в открытой части сайта их нет. Фильтр дат пересчитывает всю страницу.
 import { api, session } from './api.js';
-import { esc, toast } from './util.js';
+import { esc, toast, faceBg } from './util.js';
 import { totals, cumulative, inRange, ranking } from './season.js';
 
 const COLS = ['#e0b65a', '#c98a56', '#8fb0c7', '#9dbb86']; // в порядке участников турнира
@@ -21,10 +21,10 @@ function rememberTour(id) {
   try { localStorage.setItem(TOUR_KEY, id); } catch { /* приватный режим: живем без памяти */ }
 }
 
-function podium(players, t) {
+function podium(players, t, avatars) {
   return ranking(t).map((i, r) => `<div class="pl" style="--tone:${COLS[i]}">
     <div class="rank">${RANK[r]} место</div>
-    <div class="who">${esc(players[i])}</div>
+    <div class="who">${avatars[i] ? `<i class="face big" style="background-image:${faceBg({ avatar: avatars[i] })}"></i>` : ''}${esc(players[i])}</div>
     <div class="score">${t.pts[i]}</div>
     <div class="places">${t.places[i].map((count, k) => `<div><b>${count}</b><span>${SLOTS[k]}</span></div>`).join('')}</div>
   </div>`).join('');
@@ -133,12 +133,12 @@ export async function renderStats(app, top, bindTop) {
   }
   if (!$('sLine')) return; // пока ждали ответ, ушли на другую страницу
   const from = $('sFrom'), to = $('sTo'), pick = $('sTour');
-  let players = [], games = [], first = '', last = '', asked = 0;
+  let players = [], avatars = [], games = [], first = '', last = '', asked = 0;
 
   const update = () => {
     const list = inRange(games, from.value, to.value);
     const t = totals(list, players.length);
-    $('sPodium').innerHTML = podium(players, t);
+    $('sPodium').innerHTML = podium(players, t, avatars);
     $('sCount').textContent = `Партий: ${list.length}`;
     $('sLine').innerHTML = lineChart(list, players.length);
     $('sBars').innerHTML = barsChart(players, t, list.length);
@@ -155,7 +155,7 @@ export async function renderStats(app, top, bindTop) {
       return;
     }
     if (mine !== asked || !$('sLine')) return; // успели выбрать другой турнир или уйти со страницы
-    ({ players, games } = data);
+    ({ players, avatars, games } = data);
     first = games[0]?.date ?? '';
     last = games[games.length - 1]?.date ?? '';
     from.min = to.min = first;

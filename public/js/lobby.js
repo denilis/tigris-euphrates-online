@@ -1,6 +1,6 @@
 // Лобби стола: места, герои, боты, очередность и правила. Менять правила, места и ботов
 // может хозяин стола; героя выбирает тот, кто сидит; начать может любой сидящий.
-import { HEROES, HERONAME, STYLES, tokenImg, esc, copy, toast } from './util.js';
+import { HEROES, HERONAME, STYLES, tokenImg, faceBg, esc, copy, toast } from './util.js';
 import { api } from './api.js';
 import { mountOnline } from './presence.js';
 import { fitTours, tourChoice } from './season.js';
@@ -69,7 +69,7 @@ export function renderLobby(root, view, { act }) {
     }).join('');
     let who;
     if (s.kind === 'bot') who = `<b>${esc(s.name || 'Бот')}</b>`;
-    else if (s.taken) who = `<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}`;
+    else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}`;
     else who = me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : '<span class="muted">Свободно</span>';
     const kindSwitch = host && !(s.kind === 'human' && s.taken)
       ? `<span class="seg sm"><button data-kind="human" data-seat="${s.id}" class="${s.kind === 'human' ? 'on' : ''}">Человек</button><button data-kind="bot" data-seat="${s.id}" class="${s.kind === 'bot' ? 'on' : ''}">Бот</button></span>` : '';

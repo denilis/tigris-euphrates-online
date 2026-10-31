@@ -75,6 +75,16 @@ export function makeHandler(env, store) {
     // Vercel сам ставит адрес клиента в эти заголовки; первый в списке — клиент
     const ip = ipKey(String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim());
     const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token, ip });
+    if (r.body?.file) {
+      // <img> не шлет токен, поэтому фото открывается без входа, по случайному номеру.
+      // Номер меняется с каждым новым фото, так что картинка может лежать в браузере вечно
+      res.statusCode = 200;
+      res.setHeader('Content-Type', r.body.file.type);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.end(Buffer.from(r.body.file.data, 'base64'));
+      return;
+    }
     send(res, r.status, r.body);
   };
 }

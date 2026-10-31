@@ -23,6 +23,14 @@ export const tileImg = (c) => `/img/tiles/${TILEFILE[c]}.jpg`;
 export const catImg = '/img/tiles/catastrophe.jpg';
 export const uniteImg = '/img/tiles/unification.jpg';
 export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.png`;
+/**
+ * Лицо игрока для background-image: фото, а под ним жетон героя. Жетон виден, если фото нет
+ * или его уже сменили, а за старым столом остался прежний адрес.
+ */
+export function faceBg(who, c = 0) {
+  const token = `url(${tokenImg(who?.hero, c)})`;
+  return who?.avatar ? `url(/api/avatar/${who.avatar}),${token}` : token;
+}
 export const cellName = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
 
 const PLURAL = [['храм', 'храма', 'храмов'], ['ферма', 'фермы', 'ферм'], ['рынок', 'рынка', 'рынков'], ['поселение', 'поселения', 'поселений']];

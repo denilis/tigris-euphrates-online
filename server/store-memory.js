@@ -87,6 +87,12 @@ export function memoryStore() {
       const ids = lists.get('users') || [];
       if (!ids.includes(user.id)) lists.set('users', [...ids, user.id]);
     },
+    /** Записать игрока, только если запись не менялась с момента чтения: иначе false. */
+    async casUser(before, after) {
+      if (alive(`user:${before.id}`) !== JSON.stringify(before)) return false;
+      set(`user:${before.id}`, JSON.stringify(after));
+      return true;
+    },
     async listUsers() {
       return (lists.get('users') || []).map((id) => JSON.parse(alive(`user:${id}`)));
     },
@@ -101,6 +107,18 @@ export function memoryStore() {
     },
     async delCode(hash) {
       kv.delete(`code:${hash}`);
+    },
+
+    /** Фото игрока по случайному номеру. */
+    async getAvatar(token) {
+      const a = alive(`ava:${token}`);
+      return a ? JSON.parse(a) : null;
+    },
+    async setAvatar(token, value) {
+      set(`ava:${token}`, JSON.stringify(value));
+    },
+    async delAvatar(token) {
+      kv.delete(`ava:${token}`);
     },
 
     /** Настройки экрана партии у игрока. */

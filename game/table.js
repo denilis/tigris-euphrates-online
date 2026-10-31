@@ -83,7 +83,7 @@ function nameBots(t) {
     s.name = `Бот ${BOT_NAMES[s.bot.style]}${n > 1 ? ` ${n}` : ''}`;
   }
 }
-const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, hero: null });
+const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, avatar: null, hero: null });
 function makeBot(t, id) {
   return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
@@ -101,7 +101,7 @@ export function createTable({ code, title = null, host, now }) {
     code, title, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
     hostUserId: host.userId, options: { ...DEFAULT_OPTIONS }, seats: [], game: null, next: null,
   };
-  t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, hero: null }, emptyHuman(1), emptyHuman(2));
+  t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, avatar: host.avatar || null, hero: null }, emptyHuman(1), emptyHuman(2));
   t.seats.push(makeBot(t, 3));
   nameBots(t);
   return t;
@@ -117,6 +117,7 @@ export function sit(t, user, seatId, now) {
   if (!t.seats.some((s) => s.kind === 'human' && s.userId)) t.hostUserId = user.userId;
   seat.userId = user.userId;
   seat.name = user.name;
+  seat.avatar = user.avatar || null;
   touch(t, now);
 }
 

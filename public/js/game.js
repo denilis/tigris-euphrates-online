@@ -11,7 +11,7 @@ import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import {
-  HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, cellName, esc, plural, copy, cells,
+  HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, cellName, esc, plural, copy, cells,
   unitePos, toast,
 } from './util.js';
 
@@ -283,7 +283,7 @@ function drawPlayers({ view, g, me, seat }) {
       : '<span class="sc hid" title="закрытый счет: очки соперников не видны">счет скрыт</span>';
     const bot = s.kind === 'bot' ? `<span class="tag" title="${esc(STYLES[s.bot?.style] || '')}, сила ${s.bot?.strength ?? ''}">бот</span>` : '';
     return `<div class="pc${deciding ? ' deciding' : active ? ' active' : ''}">
-      <div class="av" style="background-image:url(${tokenImg(s.hero, pl.seat === me ? 0 : 3)})"></div>
+      <div class="av" style="background-image:${faceBg(s, pl.seat === me ? 0 : 3)}"></div>
       <div class="nm">${esc(s.name || 'Бот')}${pl.seat === me ? ' <small>(вы)</small>' : ''} <small>${HERONAME[s.hero] || ''}</small> ${bot} ${tag}</div>
       <span class="tm">${pl.handCount} в руке</span>
       <div class="row"><span class="dots">${dots}</span><span class="cnt" title="катастрофы"><i class="cat" style="background-image:url(${catImg})"></i>${pl.cats}</span><span class="cnt" title="сокровища"><i class="coin"></i>${pl.treasures}</span>${sc}</div>${

@@ -1,7 +1,25 @@
 // Итог партии: места, очки по цветам и сокровища, «Еще партию» (реванш: тот же состав,
 // первым ходит последнее место) и возврат к столам. Партия, завершенная организатором
 // досрочно, итога не имеет: только сообщение и те же выходы.
-import { HEX, HERONAME, COLNAME, tokenImg, esc } from './util.js';
+import { HEX, HERONAME, COLNAME, faceBg, esc } from './util.js';
+import { matchStats, turnsOf, STAT_ROWS } from './matchstats.js';
+import { fmtTotal } from './clock.js';
+
+/** Таблица как в конце партии на BGA: столбцы в порядке мест. */
+function statsTable(view, list, seat) {
+  const g = view.game;
+  const stats = matchStats(g.log, view.seats.map((s) => s.id));
+  const row = (name, cell) => `<tr><th scope="row">${name}</th>${list.map((r) => `<td>${cell(r)}</td>`).join('')}</tr>`;
+  const value = (f) => (r) => f(stats[r.seatId], r);
+  const turns = (r) => turnsOf(g.order.indexOf(r.seatId), g.order.length, g.turn);
+  const time = (r) => fmtTotal(g.clock?.used?.[r.seatId] || 0);
+  const rows = STAT_ROWS.map(([name, f]) => row(name, value(f)));
+  rows.splice(5, 0, row('Количество ходов', turns));
+  return `<h3 class="stathead">Статистика партии</h3><div class="statwrap"><table class="stattbl">
+    <thead><tr><th></th>${list.map((r) => `<th scope="col">${esc(seat(r.seatId)?.name || 'Бот')}</th>`).join('')}</tr></thead>
+    <tbody>${row('Результат', (r) => `${r.place}-е (${r.vector[0]})`)}${row('Время на обдумывание', time)}${rows.join('')}</tbody>
+  </table></div>`;
+}
 
 export function renderEnd(box, view, { act, go }) {
   const g = view.game;
@@ -32,12 +50,13 @@ export function renderEnd(box, view, { act, go }) {
     return;
   }
   const seat = (id) => view.seats.find((s) => s.id === id);
-  const rows = [...g.result.seats].sort((a, b) => a.place - b.place).map((r) => {
+  const list = [...g.result.seats].sort((a, b) => a.place - b.place);
+  const rows = list.map((r) => {
     const s = seat(r.seatId) || {};
     const chips = r.score.map((v, c) => `<span style="background:${HEX[c]}" title="${COLNAME[c]}">${v}</span>`).join('');
     return `<tr class="${r.seatId === view.me ? 'me' : ''}">
       <td class="place">${r.place}</td>
-      <td><span class="who"><i style="background-image:url(${tokenImg(s.hero, 0)})"></i>${esc(s.name || 'Бот')}<small>${HERONAME[s.hero] || ''}</small></span></td>
+      <td><span class="who"><i style="background-image:${faceBg(s)}"></i>${esc(s.name || 'Бот')}<small>${HERONAME[s.hero] || ''}</small></span></td>
       <td class="fin">${r.vector[0]}</td>
       <td><span class="sc2">${chips}<em title="сокровища">+${r.treasures}</em></span></td>
     </tr>`;
@@ -46,6 +65,7 @@ export function renderEnd(box, view, { act, go }) {
     <h2>Партия окончена</h2>
     <p class="msub">${g.endReason === 'bag' ? 'В мешке кончились тайлы.' : 'На поле осталось два сокровища.'} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
+    ${statsTable(view, list, seat)}
     <div class="mfoot">
       <button class="btn" id="eClose">Посмотреть поле</button>
       <button class="btn" id="eHome">К столам</button>

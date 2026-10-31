@@ -6,9 +6,10 @@ import { renderLobby } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
 import { renderRules } from './rules.js';
+import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat } from './online.js';
-import { esc, toast, copy } from './util.js';
+import { esc, toast, copy, faceBg } from './util.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -32,7 +33,7 @@ function topbar(active) {
       <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
       ${u?.admin ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
-      <span class="me">${esc(u?.name || '')}</span>
+      <a class="me" href="#/me" title="Мой профиль">${u?.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i>` : ''}${esc(u?.name || '')}</a>
       <button class="linkbtn" id="logout">Выйти</button>
     </nav>
   </header>`;
@@ -251,6 +252,7 @@ function route() {
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
+  if (h === 'me') return renderProfile(app, topbar(''), bindTopbar);
   return renderHome();
 }
 

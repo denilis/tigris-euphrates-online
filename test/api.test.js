@@ -76,7 +76,7 @@ test('без кода ничего нельзя; админ входит сво�
   assert.equal((await req('POST', 'activate', { body: { code: 'короткий' } })).status, 401);
   const a = await req('POST', 'activate', { body: { code: 'ADMN-TEST-2345' } });
   assert.equal(a.status, 200);
-  assert.deepEqual(a.body.user, { id: 'u-admin', name: 'Денис', admin: true, main: true });
+  assert.deepEqual(a.body.user, { id: 'u-admin', name: 'Денис', admin: true, main: true, avatar: null });
   assert.equal((await req('GET', 'me', { token: a.body.token })).body.admin, true);
   assert.equal((await req('GET', 'ping')).body.ok, true);
 });

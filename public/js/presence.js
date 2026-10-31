@@ -1,7 +1,7 @@
 // Кто на сайте и приглашения: пульс на всех экранах после входа, плашка приглашения, список людей.
 import { api, session } from './api.js';
 import { beatDelay, arrivals, pendingInvites } from './online.js';
-import { esc, toast } from './util.js';
+import { esc, toast, faceBg } from './util.js';
 
 const TITLE = document.title;
 const HANDLED_KEY = 'tigris.letters'; // на какие письма уже отвечали на этом устройстве
@@ -131,9 +131,10 @@ export function mountOnline(el, { button, count = false, exclude = () => false, 
     }
     const list = (st.online || []).filter((p) => !exclude(p));
     const head = count ? `<div class="ohead">Сейчас на сайте: ${(st.online?.length || 0) + 1}</div>` : '';
+    const face = (p) => (p.avatar ? `<i class="face" style="background-image:${faceBg(p)}"></i>` : '');
     const rows = list.map((p) => (p.busy
-      ? `<div class="oitem"><span class="oname">${esc(p.name)}</span><small>в партии</small></div>`
-      : `<label class="oitem"><input type="checkbox" data-pick="${esc(p.id)}" ${selected.has(p.id) ? 'checked' : ''}><span class="oname">${esc(p.name)}</span></label>`)).join('');
+      ? `<div class="oitem">${face(p)}<span class="oname">${esc(p.name)}</span><small>в партии</small></div>`
+      : `<label class="oitem"><input type="checkbox" data-pick="${esc(p.id)}" ${selected.has(p.id) ? 'checked' : ''}>${face(p)}<span class="oname">${esc(p.name)}</span></label>`)).join('');
     const empty = !st.online ? 'Смотрю, кто на сайте...' : st.online.length ? 'Все, кто на сайте, уже за столом.' : 'Кроме вас сейчас никого нет.';
     el.innerHTML = `${head}${rows || `<p class="muted small">${empty}</p>`}
       ${rows ? `<button class="btn sm" data-send ${selected.size ? '' : 'disabled'}>${button}</button>` : ''}`;
