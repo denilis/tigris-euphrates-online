@@ -1,4 +1,5 @@
-// Сообщения в чат компании через бота Telegram. Отправка не должна мешать игре: say не бросает
+// Приглашения в чат компании через бота Telegram. Другого в чат не пишем (решение Дениса 01.11):
+// ни кто зашел на сайт, ни о начале партии. Отправка не должна мешать игре: say не бросает
 // ошибок и ждет недолго. Пишет только основной сайт, превью и локальный сервер молчат.
 const WAIT_MS = 5000; // первый запрос после простоя у Telegram занимал больше 2,5 с
 const TOKEN = /\d{5,}:[\w-]{30,}/; // номер бота, двоеточие и длинный ключ
@@ -40,8 +41,6 @@ export function telegram(env, { fetchFn = fetch, waitMs = WAIT_MS } = {}) {
   return { on, say };
 }
 
-export const arrived = (name) => ({ text: `${name} сейчас на сайте`, button: 'Открыть сайт', url: SITE });
-
 export const invited = (name, t, free) => ({
   text: `${name} зовёт на партию\nСтол ${tableName(t)}, свободно мест: ${free}`,
   button: 'Сесть за стол',
@@ -54,13 +53,3 @@ export const called = (name, t, names) => ({
   button: 'Открыть стол',
   url: tableUrl(t),
 });
-
-/** Начало партии. solo: людей меньше двух, такие сообщения идут реже. */
-export function started(t) {
-  const people = t.seats.filter((s) => s.kind === 'human');
-  const bots = t.seats.length - people.length;
-  const line = people.length === 1
-    ? `${people[0].name} играет ${bots === 1 ? 'с ботом' : 'с ботами'}`
-    : `Партия началась: ${t.seats.map((s) => s.name || 'Бот').join(', ')}`;
-  return { text: `${line}\nСтол ${tableName(t)}`, button: 'Смотреть партию', url: tableUrl(t), solo: people.length < 2 };
-}

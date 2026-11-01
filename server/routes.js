@@ -13,7 +13,7 @@ import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, inChat, arrived, invited, called, started } from './telegram.js';
+import { telegram, inChat, invited, called } from './telegram.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -38,10 +38,9 @@ const TITLE_DAY_MS = 3 * 24 * 3600 * 1000; // счетчик столов за �
 // чтение это один MGET, а отметка обновляется реже: 10 человек укладываются в бесплатный лимит
 const ONLINE_MS = 90 * 1000; // без отметки дольше человек уже не на сайте
 const MARK_EVERY_MS = 45 * 1000;
-const AWAY_MS = 15 * 60 * 1000; // отметка живет дольше: отлучка короче этого не новое появление для чата
+const MARK_TTL_MS = 15 * 60 * 1000; // сколько отметка живет в базе
 const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульса, чтобы не читать его каждый раз
 const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
-const CHAT_QUIET_MS = 3 * 3600 * 1000; // сообщения, о которых никто не просил: не чаще на одного игрока
 const CHAT_CALL_MS = 3 * 60 * 1000; // повторно позвать в чат с того же стола
 const CHAT_CALLS = 3; // и всего от одного игрока за это время: новые столы не обходят замок стола
 const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
@@ -254,25 +253,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   // --- чат Telegram
 
-  /** Сообщение, о котором никто не просил: одно за окно на ключ. Сбой здесь не мешает пульсу и партии. */
-  async function tellOnce(key, message) {
-    if (!tg.on) return;
-    try {
-      if ((await store.hit(`tg:${key}`, CHAT_QUIET_MS)) === 1) await tg.say(message);
-    } catch (e) {
-      console.error('telegram', e.message);
-    }
-  }
-
   /** Стол для чата: и тот, кто действует, и все люди за столом из его компании. */
   const chatTable = (t, u) => inChat(u.name) && t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.name));
-
-  /** Начало партии в чат. С ботами играют и для проверки, такие сообщения реже. */
-  function announce(t, u) {
-    if (!chatTable(t, u)) return null;
-    const news = started(t);
-    return news.solo ? tellOnce(`solo:${u.id}`, news) : tg.say(news);
-  }
 
   /** Позвать чат за стол. Замок снимается при сбое, чтобы отправку можно было сразу повторить. */
   async function callChat(u, body) {
@@ -334,9 +316,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const mine = marks.find((m) => m?.id === u.id);
     const avatar = u.avatar || null;
     if (!mine || mine.busy !== busy || mine.avatar !== avatar || t - mine.at >= MARK_EVERY_MS) {
-      await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, AWAY_MS);
+      await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, MARK_TTL_MS);
     }
-    if (inChat(u.name) && (!mine || t - mine.at > AWAY_MS)) await tellOnce(`on:${u.id}`, arrived(u.name));
     return {
       me: publicUser(u),
       online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, avatar: a, busy: b }) => ({ id, name, avatar: a || null, busy: b })),
@@ -511,7 +492,6 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const humans = t.seats.filter((s) => s.kind === 'human').map((s) => s.userId);
       const last = t.options.order === 'loser' && humans.every(Boolean) ? await store.companyLast(companyKey(humans)) : null;
       start(t, u.id, { last, now: now() });
-      return { commit: () => announce(t, u) };
     },
     async rematch(t, u) {
       if (t.next) return;
@@ -530,7 +510,6 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return {
         commit: async () => {
           for (const s of created.seats) if (s.kind === 'human') await store.addMyTable(s.userId, created.code);
-          await announce(created, u); // реванш сразу идет партией, отдельного start у него нет
         },
         rollback: () => store.delTable(created.code),
       };

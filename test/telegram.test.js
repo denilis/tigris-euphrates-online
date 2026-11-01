@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/routes.js';
 import { memoryStore } from '../server/store-memory.js';
-import { telegram, arrived, invited, started, SITE } from '../server/telegram.js';
+import { telegram, invited, SITE } from '../server/telegram.js';
 
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
 const TOKEN = '123456789:SECRET-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -134,10 +134,6 @@ test('отправка: завис Telegram, ждем не дольше срок
 
 // --- тексты
 
-test('тексты: игрок на сайте', () => {
-  assert.deepEqual(arrived('Денис'), { text: 'Денис сейчас на сайте', button: 'Открыть сайт', url: SITE });
-});
-
 test('тексты: приглашение ведет на стол', () => {
   const m = invited('Денис', { code: 'ABC234', title: '01.11.2026.3' }, 2);
   assert.equal(m.text, 'Денис зовёт на партию\nСтол 01.11.2026.3, свободно мест: 2');
@@ -146,86 +142,24 @@ test('тексты: приглашение ведет на стол', () => {
   assert.match(invited('Денис', { code: 'ABC234' }, 1).text, /Стол ABC234,/, 'без названия показываем код');
 });
 
-test('тексты: партия людей и партия с ботами', () => {
-  const human = (name) => ({ kind: 'human', name });
-  const bot = (name) => ({ kind: 'bot', name });
-  const t = { code: 'ABC234', title: '01.11.2026.3' };
-  const all = started({ ...t, seats: [human('Денис'), human('Андрей'), human('Влад'), bot('Бот Ур')] });
-  assert.equal(all.text, 'Партия началась: Денис, Андрей, Влад, Бот Ур\nСтол 01.11.2026.3');
-  assert.equal(all.button, 'Смотреть партию');
-  assert.equal(all.url, `${SITE}#/t/ABC234`);
-  assert.equal(all.solo, false);
-  const solo = started({ ...t, seats: [human('Денис'), bot('Бот Ур'), bot('Бот Киш')] });
-  assert.equal(solo.text, 'Денис играет с ботами\nСтол 01.11.2026.3');
-  assert.equal(solo.solo, true);
-  assert.equal(started({ ...t, seats: [human('Денис'), bot('Бот Ур')] }).text, 'Денис играет с ботом\nСтол 01.11.2026.3');
-});
+// --- в чат идут только приглашения
 
-// --- игрок на сайте
-
-test('на сайте: сообщение при появлении, не чаще раза в 3 часа на игрока', async (t) => {
+test('чат: появление на сайте не сообщается, пульс не тратит счетчик', async (t) => {
   clock(t);
-  const s = setup();
+  const store = memoryStore();
+  const s = setup(store);
   const { denis, andrey } = await pair(s);
+  let hits = 0;
+  const hit = store.hit;
+  store.hit = async (...args) => { hits++; return hit(...args); };
   const beat = (who) => s.req('POST', 'beat', { body: { busy: false }, token: who.token });
 
   assert.equal((await beat(denis)).status, 200);
-  assert.deepEqual(s.tg.sent.map((m) => m.text), ['Денис сейчас на сайте']);
-
-  t.mock.timers.tick(20 * 1000);
-  await beat(denis);
-  assert.equal(s.tg.sent.length, 1, 'следующий пульс не новое появление');
-
-  await beat(andrey);
-  assert.equal(s.tg.sent.at(-1).text, 'Андрей сейчас на сайте', 'у каждого игрока свой счет');
-
-  t.mock.timers.tick(30 * MINUTE);
-  await beat(denis);
-  assert.equal(s.tg.sent.length, 2, 'короткая отлучка не новое появление');
-
-  t.mock.timers.tick(3 * HOUR);
-  await beat(denis);
-  assert.equal(s.tg.sent.at(-1).text, 'Денис сейчас на сайте');
-  assert.equal(s.tg.sent.length, 3);
-});
-
-test('на сайте: разрыв посреди долгой сессии не новое появление', async (t) => {
-  clock(t);
-  const s = setup();
-  const { denis } = await pair(s);
-  const beat = () => s.req('POST', 'beat', { body: { busy: false }, token: denis.token });
-  await beat();
-  for (let k = 0; k < 190; k++) {
-    t.mock.timers.tick(MINUTE);
-    await beat();
-  }
-  t.mock.timers.tick(5 * MINUTE); // отошел ненадолго, а окно в 3 часа уже прошло
-  await beat();
-  assert.equal(s.tg.sent.length, 1);
-});
-
-test('на сайте: сбой базы при подсчете не мешает пульсу', async (t) => {
-  clock(t);
-  const store = memoryStore();
-  const s = setup(store);
-  const { denis } = await pair(s);
-  t.mock.method(console, 'error', () => {});
-  store.hit = async () => { throw new Error('нет связи'); };
-  assert.equal((await s.req('POST', 'beat', { body: { busy: false }, token: denis.token })).status, 200);
+  assert.equal((await beat(andrey)).status, 200);
+  t.mock.timers.tick(4 * HOUR);
+  assert.equal((await beat(denis)).status, 200);
   assert.equal(s.tg.sent.length, 0);
-});
-
-test('на сайте: без настроенного Telegram база не тратится', async (t) => {
-  clock(t);
-  const store = memoryStore();
-  const s = setup(store);
-  s.tg.on = false;
-  const { denis } = await pair(s);
-  let hits = 0;
-  store.hit = async () => ++hits;
-  await s.req('POST', 'beat', { body: { busy: false }, token: denis.token });
   assert.equal(hits, 0);
-  assert.equal(s.tg.sent.length, 0);
 });
 
 // --- позвать в чат
@@ -325,8 +259,6 @@ test('позвать в чат: мест нет или партия уже ид�
   assert.equal(s.tg.sent.filter((m) => /зовёт/.test(m.text)).length, 0);
 });
 
-// --- партия началась
-
 async function ready(s, denis, andrey) {
   const { code } = (await s.req('POST', 'tables', { token: denis.token })).body;
   const post = (who, body) => s.req('POST', `tables/${code}`, { body, token: who.token });
@@ -355,31 +287,12 @@ test('позвать в чат: стол заполнен людьми, сооб
   assert.equal(s.tg.sent.at(-1).url, `${SITE}#/t/${code}`);
 });
 
-test('партия началась: сообщение со ссылкой, у партий людей без ограничения', async () => {
+test('чат: начало партии не сообщается, ни с людьми, ни с ботами', async () => {
   const s = setup();
   const { denis, andrey } = await pair(s);
-  for (let k = 1; k <= 2; k++) {
-    const { code, start } = await ready(s, denis, andrey);
-    assert.equal((await start()).status, 200);
-    assert.equal(s.tg.sent.length, k);
-    assert.match(s.tg.sent.at(-1).text, /^Партия началась: Денис, Андрей, /);
-    assert.equal(s.tg.sent.at(-1).url, `${SITE}#/t/${code}`);
-  }
-});
-
-test('партия началась: партии с ботами не чаще раза в 3 часа', async (t) => {
-  clock(t);
-  const s = setup();
-  const { denis } = await pair(s);
+  assert.equal((await (await ready(s, denis, andrey)).start()).status, 200);
   assert.equal((await (await ready(s, denis)).start()).status, 200);
-  assert.match(s.tg.sent.at(-1).text, /^Денис играет с ботами\n/);
-
-  assert.equal((await (await ready(s, denis)).start()).status, 200);
-  assert.equal(s.tg.sent.length, 1);
-
-  t.mock.timers.tick(3 * HOUR + 1000);
-  await (await ready(s, denis)).start();
-  assert.equal(s.tg.sent.length, 2);
+  assert.equal(s.tg.sent.length, 0);
 });
 
 /** Закончить партию без игры: реванш смотрит только на итог. */
@@ -392,7 +305,7 @@ async function finish(store, code) {
   assert.equal(await store.putTable(cur.doc, cur.version, ''), true);
 }
 
-test('партия началась: реванш тоже сообщает, со ссылкой на новый стол', async () => {
+test('чат: реванш не сообщается, новый стол попадает в списки игроков', async () => {
   const s = setup();
   const { denis, andrey } = await pair(s);
   const { code, start } = await ready(s, denis, andrey);
@@ -400,45 +313,10 @@ test('партия началась: реванш тоже сообщает, с�
   await finish(s.store, code);
   const r = await s.req('POST', `tables/${code}`, { body: { action: 'rematch' }, token: andrey.token });
   assert.equal(r.status, 200);
-  assert.equal(s.tg.sent.length, 2);
-  assert.match(s.tg.sent[1].text, /^Партия началась: /);
-  assert.equal(s.tg.sent[1].url, `${SITE}#/t/${r.body.next}`);
-});
-
-test('партия началась: реванш с ботами под тем же ограничением', async (t) => {
-  clock(t);
-  const s = setup();
-  const { denis } = await pair(s);
-  const { code, start } = await ready(s, denis);
-  await start();
-  await finish(s.store, code);
-  assert.equal((await s.req('POST', `tables/${code}`, { body: { action: 'rematch' }, token: denis.token })).status, 200);
-  assert.equal(s.tg.sent.length, 1);
-});
-
-test('партия началась: проигранная гонка записи ничего не отправляет', async () => {
-  const store = memoryStore();
-  const s = setup(store);
-  const { denis, andrey } = await pair(s);
-  const { start } = await ready(s, denis, andrey);
-  const put = store.putTable;
-  store.putTable = async () => false;
-  assert.equal((await start()).status, 409);
-  store.putTable = put;
+  assert.ok(r.body.next, 'реванш создан');
   assert.equal(s.tg.sent.length, 0);
-});
-
-test('партия началась: сбой базы при подсчете не мешает партии', async (t) => {
-  clock(t);
-  const store = memoryStore();
-  const s = setup(store);
-  const { denis } = await pair(s);
-  const { start } = await ready(s, denis);
-  t.mock.method(console, 'error', () => {});
-  store.hit = async () => { throw new Error('нет связи'); };
-  const r = await start();
-  assert.equal(r.status, 200);
-  assert.equal(r.body.status, 'playing');
+  const mine = (await s.req('GET', 'tables', { token: denis.token })).body;
+  assert.ok(mine.some((x) => x.code === r.body.next), 'стол реванша у соперника');
 });
 
 test('ping показывает, подключен ли чат', async () => {

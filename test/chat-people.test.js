@@ -49,15 +49,6 @@ test('чат: список на сервере и в браузере один �
   assert.deepEqual([...CLIENT_PEOPLE].sort(), [...CHAT_PEOPLE].sort());
 });
 
-test('на сайте: о других игроках в чат не пишем', async () => {
-  const s = setup();
-  const P = await company(s, 'Андрей', 'Петя');
-  await s.req('POST', 'beat', { body: { busy: false }, token: P['Петя'].token });
-  assert.equal(s.tg.sent.length, 0);
-  await s.req('POST', 'beat', { body: { busy: false }, token: P['Андрей'].token });
-  assert.equal(says(s, /^Андрей сейчас на сайте/), 1);
-});
-
 test('позвать в чат: свободные места, зовет свой, можно', async () => {
   const s = setup();
   const P = await company(s, 'Петя');
@@ -137,35 +128,6 @@ test('пригласить: чужой хозяин не за столом, зо
   assert.equal(r.status, 200);
   assert.equal(r.body.chat, null);
   assert.equal(s.tg.sent.length, 0);
-});
-
-test('партия началась: за столом другой игрок, в чат не пишем', async () => {
-  const s = setup();
-  const P = await company(s, 'Петя');
-  const { post } = await table(s, P.denis, 2);
-  await post(P['Петя'], { action: 'sit', seat: 1 });
-  await post(P['Петя'], { action: 'hero', seat: 1, hero: 'bull' });
-  assert.equal((await post(P.denis, { action: 'start' })).status, 200);
-  assert.equal(s.tg.sent.length, 0);
-});
-
-test('партия началась: другой игрок с ботами, в чат не пишем', async () => {
-  const s = setup();
-  const P = await company(s, 'Петя');
-  const { post } = await table(s, P['Петя'], 2);
-  await post(P['Петя'], { action: 'seatKind', seat: 1, kind: 'bot' });
-  await post(P['Петя'], { action: 'hero', seat: 0, hero: 'lion' });
-  assert.equal((await post(P['Петя'], { action: 'start' })).status, 200);
-  assert.equal(s.tg.sent.length, 0);
-});
-
-test('партия началась: свои, сообщение уходит', async () => {
-  const s = setup();
-  const P = await company(s, 'Андрей');
-  const { post } = await table(s, P.denis, 2);
-  await post(P['Андрей'], { action: 'sit', seat: 1 });
-  assert.equal((await post(P.denis, { action: 'start' })).status, 200);
-  assert.equal(says(s, /^Партия началась: Денис, Андрей/), 1);
 });
 
 test('кнопка: видна своим, пока есть кого звать', () => {
