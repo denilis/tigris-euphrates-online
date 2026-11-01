@@ -1,11 +1,12 @@
 // Точка входа: окно активации, мои столы, стол (лобби или партия), коды игроков.
-// Адреса: #/ — мои столы, #/t/КОД — стол, #/rules — правила (без входа), #/stats — статистика,
-// #/admin — коды (администраторы).
+// Адреса: #/ мои столы, #/t/КОД стол, #/rules правила (без входа), #/learn обучение (без входа),
+// #/stats статистика, #/admin коды (администраторы).
 import { api, session, watchTable } from './api.js';
 import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
 import { renderRules } from './rules.js';
+import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion, canDelete } from './online.js';
@@ -89,6 +90,7 @@ function renderActivate() {
       <button class="btn primary" type="submit">Войти</button>
       <p class="err" id="actErr" role="alert"></p>
       <a class="glink" href="#/rules">Правила игры</a>
+      <a class="glink" href="#/learn">Обучение</a>
     </form>
   </div>`;
   const input = app.querySelector('#actCode');
@@ -303,21 +305,30 @@ async function renderAdmin() {
 
 // --- маршрутизация
 
+const LEARN = /^learn(?:\/([1-8])\/(watch|play))?$/;
+
+function showLearn(m, bar) {
+  if (m[1]) return openLesson(app, +m[1], m[2], { go });
+  return renderLearn(app, bar, bindTopbar);
+}
+
 function route() {
   watcher?.stop();
   watcher = null;
   closePicker();
-  setBackdrop(true);
   const s = session.get();
   const h = location.hash.replace(/^#\/?/, '');
+  setBackdrop(!LEARN.exec(h)?.[1]); // в уроке поле, ролик на телефоне качался бы впустую
   if (!s?.token) {
     stopPresence();
     if (h === 'rules') return renderRules(app, GUEST_BAR, bindTopbar);
+    if (LEARN.test(h)) return showLearn(h.match(LEARN), GUEST_BAR);
     return renderActivate();
   }
   startPresence();
   setBusy(false);
   if (h === 'rules') return renderRules(app, topbar('rules'), bindTopbar);
+  if (LEARN.test(h)) return showLearn(h.match(LEARN), topbar('rules'));
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'admin') return renderAdmin();

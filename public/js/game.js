@@ -50,13 +50,17 @@ const SKELETON = `<div class="app" id="game">
     <div class="sidefoot"><button class="linkbtn" id="gSideMove"></button><button class="linkbtn" id="gLayoutReset">Сбросить вид</button></div>
   </aside>
   <footer class="hand" id="gHand"></footer>
+  <div id="gLessonSlot"></div>
   <div class="modal" id="gDock" hidden></div>
   <div class="battle" id="gBattle" hidden></div>
   <div class="endwrap" id="gEnd" hidden></div>
 </div>`;
 
-/** Нарисовать партию в root. act(body) отправляет действие стола, go(hash) переходит. */
-export function renderGame(root, view, { act, go }) {
+/**
+ * Нарисовать партию в root. act(body) отправляет действие стола, go(hash) переходит.
+ * lesson: { panel, cells, pick, hint, miss, selected } включает режим урока (lesson.js).
+ */
+export function renderGame(root, view, { act, go, lesson = null }) {
   if (!root.querySelector('#game')) {
     root.innerHTML = SKELETON;
     initPanels(root);
@@ -86,7 +90,7 @@ export function renderGame(root, view, { act, go }) {
     });
   }
   current = view;
-  ctl = { act, go, root };
+  ctl = { act, go, root, lesson };
   resetFor(view);
   draw();
 }
@@ -151,11 +155,12 @@ function onCell(i) {
     if (idx < 0) idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && squareCells(m.tl).includes(i));
   }
   if (idx >= 0) move(idx);
+  else ctl.lesson?.miss(g.phase === 'action' ? ui.sel : undefined, i);
 }
 
 function boardOpts() {
   const { g, me, myP, legal, decides } = D();
-  const o = { flash: ui.flash, owners: ui.owners, unite: unitePos(g), trail: ui.trail };
+  const o = { flash: ui.flash, owners: ui.owners, unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
@@ -225,6 +230,10 @@ function draw() {
   app.classList.toggle('conflict', Boolean(dockState) && !ui.collapsed);
   app.classList.toggle('locked', dockState === 'decide'); // кто ждет, тому шапка нажимается, журнал виден после «Свернуть»
   app.classList.toggle('waiting', dockState === 'wait');
+  app.classList.toggle('lesson', Boolean(ctl.lesson));
+  // в бою окно занимает место панели урока, поэтому текст урока переезжает внутрь окна
+  if (ctl.lesson) (dockState && !ui.collapsed ? dock.querySelector('.mcard') : root.querySelector('#gLessonSlot')).prepend(ctl.lesson.panel);
+  ctl.lesson?.selected(ui.sel);
   drawBattle(d);
   renderEnd(root.querySelector('#gEnd'), view, ctl);
 }
@@ -249,6 +258,8 @@ function closeBattle() {
 function drawBattle({ view, g }) {
   const box = ctl.root.querySelector('#gBattle');
   if (ui.battleCode !== view.code) Object.assign(ui, { battleCode: view.code, battleSeen: g.log.length, battleShow: null, battleEpoch: g.logEpoch });
+  // в уроке на телефоне карточка закрыла бы текст урока, а итог боя он рассказывает сам
+  if (ctl.lesson && matchMedia('(max-width:900px)').matches) ui.battleSeen = g.log.length;
   if (ui.battleEpoch !== g.logEpoch) Object.assign(ui, { battleEpoch: g.logEpoch, battleSeen: seenAfterUndo(g.log, ui.battleSeen) });
   const list = ui.battleShow != null ? battlesIn(g.log, ui.battleShow).slice(0, 1) : battlesIn(g.log, ui.battleSeen).slice(-2);
   const key = list.map((b) => b.i).join(',');
@@ -321,6 +332,7 @@ function waitingText({ g, name }) {
 function drawNow(d) {
   const { view, g, legal, decides, seat } = d;
   const el = ctl.root.querySelector('#gNow');
+  el.closest('section').hidden = Boolean(ctl.lesson && !decides); // на шаге без хода говорит панель урока
   const btn = (id, label, cls = '') => `<button class="btn ${cls}" data-act="${id}">${label}</button>`;
   let title = 'Сейчас', body = '', buttons = '';
   if (g.stopped) {
@@ -430,20 +442,22 @@ function drawHand(d) {
   const acting = decides && g.phase === 'action' && !ui.confirmPass;
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
+  const pick = ctl.lesson?.pick; // что взять на этом шаге урока
+  const mark = (kind, c) => (pick?.kind === kind && (pick.color == null || pick.color === c) ? ' lessonpick' : '');
   const tiles = handColors(view).map((c, k) => {
     const on = ui.discard ? ui.discard.has(k) : ui.sel?.kind === 'tile' && ui.sel.color === c && handColors(view).indexOf(c) === k;
     const can = acting && (ui.discard || has('tile', c));
-    return `<button class="ht${on ? ' sel' : ''}${can ? '' : ' idle'}" data-tile="${k}" data-c="${c}" title="${TILE[c]}" style="background-image:url(${tileImg(c)})"></button>`;
+    return `<button class="ht${on ? ' sel' : ''}${can ? '' : ' idle'}${handColors(view).indexOf(c) === k ? mark('tile', c) : ''}" data-tile="${k}" data-c="${c}" title="${TILE[c]}" style="background-image:url(${tileImg(c)})"></button>`;
   }).join('');
   const hero = view.seats.find((s) => s.id === view.me)?.hero;
   const leaders = [0, 1, 2, 3].map((c) => {
     const on = pl.leaders[c] >= 0;
     const can = acting && !ui.discard && (has('leader', c) || has('withdraw', c));
-    return `<button class="hl${on ? ' onb' : ''}${ui.sel?.kind === 'leader' && ui.sel.color === c ? ' sel' : ''}${can ? '' : ' idle'}" data-leader="${c}" title="${LEADER[c]}${on ? ', на поле' : ''}" style="border-color:${RING[c]};background-image:url(${tokenImg(hero, c)})"></button>`;
+    return `<button class="hl${on ? ' onb' : ''}${ui.sel?.kind === 'leader' && ui.sel.color === c ? ' sel' : ''}${can ? '' : ' idle'}${mark('leader', c)}" data-leader="${c}" title="${LEADER[c]}${on ? ', на поле' : ''}" style="border-color:${RING[c]};background-image:url(${tokenImg(hero, c)})"></button>`;
   }).join('');
   const cats = [0, 1].map((k) => {
     const can = acting && !ui.discard && k < pl.cats && has('catastrophe');
-    return `<button class="ht${k >= pl.cats ? ' used' : ''}${ui.sel?.kind === 'cat' && k === 0 ? ' sel' : ''}${can ? '' : ' idle'}" data-cat="${k}" title="катастрофа" style="background-image:url(${catImg})"></button>`;
+    return `<button class="ht${k >= pl.cats ? ' used' : ''}${ui.sel?.kind === 'cat' && k === 0 ? ' sel' : ''}${can ? '' : ' idle'}${k === 0 ? mark('cat') : ''}" data-cat="${k}" title="катастрофа" style="background-image:url(${catImg})"></button>`;
   }).join('');
   let hint = '';
   if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
@@ -451,6 +465,7 @@ function drawHand(d) {
   else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите на панели.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
   else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие на панели.';
   else hint = 'Решите на панели.';
+  if (ctl.lesson) hint = ctl.lesson.hint;
   el.className = 'hand' + (acting ? '' : ' locked');
   el.innerHTML = `<div class="hint">${hint}</div>
     <div class="hrow">

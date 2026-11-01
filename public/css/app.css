@@ -472,6 +472,47 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .app.waiting .battle{z-index:55} /* итог прошлого боя важнее панели ожидания: он закроется сам, она останется */
 @media (prefers-reduced-motion:reduce){.battle,.battle *{animation:none!important}}
 
+/* ---------- обучение ---------- */
+.rtabs{display:flex;gap:6px;margin-bottom:14px}
+.rtabs a{padding:7px 14px;border:1px solid var(--line);border-radius:8px;color:var(--muted);text-decoration:none}
+.rtabs a.on{color:var(--gold);border-color:var(--gold2)}
+.lessons{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.litem{display:flex;justify-content:space-between;align-items:center;gap:14px;background:var(--card);border-radius:10px;padding:10px 14px}
+.litem b{color:var(--gold)}
+.litem span:not(.ldone),.litem small{display:block}
+.litem small{color:var(--muted)}
+.ldone{font-size:12px;color:#9ccf8f}
+.lacts{display:flex;gap:6px;flex:none}
+#gLessonSlot{display:none}
+.app.lesson #gCode,.app.lesson #gBadges,.app.lesson .nav a,.app.lesson .sidefoot,.app.lesson [data-block="stock"]{display:none}
+.app.lesson{grid-template-rows:var(--top) auto minmax(0,1fr) var(--hand);grid-template-areas:"top top top top top" ". board sizer lesson ." ". board sizer side ." ". hand sizer side ."}
+.app.lesson.sideleft{grid-template-areas:"top top top top top" ". lesson sizer board ." ". side sizer board ." ". side sizer hand ."}
+.app.lesson #gLessonSlot{display:block;grid-area:lesson;min-width:0;background:var(--frame);border-left:1px solid var(--line)}
+.lessonbox{padding:10px 12px;font-size:14px;line-height:1.4;background:linear-gradient(180deg,#2e2419,#1c1712);border-bottom:1px solid var(--gold2);max-height:62dvh;overflow:auto}
+.lessonbox h3{margin:6px 0 4px;font-family:Cinzel,Georgia,serif;font-size:17px;color:var(--gold);letter-spacing:.02em}
+.lessonbox p{margin:0 0 6px}
+.lsnhead{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:13px}
+.lsnhead b{color:var(--text)}
+.lsnhead a{color:var(--muted);white-space:nowrap}
+.lprog{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:4px}
+.lprog i{flex:1;height:4px;border-radius:2px;background:#3a2e22;overflow:hidden}
+.lprog u{display:block;height:100%;background:var(--gold2)}
+.lwhy b,.lalt b{color:var(--gold)}
+.lalt{color:var(--muted)}
+.lnote{padding:6px 10px;border-left:3px solid var(--gold);background:rgba(224,182,90,.12);border-radius:4px}
+.lbtns{display:flex;gap:8px;margin-top:8px}
+.lbtns .btn{flex:1;min-height:40px;padding:0 10px}
+.mcard .lessonbox{margin:-14px -16px 12px;max-height:none}
+/* в бою текст урока стоит над окном: окно сжато, чтобы рука с поддержкой оставалась на экране */
+.app.lesson .mcard .msub{display:none}
+.app.lesson .mcard .sides{flex-direction:row}
+.app.lesson .mcard .sbox{flex:1 1 0}
+.app.lesson .ht2:not(.off){box-shadow:0 0 0 2px #ffe08a}
+.app.lesson.locked .mnote{display:none}
+.lessoncell{fill:rgba(255,224,138,.25);stroke:#ffe08a;stroke-width:3;pointer-events:none;animation:breathe 1.8s ease-in-out infinite}
+.ht.lessonpick,.hl.lessonpick{box-shadow:0 0 0 3px #ffe08a,0 0 14px rgba(255,224,138,.7)}
+@media (prefers-reduced-motion:reduce){.lessoncell{animation:none}}
+
 /* ---------- узкие экраны ---------- */
 @media (max-width:1200px){:root{--side:250px;--dock:390px}.badges{display:none}}
 @media (max-width:900px){
@@ -503,4 +544,10 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   .lcard{padding:16px}
   .titem{grid-template-columns:1fr}
   .facts{grid-template-columns:1fr 1fr}
+  .app.lesson,.app.lesson.sideleft{grid-template-rows:auto auto auto auto auto;grid-template-areas:"top" "board" "lesson" "hand" "side"}
+  .app.lesson #gLessonSlot{border-left:0}
+  .lessonbox{max-height:none}
+  .app.lesson .modal.dock{max-height:88vh}
+  .litem{flex-direction:column;align-items:stretch}
+  .lacts .btn{flex:1}
 }

@@ -51,6 +51,7 @@ function change(patch) {
   cur = { ...cur, ...patch };
   touched = true;
   apply();
+  if (!uid) return; // гость в уроке: вид только на экране, сервер ответил бы 401 и выкинул на вход
   remember();
   markUnsaved(true);
   clearTimeout(timer);

@@ -16,10 +16,14 @@ function block(b, query) {
   return `<${tag}>${b.list.map((x) => `<li>${marked(x, query)}</li>`).join('')}</${tag}>`;
 }
 
+/** Вкладки раздела: правила и обучение. */
+export const rulesTabs = (active) => `<nav class="rtabs"><a href="#/rules" class="${active === 'rules' ? 'on' : ''}">Правила</a><a href="#/learn" class="${active === 'learn' ? 'on' : ''}">Обучение</a></nav>`;
+
 /** Нарисовать страницу в app. top и bindTop — шапка сайта и привязка ее кнопок. */
 export function renderRules(app, top, bindTop) {
   app.innerHTML = `<div class="page">${top}<main class="pcard rules">
     <h1>Правила</h1>
+    ${rulesTabs('rules')}
     <div class="rsearch">
       <input id="rQuery" type="search" placeholder="Поиск по правилам" aria-label="Поиск по правилам" autocomplete="off">
       <span class="muted" id="rCount"></span>
