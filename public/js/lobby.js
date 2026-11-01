@@ -3,7 +3,7 @@
 import { HEROES, HERONAME, STYLES, tokenImg, faceBg, esc, copy, toast } from './util.js';
 import { api, session } from './api.js';
 import { onlineNow } from './presence.js';
-import { pickList } from './online.js';
+import { pickList, chatAllowed, chatNote } from './online.js';
 import { fitTours, tourChoice } from './season.js';
 
 const ORDER = [
@@ -83,7 +83,7 @@ function openPicker(view, act, seat) {
     paint();
     const v = await act({ action: 'invitePeople', ids: [...chosen], seat });
     box.close();
-    if (v) toast(v.chat ? 'Игроки за столом, сообщение ушло в чат' : 'Игроки за столом, в чат сообщение не ушло');
+    if (v) toast(chatNote(v.chat));
   });
   document.body.append(box);
   box.showModal();
@@ -97,8 +97,7 @@ function openPicker(view, act, seat) {
 
 export function renderLobby(root, view, { act }) {
   const host = view.isHost, me = view.me;
-  // в чат можно звать, пока есть свободное место или другой человек за столом
-  const canChat = (me != null || host) && view.seats.some((s) => s.kind === 'human' && s.id !== me);
+  const canChat = (me != null || host) && chatAllowed(view, session.get()?.user?.name);
   const ready = view.seats.every((s) => s.taken && s.hero);
   const canStart = ready && (me != null || host);
   const heroOwner = (h) => view.seats.find((s) => s.hero === h);
@@ -171,7 +170,7 @@ export function renderLobby(root, view, { act }) {
         <span class="muted">На ход</span><span class="seg">${[20, 30, 45, 60, 90].map((n) => `<button data-time="turnSeconds" data-val="${n}" class="${(o.turnSeconds ?? 30) === n ? 'on' : ''}" ${dis}>${n} с</button>`).join('')}</span>
         <span class="muted">Окно отмены</span><span class="seg">${[[0, 'нет'], [10, '10 с'], [20, '20 с'], [30, '30 с']].map(([n, t]) => `<button data-time="confirmSeconds" data-val="${n}" class="${(o.confirmSeconds ?? 10) === n ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
       </div>
-      <p class="muted small">Ход не отнимается: когда время выходит, таймер уходит в минус и горит красным, у каждого копится общее время за партию. После второго действия ход еще можно отменить, пока идет окно отмены. Сброс тайлов и нападение не отменяются.</p>
+      <p class="muted small">Ход не отнимается: когда время выходит, таймер уходит в минус и горит красным, у каждого копится общее время за партию. После второго действия ход еще можно отменить, пока идет окно отмены. Нападение можно отменить, пока соперник не ответил. Сброс тайлов не отменяется.</p>
       ${host ? '' : '<p class="muted small">Правила, места и ботов меняет хозяин стола.</p>'}
 
       <div class="lfoot">

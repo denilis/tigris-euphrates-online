@@ -84,6 +84,8 @@ body.stillbg::before{content:"";position:fixed;inset:0;z-index:0;background:url(
 .titem.turn{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
 .titem b{color:var(--gold);letter-spacing:.1em}
 .titem small{color:var(--muted)}
+@media (min-width:761px){.titem.del{grid-template-columns:128px 1fr auto auto}}
+.titem.del .btn{justify-self:start}
 .titem.static{display:flex;flex-wrap:wrap;gap:6px 14px}
 .titem.static b{margin-right:auto}
 .chk{display:inline-flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer}
@@ -467,6 +469,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .bleft{flex:1;font-size:13px;color:var(--muted)}
 .lb{margin-left:4px;padding:0 6px;font:inherit;font-size:11px;line-height:16px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--gold);cursor:pointer}
 .lb:hover{border-color:var(--gold2)}
+.app.waiting .battle{z-index:55} /* итог прошлого боя важнее панели ожидания: он закроется сам, она останется */
 @media (prefers-reduced-motion:reduce){.battle,.battle *{animation:none!important}}
 
 /* ---------- узкие экраны ---------- */

@@ -19,7 +19,8 @@ test('опрос: пока вида нет, обычный темп', () => {
 
 test('опрос: чужой ход ждем часто, свой ход редко, бота и окно подтверждения не тормозим', () => {
   assert.equal(pollDelay(playing(1, 0), false), 2000, 'ходит другой человек');
-  assert.equal(pollDelay(playing(0, 0), false), 5000, 'мой ход: чужие ничего не меняют');
+  assert.equal(pollDelay(playing(0, 0, { cur: 0 }), false), 5000, 'мой ход: чужие ничего не меняют');
+  assert.equal(pollDelay(playing(0, 0, { cur: 1 }), false), 2000, 'отвечаю на нападение: его могут отменить');
   assert.equal(pollDelay(playing(3, 0), false), 1200, 'ходит бот: его ход нужно подхватить сразу');
   assert.equal(pollDelay(playing(0, 0, { clock: { confirmBy: 1 } }), false), 1200, 'окно подтверждения: срок вышел, кто-то должен завершить ход');
   assert.equal(pollDelay(playing(1, null), false), 2000, 'зритель');

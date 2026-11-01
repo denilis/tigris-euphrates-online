@@ -171,6 +171,9 @@ export function redisStore({ exec, prefix = '' }) {
     async myTables(userId) {
       return exec(['LRANGE', k(`mine:${userId}`), 0, 19]);
     },
+    async dropMyTable(userId, code) {
+      await exec(['LREM', k(`mine:${userId}`), 0, code]);
+    },
 
     async setPresence(id, value, ttlMs) {
       await exec(['SET', k(`pres:${id}`), JSON.stringify(value), 'PX', ttlMs]);

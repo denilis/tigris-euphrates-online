@@ -365,12 +365,12 @@ function step(t, s, move, rng, now) {
   g.log.push(...entries);
   g.state = stateToJSON(s);
   g.toMove = s.over ? null : g.order[s.toMove];
-  // отменять нельзя после сброса (уже видны новые тайлы) и нападения (война, восстание),
-  // после решения другого места (выбор сокровища: ходящий увидел чужой выбор и переиграл бы),
-  // а с концом хода снимки больше не нужны
-  const attack = CONFLICT.includes(before) || CONFLICT.includes(s.phase) || entries.some((e) => e.ev === 'warStart');
+  // отменять нельзя после сброса (уже видны новые тайлы), исхода боя и решения другого места
+  // (чужой выбор виден, и ходящий переиграл бы), а с концом хода снимки больше не нужны.
+  // Нападение отменить можно, пока другое место не ответило
+  const fought = entries.some((e) => e.ev === 'war' || e.ev === 'revolt');
   const otherSeat = seatId !== g.order[meta.cur];
-  if (move.type === 'discard' || attack || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
+  if (move.type === 'discard' || fought || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
   if (g.clock && s.cur !== meta.cur) g.clock.turnUsed = 0;
   g.confirmBy = null;
   return entries;
@@ -393,7 +393,8 @@ function applyLegal(t, s, move, rng, now) {
 export function canUndo(t) {
   if (t.status !== 'playing' || !t.game?.undo?.length) return false;
   const s = stateFromJSON(t.game.state);
-  return !s.over && s.toMove === s.cur && UNDO_PHASES.includes(s.phase);
+  if (s.over) return false;
+  return CONFLICT.includes(s.phase) || (s.toMove === s.cur && UNDO_PHASES.includes(s.phase)); // в бою снимок живет до первого ответа
 }
 
 /** Отменить последнее действие своего хода: поле, рука и журнал как до него. */
@@ -406,7 +407,7 @@ export function undo(t, userId, { version } = {}, { now } = {}) {
   if (g.order[s.cur] !== seat.id || !canUndo(t)) fail('no-undo', 'Отменить нечего', 409);
   // срок окна вышел: ход вот-вот завершится сам, его уже не вернуть
   if (g.confirmBy != null && Number.isFinite(now) && now >= g.confirmBy) fail('no-undo', 'Время на отмену вышло', 409);
-  spend(t, s, seat.id, now);
+  spend(t, s, g.order[s.toMove], now); // в бою часы шли у соперника, а отменяет ходящий
   const snap = g.undo.pop();
   const back = stateFromJSON(snap.state);
   g.state = snap.state;

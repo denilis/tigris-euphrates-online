@@ -13,7 +13,7 @@ import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, arrived, invited, called, started } from './telegram.js';
+import { telegram, inChat, arrived, invited, called, started } from './telegram.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -264,8 +264,12 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     }
   }
 
+  /** Стол для чата: и тот, кто действует, и все люди за столом из его компании. */
+  const chatTable = (t, u) => inChat(u.name) && t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.name));
+
   /** Начало партии в чат. С ботами играют и для проверки, такие сообщения реже. */
   function announce(t, u) {
+    if (!chatTable(t, u)) return null;
     const news = started(t);
     return news.solo ? tellOnce(`solo:${u.id}`, news) : tg.say(news);
   }
@@ -276,6 +280,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const { doc: t } = await load(String(body.code));
     if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
     if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Позвать может только тот, кто за столом');
+    if (!chatTable(t, u)) http(403, 'not-chat', 'Чат только для Дениса, Андрея и Влада');
     const humans = t.seats.filter((s) => s.kind === 'human');
     const free = humans.filter((s) => !s.userId).length;
     const others = humans.filter((s) => s.userId && s.userId !== u.id).map((s) => s.name);
@@ -291,8 +296,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { ok: true };
   }
 
-  /** Сообщение о посаженных за стол. Люди уже сидят, поэтому сбой здесь только возвращает false. */
+  /** Сообщение о посаженных за стол: null, если чат здесь ни при чем. Люди уже сидят, поэтому сбой только возвращает false. */
   async function chatPeople(u, t, names) {
+    if (!chatTable(t, u)) return null;
     if (!tg.on) return false;
     try {
       if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) return false;
@@ -330,7 +336,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!mine || mine.busy !== busy || mine.avatar !== avatar || t - mine.at >= MARK_EVERY_MS) {
       await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, AWAY_MS);
     }
-    if (!mine || t - mine.at > AWAY_MS) await tellOnce(`on:${u.id}`, arrived(u.name));
+    if (inChat(u.name) && (!mine || t - mine.at > AWAY_MS)) await tellOnce(`on:${u.id}`, arrived(u.name));
     return {
       me: publicUser(u),
       online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, avatar: a, busy: b }) => ({ id, name, avatar: a || null, busy: b })),
@@ -396,8 +402,38 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   async function load(code) {
     const cur = await store.getTable(code);
-    if (!cur) http(404, 'no-table', 'Нет такого стола');
+    if (!cur || cur.doc.status === 'deleted') http(404, 'no-table', 'Нет такого стола');
     return cur;
+  }
+
+  /** Столы, где партия не начиналась. Общего списка столов нет, собираем по спискам игроков. */
+  async function openTables() {
+    const lists = await Promise.all((await store.listUsers()).map((x) => store.myTables(x.id)));
+    const docs = await store.getTables([...new Set(lists.flat())]);
+    return docs.filter((t) => t?.status === 'lobby').sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((t) => ({ code: t.code, title: t.title || null, updatedAt: t.updatedAt, seats: t.seats.map((s) => ({ kind: s.kind, name: s.name })) }));
+  }
+
+  /**
+   * Удалить стол, где партия не начиналась. Сначала запись по версии: если партию начали
+   * в этот же момент, удаление не пройдет. Сбой после нее оставит стол скрытым до срока хранения.
+   */
+  async function deleteTable(code) {
+    const { doc: t, version } = await load(code);
+    if (t.status !== 'lobby') http(409, 'not-lobby', 'Удалить можно только стол, где партия не начиналась');
+    t.status = 'deleted';
+    t.version = version + 1;
+    if (!(await store.putTable(t, version, ''))) http(409, 'stale', 'Стол уже изменился, обновите');
+    await store.delTable(code);
+    await Promise.all((await store.listUsers()).map((x) => store.dropMyTable(x.id, code)));
+    return { ok: true };
+  }
+
+  async function adminTables(method, rest, u) {
+    needAdmin(u);
+    if (method === 'GET' && !rest.length) return openTables();
+    if (method === 'POST' && rest.length === 2 && rest[1] === 'delete') return deleteTable(rest[0]);
+    http(404, 'no-route', 'Нет такого адреса');
   }
 
   /** Итог законченной партии в историю: один раз, повтор безопасен. */
@@ -432,7 +468,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function myTables(u) {
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
-    return docs.filter(Boolean).map((t) => ({
+    return docs.filter((t) => t && t.status !== 'deleted').map((t) => ({
       code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
       me: seatOfUser(t, u.id)?.id ?? null,
       toMove: t.game?.toMove ?? null,
@@ -578,6 +614,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true };
     }
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
+    if (head === 'admin' && rest[0] === 'tables') return adminTables(method, rest.slice(1), u);
     if (head === 'tables') {
       if (!rest.length && method === 'POST') return newTable(u);
       if (!rest.length && method === 'GET') return myTables(u);

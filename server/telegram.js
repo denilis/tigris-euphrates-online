@@ -5,6 +5,10 @@ const TOKEN = /\d{5,}:[\w-]{30,}/; // номер бота, двоеточие и
 
 export const SITE = 'https://tigris-euphrates-online.vercel.app/';
 
+// чат пока один и свой у этой компании, у других игроков будут свои: о них сюда не пишем
+export const CHAT_PEOPLE = ['денис', 'андрей', 'влад'];
+export const inChat = (name) => CHAT_PEOPLE.includes(String(name).trim().toLowerCase());
+
 const tableUrl = (t) => `${SITE}#/t/${t.code}`;
 const tableName = (t) => t.title || t.code;
 

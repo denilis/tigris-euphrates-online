@@ -12,22 +12,32 @@ export function warActive(view) {
   return Boolean(g && g.legal && !g.over && PHASES.includes(g.phase));
 }
 
-/** Нарисовать окно в box; вернуть true, если окно сейчас нужно. */
-export function renderWarDock(box, view, ui, { move, redraw }) {
+/** Бой идет, решает соперник, а смотрящий в нем участвует: окно остается, только без решений. */
+export function warWaiting(view) {
+  const g = view.game;
+  if (!g || g.legal || g.over || g.stopped || view.me == null) return false;
+  const k = g.phase === 'revoltSupport' ? g.ctx?.revolt : g.phase === 'warSupport' ? g.ctx?.war : null;
+  return Boolean(k) && (k.att === view.me || k.def === view.me);
+}
+
+/** Нарисовать окно в box; вернуть 'decide', если решает смотрящий, 'wait', если он ждет, иначе false. */
+export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   const active = warActive(view);
-  box.hidden = !active;
-  if (!active) return false;
+  box.hidden = !active && !warWaiting(view);
+  if (box.hidden) return false;
+  const state = active ? 'decide' : 'wait';
   const g = view.game, me = view.me, legal = g.legal;
   const seat = (id) => view.seats.find((s) => s.id === id);
   const name = (id) => (id === me ? 'Вы' : seat(id)?.name || 'Бот');
 
   if (ui.collapsed) {
     box.className = 'modal pill';
-    box.innerHTML = `<span class="dotc" style="background:${HEX[g.ctx.war?.color ?? 0]}"></span><b>${g.phase === 'revoltSupport' ? 'Восстание' : 'Война'}</b><span>Партия ждет вашего решения</span><button class="btn primary" id="wExpand">Развернуть</button>`;
+    box.innerHTML = `<span class="dotc" style="background:${HEX[g.ctx.war?.color ?? 0]}"></span><b>${g.phase === 'revoltSupport' ? 'Восстание' : 'Война'}</b><span>${active ? 'Партия ждет вашего решения' : `Ждём решения: ${esc(name(g.toMove))}`}</span><button class="btn primary" id="wExpand">Развернуть</button>`;
     box.querySelector('#wExpand').addEventListener('click', () => { ui.collapsed = false; redraw(); });
-    return true;
+    return state;
   }
   box.className = 'modal dock';
+  const undoBtn = g.canUndo ? '<button class="btn" id="wUndo">Отменить нападение</button>' : '';
 
   // --- выбор, какая война первой
   if (g.phase === 'warChoose') {
@@ -41,38 +51,64 @@ export function renderWarDock(box, view, ui, { move, redraw }) {
       <div class="mtop"><h2>Какая война первая?</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
       <p class="msub">Тайл на ${cellName(g.ctx.pos)} объединил царства, где сошлись лидеры сразу нескольких цветов. Остальные войны пойдут следом.</p>
       <div class="orows">${rows}</div>
-      <div class="mfoot"><div class="mnote">Пока вы не решите, партия стоит.</div></div>
+      <div class="mfoot">${undoBtn}<div class="mnote">Пока вы не решите, партия стоит.</div></div>
     </div>`;
     box.querySelectorAll('[data-idx]').forEach((b) => b.addEventListener('click', () => move(+b.dataset.idx)));
     box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
-    return true;
+    box.querySelector('#wUndo')?.addEventListener('click', undo);
+    return state;
   }
 
   // --- поддержка в войне или восстании
   const isRevolt = g.phase === 'revoltSupport';
   const k = isRevolt ? g.ctx.revolt : g.ctx.war;
   const color = isRevolt ? 0 : k.color; // в восстании поддержка храмами
-  const isAtt = k.attN === null;
+  const isAtt = k.attN === null; // решает атакующий
+  const iAtt = k.att === me;
   const myP = g.order.indexOf(me);
   const pl = g.players[myP];
-  const opp = isAtt ? k.def : k.att;
+  const opp = iAtt ? k.def : k.att;
+  const tiles = (cnt, cls = '') => Array.from({ length: cnt }, () => `<i class="mt ${cls}" style="background-image:url(${tileImg(color)})"></i>`).join('');
+  const side = (id, role, cls, board, add, total, mine, note) => `
+    <div class="sbox ${cls}${mine ? ' mine' : ''}">
+      <div class="shead">
+        <div class="stok" style="border-color:${HEX[isRevolt ? k.leaderColor : color]};background-image:url(${tokenImg(seat(id)?.hero, isRevolt ? k.leaderColor : color)})"></div>
+        <div class="sname"><span class="role">${role}</span><b>${esc(name(id))}</b></div>
+        <div class="stot">${note ? `${board}<small>+?</small>` : total}</div>
+      </div>
+      <div class="trow"><span>${isRevolt ? 'храмы рядом' : 'на поле'}</span><div class="tiles">${tiles(board)}</div></div>
+      <div class="trow"><span>из руки</span><div class="tiles add">${
+        note ? `<em>${note}</em>` : add > 0 ? tiles(add, 'sent') : mine && active ? '<em>нажмите тайлы в руке ниже</em>' : '<em>ничего</em>'}</div></div>
+    </div>`;
+
+  const title = isRevolt ? `Восстание: ${LEADER[k.leaderColor]}` : `Война за ${COLNAME[color]}`;
+  const who = iAtt ? `Вы атакуете, защищается ${esc(name(opp))}.` : `Атакует ${esc(name(opp))}, вы защищаетесь.`;
+  const cause = !isRevolt && g.ctx.unite ? `Тайл на ${cellName(g.ctx.pos)} объединил два царства. ` : '';
+  // ходящий без лидера этого цвета в войне не участвует: атакует следующий по очереди участник
+  const why = !isRevolt && k.att !== g.cur ? ` У ходящего (${esc(name(g.cur))}) нет ${COLGEN[color]} лидера в этих царствах, поэтому атакует следующий по очереди участник.` : '';
+  const strength = isRevolt ? 'Сила по храмам рядом с лидером и храмам из руки.' : `Сила по ${TILEDAT[color]}, стороны подсвечены на поле.`;
+  const top = `<div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
+    <p class="msub">${cause}${who}${why} ${strength}</p>`;
+
+  // решает соперник: видно, что уже известно обоим, своей руки и исхода здесь нет
+  if (!active) {
+    const attSide = isAtt ? side(k.att, 'атака', 'att', k.attBoard, 0, k.attBoard, iAtt, 'решает') : side(k.att, 'атака', 'att', k.attBoard, k.attN, k.attBoard + k.attN, iAtt, null);
+    const defSide = side(k.def, 'защита', 'def', k.defBoard, 0, k.defBoard, !iAtt, isAtt ? 'вы ответите следом' : 'решает');
+    box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
+      ${top}
+      <div class="sides">${attSide}${defSide}</div>
+      <div class="mfoot">${undoBtn}<div class="mnote">Ждём решения: ${esc(name(g.toMove))}.</div></div>
+    </div>`;
+    box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
+    box.querySelector('#wUndo')?.addEventListener('click', undo);
+    return state;
+  }
+
   const legalNs = legal.map((m) => m.n);
   const n = ui.chosen.size;
   const ok = legalNs.includes(n);
   const attAdd = isAtt ? n : k.attN;
   const attTot = k.attBoard + attAdd, defTot = k.defBoard + (isAtt ? 0 : n);
-  const tiles = (cnt, cls = '') => Array.from({ length: cnt }, () => `<i class="mt ${cls}" style="background-image:url(${tileImg(color)})"></i>`).join('');
-  const side = (id, role, cls, board, add, total, mine, waiting) => `
-    <div class="sbox ${cls}${mine ? ' mine' : ''}">
-      <div class="shead">
-        <div class="stok" style="border-color:${HEX[isRevolt ? k.leaderColor : color]};background-image:url(${tokenImg(seat(id)?.hero, isRevolt ? k.leaderColor : color)})"></div>
-        <div class="sname"><span class="role">${role}</span><b>${esc(name(id))}</b></div>
-        <div class="stot">${waiting ? `${board}<small>+?</small>` : total}</div>
-      </div>
-      <div class="trow"><span>${isRevolt ? 'храмы рядом' : 'на поле'}</span><div class="tiles">${tiles(board)}</div></div>
-      <div class="trow"><span>из руки</span><div class="tiles add">${
-        waiting ? '<em>ответит после вас</em>' : add > 0 ? tiles(add, 'sent') : mine ? '<em>нажмите тайлы в руке ниже</em>' : '<em>ничего</em>'}</div></div>
-    </div>`;
 
   let hand = '', idx = 0;
   for (let c = 0; c < 4; c++) for (let j = 0; j < g.hand[c]; j++, idx++) {
@@ -108,19 +144,11 @@ export function renderWarDock(box, view, ui, { move, redraw }) {
   const rule = english
     ? `Английская поддержка: ${isAtt ? 'атакующий добавляет, только если превысит защитника' : 'защитник добавляет ровно столько, чтобы сравнять'}${allowed.length ? `, сейчас можно ${allowed.join(' или ')}` : ', сейчас добавить нельзя'}.`
     : `Можно добавить от 0 до ${Math.max(...legalNs)}.`;
-  const title = isRevolt ? `Восстание: ${LEADER[k.leaderColor]}` : `Война за ${COLNAME[color]}`;
-  const who = isAtt ? `Вы атакуете, защищается ${esc(name(opp))}.` : `Атакует ${esc(name(opp))}, вы защищаетесь.`;
-  const cause = !isRevolt && g.ctx.unite ? `Тайл на ${cellName(g.ctx.pos)} объединил два царства. ` : '';
-  // ходящий без лидера этого цвета в войне не участвует: атакует следующий по очереди участник
-  const why = !isRevolt && k.att !== g.cur ? ` У ходящего (${esc(name(g.cur))}) нет ${COLGEN[color]} лидера в этих царствах, поэтому атакует следующий по очереди участник.` : '';
-  const strength = isRevolt ? 'Сила по храмам рядом с лидером и храмам из руки.' : `Сила по ${TILEDAT[color]}, стороны подсвечены на поле.`;
-
   box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
-    <div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
-    <p class="msub">${cause}${who}${why} ${strength}</p>
+    ${top}
     <div class="sides">
-      ${side(k.att, 'атака', 'att', k.attBoard, attAdd, attTot, isAtt, false)}
-      ${side(k.def, 'защита', 'def', k.defBoard, isAtt ? 0 : n, defTot, !isAtt, isAtt)}
+      ${side(k.att, 'атака', 'att', k.attBoard, attAdd, attTot, isAtt, null)}
+      ${side(k.def, 'защита', 'def', k.defBoard, isAtt ? 0 : n, defTot, !isAtt, isAtt ? 'ответит после вас' : null)}
     </div>
     <div class="myhand">
       <div class="hl2">Ваша рука, ${g.hand.reduce((a, b) => a + b, 0)} тайлов. Нажмите ${TILEACCPL[color]}, которые отправляете в поддержку:</div>
@@ -135,6 +163,7 @@ export function renderWarDock(box, view, ui, { move, redraw }) {
     <div class="orows">${rows}</div>
     ${isAtt ? '<p class="msub">Исход посчитан на случай, если защитник ничего не добавит.</p>' : ''}
     <div class="mfoot">
+      ${undoBtn}
       <button class="btn" id="wZero">Не добавлять</button>
       <button class="btn primary" id="wSend"${n > 0 && ok ? '' : ' disabled'}>${n > 0 ? `Отправить ${n} ${plural(n, color)}` : 'Выберите тайлы в руке'}</button>
       <div class="mnote">Пока вы не решите, партия стоит.</div>
@@ -149,5 +178,6 @@ export function renderWarDock(box, view, ui, { move, redraw }) {
   box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
   box.querySelector('#wZero').addEventListener('click', () => move(legal.findIndex((m) => m.n === 0)));
   box.querySelector('#wSend').addEventListener('click', () => { if (n > 0 && ok) move(legal.findIndex((m) => m.n === n)); });
-  return true;
+  box.querySelector('#wUndo')?.addEventListener('click', undo);
+  return state;
 }

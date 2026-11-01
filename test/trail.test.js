@@ -1,7 +1,8 @@
 // След хода: куда сходил соперник. Денис: тайлы появляются, и не всегда понятно, в какое место он встал.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { trailMarks, ageMarks, TRAIL_FRESH_MS } from '../public/js/trail.js';
+import { trailMarks, ageMarks, liveMarks, TRAIL_FRESH_MS } from '../public/js/trail.js';
+import { pointsText } from '../public/js/util.js';
 import { createTable, sit, setHero, setSeatCount, start, submit, undo } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
@@ -55,6 +56,40 @@ test('след: монумент лег на тайлы этого действ�
     const log = [e('tile', 1, 1, { pos, c: 0 }), e('monument', 1, 1, { tl: 50, id: 2 })];
     assert.deepEqual(trailMarks(log, 0).map((x) => [x.ev, x.pos, x.size]), [['monument', 50, 2]], String(pos));
   }
+});
+
+const emptyBoard = () => ({ tile: Array(176).fill(-1), leader: Array(176).fill(-1) });
+
+test('след: лидер проиграл конфликт, на пустой клетке рамки нет', () => {
+  const log = [
+    e('tile', 1, 1, { pos: 10, c: 0 }),
+    e('leader', 1, 2, { pos: 20, c: 2, from: 5 }),
+    e('revolt', 1, 2, { winner: 0, loser: 1 }),
+  ];
+  const board = emptyBoard();
+  board.tile[10] = 0;
+  assert.deepEqual(liveMarks(trailMarks(log, 0), board).map((x) => x.pos), [10]);
+  board.leader[20] = 6;
+  assert.deepEqual(liveMarks(trailMarks(log, 0), board).map((x) => x.pos), [10, 20], 'лидер устоял: рамка остается');
+});
+
+test('след: тайл снят войной, рамки нет; катастрофа, чудо и монумент остаются', () => {
+  const log = [e('tile', 1, 1, { pos: 10, c: 3 }), e('catastrophe', 1, 2, { pos: 3 }), e('monument', 1, 2, { tl: 50, id: 2 }), e('wonder', 1, 2, { center: 60 })];
+  const board = emptyBoard();
+  board.tile[3] = 6; // катастрофа
+  board.tile[50] = 4; // перевернутый тайл под монументом
+  board.tile[60] = 5; // клетка под чудом
+  assert.deepEqual(liveMarks(trailMarks(log, 0), board).map((x) => x.pos), [3, 50, 60]);
+});
+
+test('журнал: очки разных игроков подписаны, за монумент и чудо назван повод', () => {
+  const name = (id) => ({ 0: 'Денис', 1: 'Соня' }[id]);
+  const revolt = { seat: 0, c: 0, n: 1, why: 'revolt' }, monument = { seat: 1, c: 3, n: 1, why: 'monument' };
+  assert.deepEqual(pointsText([revolt, monument], 1, name), ['Денис +1 красный', 'Соня +1 черный за монумент']);
+  assert.deepEqual(pointsText([{ seat: 1, c: 3, n: 1, why: 'tile' }], 1, name), ['+1 черный'], 'свое очко ходившего без имени');
+  assert.deepEqual(pointsText([{ seat: 0, c: 1, n: 2, why: 'tile' }], 1, name), ['Денис +2 синий']);
+  assert.deepEqual(pointsText([{ seat: 1, c: 3, n: 1, why: 'wonder' }], 1, name), ['+1 черный за чудо']);
+  assert.deepEqual(pointsText([], 1, name), []);
 });
 
 test('свои ходы следа не дают, и он гаснет с первым действием следующего игрока', () => {

@@ -5,6 +5,7 @@ import { submit, undo, canUndo, autoConfirm, confirmDue, TableError } from '../g
 import { stateFromJSON } from '../game/serialize.js';
 import { viewFor } from '../game/view.js';
 import { legalMoves, applyMove } from '../game/vendor/engine/engine.js';
+import { warWaiting } from '../public/js/war.js';
 import { T0, started, randomStep, makeRng } from './support.js';
 
 const CONFLICT = ['warChoose', 'warSupport', 'revoltSupport'];
@@ -141,6 +142,7 @@ test('после решения не ходящего места (сокрови
       const s = stateFromJSON(t.game.state);
       const other = s.toMove !== s.cur;
       const phase = s.phase;
+      if (phase === 'treasure' && other) assert.equal(canUndo(t), false, 'сокровище выбирает другой, отменить нельзя');
       randomStep(t, r, draw);
       if (!other) continue;
       offTurn++;
@@ -169,20 +171,138 @@ test('сброс тайлов не отменяется, и после него 
   assert.equal(canUndo(t), false);
 });
 
-test('нападение (война или восстание) не отменяется', () => {
-  let found = 0;
-  for (let seed = 1; seed <= 40 && found < 3; seed++) {
-    const t = humanTurn(seed);
-    const i = findIndex(t, null, (a) => CONFLICT.includes(a.phase));
-    if (i < 0) continue;
-    const who = decider(t);
-    submit(t, who.userId, { version: t.version, index: i }, { rng: makeRng(6), now: T0 });
-    assert.equal(t.game.undo.length, 0);
-    assert.equal(canUndo(t), false);
-    assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 })), 'no-undo');
-    found++;
+/**
+ * Нападения человека в разгаре партии: { t, who, before }, нападение уже сделано.
+ * Ищем не с начала партии: в первых ходах на поле обычно только лидер бота.
+ */
+function* attacks() {
+  for (let seed = 1; seed <= 60; seed++) {
+    const t = started(seed);
+    const r = makeRng(seed + 11), draw = makeRng(seed + 12);
+    for (let k = 0; k < 900 && t.status === 'playing'; k++) {
+      const s = stateFromJSON(t.game.state);
+      if (s.phase === 'action' && s.actionNo === 1 && s.toMove === s.cur && decider(t).kind === 'human') {
+        const i = findIndex(t, null, (a) => CONFLICT.includes(a.phase));
+        if (i >= 0) {
+          const who = decider(t);
+          const before = structuredClone(t.game);
+          submit(t, who.userId, { version: t.version, index: i }, { rng: makeRng(6), now: T0 + k });
+          yield { t, who, before };
+          break;
+        }
+      }
+      randomStep(t, r, draw);
+    }
   }
-  assert.ok(found >= 1, 'нашлась позиция с нападением');
+}
+
+/** Довести бой до ответа соперника-человека; false, если у него ответа нет и бой решается сразу. */
+function toWaiting({ t, who }, now = T0 + 2000) {
+  const other = (id) => id !== who.id && t.seats.find((x) => x.id === id).kind === 'human';
+  if (decider(t).id !== who.id) return other(decider(t).id);
+  const i = findIndex(t, null, (a) => CONFLICT.includes(a.phase) && other(t.game.order[a.toMove]));
+  if (i < 0) return false;
+  submit(t, who.userId, { version: t.version, index: i }, { rng: makeRng(7), now });
+  return true;
+}
+
+function waitingFight(skip = 0) {
+  let left = skip;
+  for (const a of attacks()) {
+    if (toWaiting(a) && left-- === 0) return a;
+  }
+  return assert.fail('не нашлось ожидания ответа соперника');
+}
+
+const answer = (t, now = T0 + 3000) => {
+  const who = decider(t);
+  submit(t, who.userId, { version: t.version, index: 0 }, { rng: makeRng(8), now });
+};
+
+test('нападение можно отменить, пока никто не ответил: поле, рука и журнал как до него', () => {
+  let found = 0;
+  for (const { t, who, before } of attacks()) {
+    assert.ok(canUndo(t), 'нападение только что сделано');
+    undo(t, who.userId, { version: t.version }, { now: T0 + 500 });
+    assert.deepEqual(t.game.state, before.state);
+    assert.deepEqual(t.game.log.slice(0, before.log.length), before.log);
+    assert.equal(t.game.log.at(-1).ev, 'undo');
+    assert.equal(t.game.toMove, who.id);
+    if (++found === 4) break;
+  }
+  assert.equal(found, 4);
+});
+
+test('нападение можно отменить и после своей поддержки, пока соперник не ответил', () => {
+  for (const skip of [0, 1]) {
+    const { t, who, before } = waitingFight(skip);
+    const waiting = viewFor(t, who.userId, { now: T0 + 1000 });
+    assert.equal(waiting.game.legal, null, 'решает соперник');
+    assert.equal(waiting.game.canUndo, true, 'кнопка видна тому, кто ждет');
+    const def = decider(t);
+    assert.equal(viewFor(t, def.userId, { now: T0 + 1000 }).game.canUndo, false, 'соперник чужое действие не отменяет');
+    assert.equal(code(() => undo(t, def.userId, { version: t.version }, { now: T0 })), 'no-undo');
+    undo(t, who.userId, { version: t.version }, { now: T0 + 2000 });
+    assert.deepEqual(t.game.state, before.state, 'и фишка, и отправленные тайлы вернулись');
+    assert.equal(viewFor(t, who.userId, { now: T0 + 2000 }).game.canUndo, false, 'больше отменять нечего');
+  }
+});
+
+test('соперник ответил: нападение больше не отменить', () => {
+  const { t, who } = waitingFight();
+  answer(t);
+  assert.equal(t.game.undo.length, 0, 'снимки убраны');
+  assert.equal(canUndo(t), false);
+  assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 + 3000 })), 'no-undo');
+  assert.equal(viewFor(t, who.userId, { now: T0 + 3000 }).game.canUndo, false);
+});
+
+test('устаревшая отмена отклоняется: соперник ответил раньше', () => {
+  const { t, who } = waitingFight();
+  const seen = t.version;
+  answer(t);
+  assert.equal(code(() => undo(t, who.userId, { version: seen }, { now: T0 + 3000 })), 'stale');
+});
+
+test('время ожидания при отмене идет тому, кто решал, а не тому, кто отменил', () => {
+  const { t, who } = waitingFight();
+  const def = decider(t);
+  const mine = t.game.clock.used[who.id] || 0, theirs = t.game.clock.used[def.id] || 0, at = t.game.clock.at;
+  undo(t, who.userId, { version: t.version }, { now: at + 8000 });
+  assert.equal(t.game.clock.used[who.id] || 0, mine);
+  assert.equal(t.game.clock.used[def.id], theirs + 8000);
+});
+
+test('воюют другие: панели боя у ходящего нет, отмена остается', () => {
+  let found = 0;
+  for (let seed = 1; seed <= 60 && !found; seed++) {
+    const t = started(seed);
+    const r = makeRng(seed + 11), draw = makeRng(seed + 12);
+    for (let k = 0; k < 900 && t.status === 'playing' && !found; k++) {
+      const s = stateFromJSON(t.game.state);
+      if (s.phase === 'action' && s.toMove === s.cur && decider(t).kind === 'human') {
+        const who = decider(t);
+        const i = findIndex(t, null, (a) => {
+          const fight = a.phase === 'warSupport' ? a.ctx.war : a.phase === 'revoltSupport' ? a.ctx.revolt : null;
+          return fight && fight.att !== s.cur && fight.def !== s.cur;
+        });
+        if (i >= 0) {
+          const before = structuredClone(t.game);
+          submit(t, who.userId, { version: t.version, index: i }, { rng: makeRng(6), now: T0 + k });
+          const v = viewFor(t, who.userId, { now: T0 + k });
+          assert.equal(v.game.legal, null, 'решает не он');
+          assert.equal(v.game.canUndo, true);
+          assert.equal(warWaiting(v), false, 'кнопка отмены у него в блоке «Сейчас»');
+          undo(t, who.userId, { version: t.version }, { now: T0 + k + 1 });
+          assert.deepEqual(t.game.state, before.state);
+          found++;
+          break;
+        }
+      }
+      randomStep(t, r, draw);
+    }
+  }
+  assert.equal(found, 1, 'не нашлось боя без ходящего');
 });
 
 test('без окна подтверждения ход проходит сразу, отмена первого действия работает', () => {
@@ -197,6 +317,8 @@ test('без окна подтверждения ход проходит сра�
   const s = stateFromJSON(t.game.state);
   assert.ok(s.over || s.cur !== cur);
   assert.equal(t.game.confirmBy, null);
+  assert.equal(canUndo(t), false, 'ход перешел, отменять нечего');
+  assert.equal(t.game.undo.length, 0);
 });
 
 test('время: копится по местам, сверх времени хода отдельно, окно подтверждения не считается', () => {

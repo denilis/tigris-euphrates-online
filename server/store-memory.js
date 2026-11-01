@@ -147,6 +147,9 @@ export function memoryStore() {
     async myTables(userId) {
       return lists.get(`mine:${userId}`) || [];
     },
+    async dropMyTable(userId, code) {
+      lists.set(`mine:${userId}`, (lists.get(`mine:${userId}`) || []).filter((c) => c !== code));
+    },
 
     /** Отметка «на сайте» живет ttlMs. */
     async setPresence(id, value, ttlMs) {

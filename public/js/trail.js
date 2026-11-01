@@ -31,6 +31,11 @@ export function trailMarks(log, me) {
   return [...byCell.values()];
 }
 
+/** Отметки на занятых клетках: лидер проиграл конфликт или тайл снят войной, и рамке не на что указывать. */
+export function liveMarks(marks, board) {
+  return marks.filter((m) => m.size > 1 || board.tile[m.pos] >= 0 || board.leader[m.pos] >= 0);
+}
+
 /** Сколько мс отметка на поле. seen помнит первое появление; first: стол только открыли, вспышка не нужна. */
 export function ageMarks(marks, seen, now, first) {
   const keys = new Set(marks.map((m) => m.key));

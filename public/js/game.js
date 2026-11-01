@@ -3,16 +3,16 @@
 import { renderBoard, sealIcon, buildingIcon } from './board.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
-import { battlesIn, battleCard } from './battle.js';
+import { battlesIn, battleCard, seenAfterUndo } from './battle.js';
 import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
-import { trailMarks, ageMarks } from './trail.js';
+import { trailMarks, ageMarks, liveMarks } from './trail.js';
 import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import {
-  HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, cellName, esc, plural, copy, cells,
-  unitePos, toast,
+  HEX, RING, COLNAME, COLGEN, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, cellName, esc, plural, pointsText, copy, cells,
+  unitePos, toast, momentKey,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -25,8 +25,7 @@ function loadOwners() {
 
 function resetFor(view) {
   // новый момент партии: прежний выбор больше не к месту
-  const g = view.game;
-  const key = `${view.code}:${g.turn}:${g.actionNo}:${g.phase}:${g.toMove}`;
+  const key = momentKey(view);
   if (key === ui.key) return;
   Object.assign(ui, { key, sel: null, discard: null, confirmPass: false, monSel: null, chosen: new Set(), collapsed: false });
 }
@@ -110,6 +109,14 @@ async function move(index) {
   await ctl.act({ action: 'move', version: view.version, index });
 }
 
+/** Отмена уходит одним запросом: второй щелчок дал бы ложное «Стол уже изменился». */
+async function undoMove() {
+  if (ui.undoing) return;
+  ui.undoing = true;
+  await ctl.act({ action: 'undo', version: current.version });
+  ui.undoing = false;
+}
+
 // --- клики по полю
 
 /** Лидер на клетке i, которого можно взять щелчком по полю: те же условия, что в нижней панели. */
@@ -171,7 +178,7 @@ function boardOpts() {
 function updateTrail({ view, g, seat }) {
   const first = ui.trailCode !== view.code;
   ui.trailCode = view.code;
-  ui.trail = ageMarks(trailMarks(g.log, view.me), ui.trailSeen, Date.now(), first).map((m) => ({ ...m, hero: seat(m.actor)?.hero }));
+  ui.trail = ageMarks(liveMarks(trailMarks(g.log, view.me), g.board), ui.trailSeen, Date.now(), first).map((m) => ({ ...m, hero: seat(m.actor)?.hero }));
 }
 
 /** Запас: что еще можно построить. Перерисовывается, только когда что-то построили. */
@@ -213,10 +220,11 @@ function draw() {
   drawLog(d);
   drawHand(d);
   const dock = root.querySelector('#gDock');
-  const active = renderWarDock(dock, view, ui, { move, redraw: draw });
+  const dockState = renderWarDock(dock, view, ui, { move, redraw: draw, undo: undoMove });
   const app = root.querySelector('#game');
-  app.classList.toggle('conflict', active && !ui.collapsed);
-  app.classList.toggle('locked', active);
+  app.classList.toggle('conflict', Boolean(dockState) && !ui.collapsed);
+  app.classList.toggle('locked', dockState === 'decide'); // кто ждет, тому шапка нажимается, журнал виден после «Свернуть»
+  app.classList.toggle('waiting', dockState === 'wait');
   drawBattle(d);
   renderEnd(root.querySelector('#gEnd'), view, ctl);
 }
@@ -240,7 +248,8 @@ function closeBattle() {
 
 function drawBattle({ view, g }) {
   const box = ctl.root.querySelector('#gBattle');
-  if (ui.battleCode !== view.code) Object.assign(ui, { battleCode: view.code, battleSeen: g.log.length, battleShow: null });
+  if (ui.battleCode !== view.code) Object.assign(ui, { battleCode: view.code, battleSeen: g.log.length, battleShow: null, battleEpoch: g.logEpoch });
+  if (ui.battleEpoch !== g.logEpoch) Object.assign(ui, { battleEpoch: g.logEpoch, battleSeen: seenAfterUndo(g.log, ui.battleSeen) });
   const list = ui.battleShow != null ? battlesIn(g.log, ui.battleShow).slice(0, 1) : battlesIn(g.log, ui.battleSeen).slice(-2);
   const key = list.map((b) => b.i).join(',');
   if (box.dataset.key === key) return; // не перерисовываем: иначе показ боя начнется заново
@@ -323,6 +332,7 @@ function drawNow(d) {
   } else if (!decides) {
     const bot = seat(g.toMove)?.kind === 'bot';
     body = `<p>${waitingText(d)}</p>${bot ? '<p class="wait">Бот думает<i></i><i></i><i></i></p>' : ''}`;
+    if (g.canUndo) buttons = btn('undo', 'Отменить действие'); // тайл ходящего столкнул других игроков
   } else if (warActive(view)) {
     title = 'Решаете вы';
     body = '<p>Открыто окно конфликта, партия ждет вашего решения.</p>';
@@ -375,7 +385,7 @@ function drawNow(d) {
   const clk = g.clock && !g.over && !g.stopped ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
   ctl.root.querySelector('#gNowHead').innerHTML = title + clk;
   el.innerHTML = `${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
-  holdNowOpen(decides);
+  holdNowOpen(Boolean(decides || g.canUndo));
   el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.act)));
   el.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', () => {
     ui.monSel = b.dataset.mon === 'wonder' ? 'wonder' : +b.dataset.mon;
@@ -391,7 +401,7 @@ function onNow(a) {
   else if (a === 'skip') move(legal.findIndex((m) => m.type === 'pass'));
   else if (a === 'withdraw') move(legal.findIndex((m) => m.type === 'withdraw' && m.color === ui.sel.color));
   else if (a === 'confirm') move(legal.findIndex((m) => m.type === 'confirm'));
-  else if (a === 'undo') ctl.act({ action: 'undo', version: view.version });
+  else if (a === 'undo') undoMove();
   else if (a === 'discardYes') {
     const counts = [0, 0, 0, 0];
     for (const k of ui.discard) counts[handColors(view)[k]]++;
@@ -554,14 +564,14 @@ function drawLog({ g, seat }) {
       case 'building': line.parts.push(`здание «${TILE[e.c]}»`); line.cell = e.pos; break;
       case 'treasure': line.parts.push(`${name(e.seat)}: сокровище`); break;
       case 'leaderReturned': line.parts.push(`${LEADER[e.c]} (${name(e.seat)}) уходит с поля`); break;
-      case 'score': line.pts.push(e.seat === line.actor ? `+${e.n} ${COLNAME[e.c]}` : `${name(e.seat)} +${e.n} ${COLNAME[e.c]}`); break;
+      case 'score': line.pts.push(e); break;
       case 'gameOver': line.parts.push('конец партии'); break;
       default: break;
     }
   }
   ctl.root.querySelector('#gLog').innerHTML = lines.reverse().slice(0, 120)
     .filter((l) => l.parts.length || l.pts.length)
-    .map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><span><u>${esc(name(l.actor))}:</u> ${esc([...l.parts, ...l.pts].join(', '))}${
+    .map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><span><u>${esc(name(l.actor))}:</u> ${esc([...l.parts, ...pointsText(l.pts, l.actor, name)].join(', '))}${
       l.battles.map((i) => ` <button class="lb" data-battle="${i}" title="Показать бой">бой</button>`).join('')}</span></li>`).join('');
 }
 

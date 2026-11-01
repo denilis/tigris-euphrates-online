@@ -34,6 +34,20 @@ export function faceBg(who, c = 0) {
 export const cellName = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
 
 const PLURAL = [['храм', 'храма', 'храмов'], ['ферма', 'фермы', 'ферм'], ['рынок', 'рынка', 'рынков'], ['поселение', 'поселения', 'поселений']];
+const POINT_WHY = { monument: ' за монумент', wonder: ' за чудо' };
+
+/** Очки строки журнала: если они у разных игроков, подписан каждый, иначе очко ходившего читается как чужое. */
+export function pointsText(pts, actor, name) {
+  const mixed = pts.some((p) => p.seat !== actor);
+  return pts.map((p) => `${mixed ? `${name(p.seat)} ` : ''}+${p.n} ${COLNAME[p.c]}${POINT_WHY[p.why] || ''}`);
+}
+
+/** Момент партии: при его смене прежний выбор игрока больше не к месту. Отмена тоже новый момент. */
+export const momentKey = (view) => {
+  const g = view.game;
+  return `${view.code}:${g.turn}:${g.actionNo}:${g.phase}:${g.toMove}:${g.logEpoch}`;
+};
+
 export function plural(n, c) {
   const f = PLURAL[c], m10 = n % 10, m100 = n % 100;
   return m10 === 1 && m100 !== 11 ? f[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? f[1] : f[2];

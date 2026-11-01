@@ -21,6 +21,12 @@ export function battlesIn(log, from = 0) {
   return out;
 }
 
+/** Отмена укорачивает журнал: метка «просмотрено до» не должна остаться за его новым хвостом. */
+export function seenAfterUndo(log, seen) {
+  const last = log.map((e) => e.ev).lastIndexOf('undo');
+  return last < 0 ? seen : Math.min(seen, last + 1);
+}
+
 const STEP = 0.18; // секунды между тайлами из руки
 
 /** Карточка одного боя. Тайлы из руки выкладываются по очереди: сначала атака, потом защита. */

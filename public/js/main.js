@@ -8,7 +8,7 @@ import { renderStats } from './stats.js';
 import { renderRules } from './rules.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
-import { freeSeat } from './online.js';
+import { freeSeat, deleteQuestion, canDelete } from './online.js';
 import { esc, toast, copy, faceBg } from './util.js';
 
 const app = document.getElementById('app');
@@ -109,6 +109,21 @@ function renderActivate() {
 
 // --- мои столы
 
+/** Удалить стол, где партия не начиналась, и обновить список на экране. */
+let removing = false;
+async function removeTable(t, done) {
+  if (removing || !confirm(deleteQuestion(t, session.get()?.user?.name))) return;
+  removing = true; // повторное нажатие не должно спрашивать и удалять второй раз
+  try {
+    await api('POST', `admin/tables/${t.code}/delete`);
+    toast('Стол удален');
+  } catch (e) { toast(e.message); }
+  removing = false;
+  done();
+}
+
+const seatName = (s) => s.name || (s.kind === 'bot' ? 'Бот' : 'свободно');
+
 const STATUS = { lobby: 'собирается', playing: 'идет партия', over: 'партия окончена', closed: 'партия завершена досрочно' };
 
 async function renderHome() {
@@ -142,19 +157,28 @@ async function renderHome() {
     const c = app.querySelector('#joinCode').value.trim().toUpperCase();
     if (c) go(`#/t/${c}`);
   });
-  try {
-    const list = await api('GET', 'tables');
-    const el = app.querySelector('#tables');
-    if (!el) return;
-    el.innerHTML = list.length ? list.map((t) => {
-      const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
-      return `<a class="titem${myTurn ? ' turn' : ''}" href="#/t/${esc(t.code)}">
-        <b>${esc(t.title || t.code)}</b>
-        <span>${t.seats.map((s) => esc(s.name || (s.kind === 'bot' ? 'Бот' : 'свободно'))).join(', ')}</span>
-        <small>${STATUS[t.status] || ''}${myTurn ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
-      </a>`;
-    }).join('') : '<p class="muted">Пока нет столов. Создайте новый или откройте стол по коду из приглашения.</p>';
-  } catch (e) { toast(e.message); }
+  const load = async () => {
+    try {
+      const list = await api('GET', 'tables');
+      const el = app.querySelector('#tables');
+      if (!el) return;
+      el.innerHTML = list.length ? list.map((t, i) => {
+        const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
+        const del = canDelete(t, session.get()?.user);
+        return `<a class="titem${myTurn ? ' turn' : ''}${del ? ' del' : ''}" href="#/t/${esc(t.code)}">
+          <b>${esc(t.title || t.code)}</b>
+          <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
+          <small>${STATUS[t.status] || ''}${myTurn ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
+          ${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}
+        </a>`;
+      }).join('') : '<p class="muted">Пока нет столов. Создайте новый или откройте стол по коду из приглашения.</p>';
+      el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => {
+        e.preventDefault(); // кнопка внутри ссылки на стол
+        removeTable(list[+b.dataset.del], load);
+      }));
+    } catch (e) { toast(e.message); }
+  };
+  await load();
 }
 
 // --- стол
@@ -190,7 +214,8 @@ function openTable(code) {
     if (takeAccepted(code)) sitInvited(v);
   }, (e) => {
     if (e.status === 404) {
-      app.innerHTML = `<div class="page">${topbar('')}<main class="pcard"><h1>Стола ${esc(code)} нет</h1><p>Проверьте код в приглашении.</p><a class="btn" href="#/">К моим столам</a></main></div>`;
+      closePicker(); // стол могли удалить, пока было открыто окно выбора игроков
+      app.innerHTML = `<div class="page">${topbar('')}<main class="pcard"><h1>Стола ${esc(code)} нет</h1><p>Возможно, его удалили. Проверьте код в приглашении.</p><a class="btn" href="#/">К моим столам</a></main></div>`;
       bindTopbar();
       watcher?.stop();
     } else if (e.code !== 'network') toast(e.message);
@@ -206,6 +231,9 @@ async function renderAdmin() {
     <form id="newUser" class="join"><input id="newName" placeholder="Имя игрока" maxlength="30" aria-label="Имя игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
     <div id="newCode"></div>
     <div id="users" class="tables"></div>
+    <h2>Открытые столы всех игроков</h2>
+    <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока. Идущие и сыгранные партии удалить нельзя.</p>
+    <div id="openTables" class="tables"></div>
   </main></div>`;
   bindTopbar();
   const showCode = (name, code) => {
@@ -243,6 +271,19 @@ async function renderAdmin() {
       } catch (e) { toast(e.message); }
     }));
   };
+  const loadTables = async () => {
+    const list = await api('GET', 'admin/tables');
+    const box = app.querySelector('#openTables');
+    if (!box) return;
+    box.innerHTML = list.length ? list.map((t, i) => `<div class="titem static">
+      <a href="#/t/${esc(t.code)}"><b>${esc(t.title || t.code)}</b></a>
+      <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
+      <span class="acts"><button class="btn sm" data-del="${i}" type="button">Удалить</button></span>
+    </div>`).join('') : '<p class="muted">Открытых столов нет.</p>';
+    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => removeTable(list[+b.dataset.del], reloadTables)));
+  };
+  const reloadTables = () => loadTables().catch((e) => toast(e.message));
+  reloadTables();
   app.querySelector('#newUser').addEventListener('submit', async (e) => {
     e.preventDefault();
     const $ = (id) => app.querySelector(id);
