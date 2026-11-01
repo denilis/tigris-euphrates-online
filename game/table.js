@@ -22,6 +22,8 @@ const fail = (code, message, status) => {
 
 export const HEROES = ['lion', 'bull', 'bow', 'pot'];
 const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётся герой с конца, людям остаётся лев
+// постоянные герои компании (просьба Дениса 01.11): выбор по умолчанию, в лобби его можно сменить
+const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['влад', 'lion']]);
 // turnSeconds — время на ход, сверх него таймер уходит в минус (ход не отнимается);
 // confirmSeconds — окно, в котором сделанный ход еще можно отменить, потом он завершается сам
 // (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
@@ -88,6 +90,15 @@ function makeBot(t, id) {
   return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
 
+/** Посадить человека с его героем: бот уступает и берет другого, героя другого человека не отбираем. */
+function giveOwnHero(t, seat) {
+  const hero = OWN_HEROES.get(String(seat.name).trim().toLowerCase());
+  const holder = t.seats.find((s) => s.hero === hero);
+  if (!hero || holder?.kind === 'human') return;
+  seat.hero = hero;
+  if (holder) holder.hero = botHero(t);
+}
+
 const DAY_FORMAT = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric' });
 
 /** День для названия стола по Москве: 30.10.2026. */
@@ -102,6 +113,7 @@ export function createTable({ code, title = null, host, now }) {
     hostUserId: host.userId, options: { ...DEFAULT_OPTIONS }, seats: [], game: null, next: null,
   };
   t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, avatar: host.avatar || null, hero: null }, emptyHuman(1), emptyHuman(2));
+  giveOwnHero(t, t.seats[0]);
   t.seats.push(makeBot(t, 3));
   nameBots(t);
   return t;
@@ -118,6 +130,7 @@ export function sit(t, user, seatId, now) {
   seat.userId = user.userId;
   seat.name = user.name;
   seat.avatar = user.avatar || null;
+  giveOwnHero(t, seat);
   touch(t, now);
 }
 

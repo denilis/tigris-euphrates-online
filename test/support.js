@@ -1,6 +1,6 @@
 // Общие помощники тестов стола (не тест: node --test запускает файл, тестов в нём нет).
 import { makeRng } from '../game/vendor/engine/rng.js';
-import { createTable, sit, setHero, start, submit, submitSeat, botDue, seatOfUser } from '../game/table.js';
+import { createTable, sit, start, submit, submitSeat, botDue, seatOfUser } from '../game/table.js';
 import { stateFromJSON } from '../game/serialize.js';
 import { legalMoves } from '../game/vendor/engine/engine.js';
 
@@ -11,15 +11,12 @@ export const USERS = {
 };
 export const T0 = 1_800_000_000_000;
 
-/** Стол «Денис, Андрей, Влад и бот» с героями, ещё в лобби. */
+/** Стол «Денис, Андрей, Влад и бот», ещё в лобби. Герои свои: кувшин, лук и лев, у бота бык. */
 export function lobby(code = 'TEST01', options) {
   const t = createTable({ code, host: USERS.denis, now: T0 });
   if (options) Object.assign(t.options, options);
   sit(t, USERS.andrey, 1, T0);
   sit(t, USERS.vlad, 2, T0);
-  setHero(t, USERS.denis.userId, 0, 'lion', T0);
-  setHero(t, USERS.andrey.userId, 1, 'bull', T0);
-  setHero(t, USERS.vlad.userId, 2, 'bow', T0);
   return t;
 }
 

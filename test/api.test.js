@@ -37,9 +37,6 @@ async function startedTable(req, P) {
   const post = (who, body) => req('POST', `tables/${code}`, { body, token: who.token });
   await post(P.andrey, { action: 'sit', seat: 1 });
   await post(P.vlad, { action: 'sit', seat: 2 });
-  await post(P.denis, { action: 'hero', seat: 0, hero: 'lion' });
-  await post(P.andrey, { action: 'hero', seat: 1, hero: 'bull' });
-  await post(P.vlad, { action: 'hero', seat: 2, hero: 'bow' });
   const s = await post(P.vlad, { action: 'start' });
   assert.equal(s.status, 200, JSON.stringify(s.body));
   return code;
@@ -205,9 +202,6 @@ for (const [name, mk] of [['память', () => memoryStore()], ['Upstash', () 
     const post = (p, body) => req('POST', `tables/${c2}`, { body, token: p.token });
     await post(P.denis, { action: 'sit', seat: 1 });
     await post(P.andrey, { action: 'sit', seat: 2 });
-    await post(P.vlad, { action: 'hero', seat: 0, hero: 'bow' });
-    await post(P.denis, { action: 'hero', seat: 1, hero: 'lion' });
-    await post(P.andrey, { action: 'hero', seat: 2, hero: 'bull' });
     const v2 = (await post(P.andrey, { action: 'start' })).body;
     const worst = Math.max(...res.seats.map((x) => x.place));
     const losers = res.seats.filter((x) => x.place === worst).map((x) => ({ 0: 'u-admin', 1: P.andrey.user.id, 2: P.vlad.user.id, 3: 'bot' }[x.seatId]));
@@ -215,6 +209,20 @@ for (const [name, mk] of [['память', () => memoryStore()], ['Upstash', () 
     assert.ok(losers.includes(newIds[v2.game.order[0]]), 'первым ходит проигравший прошлой партии');
   });
 }
+
+test('герой: запрос меняет героя в виде стола, занятого взять нельзя', async () => {
+  const { req } = setup();
+  const P = await people(req);
+  const { body: { code } } = await req('POST', 'tables', { token: P.denis.token });
+  const post = (who, body) => req('POST', `tables/${code}`, { body, token: who.token });
+  await post(P.andrey, { action: 'sit', seat: 1 });
+  const r = await post(P.denis, { action: 'hero', seat: 0, hero: 'lion' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.seats.find((s) => s.id === 0).hero, 'lion');
+  const taken = await post(P.andrey, { action: 'hero', seat: 1, hero: 'lion' });
+  assert.equal(taken.status, 409);
+  assert.equal(taken.body.error, 'hero-taken');
+});
 
 test('реванш: двое нажали, стол один; он у всех в «моих столах»', async () => {
   const { req } = setup();

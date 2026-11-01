@@ -104,7 +104,7 @@ test('герои: двух одинаковых за столом нет, сво
   assert.equal(code(() => setHero(t, USERS.andrey.userId, 2, 'pot', T0)), 'not-your-seat');
   assert.equal(code(() => setHero(t, USERS.andrey.userId, 3, 'pot', T0)), 'not-host');
   assert.equal(code(() => setHero(t, USERS.andrey.userId, 1, 'dragon', T0)), 'bad-hero');
-  setHero(t, USERS.andrey.userId, 1, 'bull', T0); // свой же герой повторно: можно
+  setHero(t, USERS.andrey.userId, 1, 'bow', T0); // свой же герой повторно: можно
   const free = ['lion', 'bull', 'bow', 'pot'].find((h) => !t.seats.some((s) => s.hero === h));
   if (free) setHero(t, USERS.denis.userId, 3, free, T0);
 });
@@ -139,17 +139,19 @@ test('ручная очерёдность: хост переставляет м�
 });
 
 test('старт: нужны занятые места и герои; начать может любой сидящий человек', () => {
-  const t = createTable({ code: 'ABC123', host: USERS.denis, now: T0 });
-  assert.equal(code(() => start(t, USERS.denis.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
-  sit(t, USERS.andrey, 1, T0);
-  sit(t, USERS.vlad, 2, T0);
-  setHero(t, USERS.denis.userId, 0, 'lion', T0);
-  setHero(t, USERS.andrey.userId, 1, 'bull', T0);
-  assert.equal(code(() => start(t, USERS.andrey.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
-  setHero(t, USERS.vlad.userId, 2, 'bow', T0);
+  // гости без постоянных героев: выбирают сами
+  const [a, b, c] = ['Аня', 'Боря', 'Вера'].map((name, i) => ({ userId: `u-${i}`, name }));
+  const t = createTable({ code: 'ABC123', host: a, now: T0 });
+  assert.equal(code(() => start(t, a.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
+  sit(t, b, 1, T0);
+  sit(t, c, 2, T0);
+  setHero(t, a.userId, 0, 'lion', T0);
+  setHero(t, b.userId, 1, 'bull', T0);
+  assert.equal(code(() => start(t, b.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
+  setHero(t, c.userId, 2, 'bow', T0);
   assert.equal(code(() => start(t, 'u-stranger', { last: null, rng: makeRng(1), now: T0 })), 'not-seated');
   const v = t.version;
-  start(t, USERS.vlad.userId, { last: null, rng: makeRng(1), now: T0 });
+  start(t, c.userId, { last: null, rng: makeRng(1), now: T0 });
   assert.equal(t.status, 'playing');
   assert.ok(t.version > v);
   assert.equal(t.game.order.length, 4);

@@ -2,7 +2,7 @@
 // → { status, body }. Функция Vercel (api/index.js) и локальный сервер (dev/server.js) — тонкие
 // переходники. Запись стола атомарна по версии: два хода в один стол не портят партию.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readSession, signSession, normalizeCode, codeHash, newCode, newTableCode } from './auth.js';
+import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode } from './auth.js';
 import {
   createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
   start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay,
@@ -13,6 +13,7 @@ import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
+import { telegram, arrived, invited, started } from './telegram.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -31,13 +32,18 @@ const LOCK_MS = 30000;
 const SESSION_MAX_MS = 90 * 24 * 3600 * 1000; // потом нужен код снова
 const ACTIVATE_LIMIT = 20; // попыток входа с одного адреса
 const ACTIVATE_WINDOW_MS = 10 * 60 * 1000; // за это время
+const PIN_LIMIT = 30, PIN_WINDOW_MS = 24 * 3600 * 1000; // короткий код легко подобрать: попытки считаются со всех адресов вместе
 const TITLE_DAY_MS = 3 * 24 * 3600 * 1000; // счетчик столов за день живет дольше самого дня
 // кто на сайте. Пульс идет часто, а скрипт Upstash считает команду за каждый вызов внутри, поэтому
 // чтение это один MGET, а отметка обновляется реже: 10 человек укладываются в бесплатный лимит
 const ONLINE_MS = 90 * 1000; // без отметки дольше человек уже не на сайте
 const MARK_EVERY_MS = 45 * 1000;
+const AWAY_MS = 15 * 60 * 1000; // отметка живет дольше: отлучка короче этого не новое появление для чата
 const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульса, чтобы не читать его каждый раз
 const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
+const CHAT_QUIET_MS = 3 * 3600 * 1000; // сообщения, о которых никто не просил: не чаще на одного игрока
+const CHAT_CALL_MS = 3 * 60 * 1000; // повторно позвать в чат с того же стола
+const CHAT_CALLS = 3; // и всего от одного игрока за это время: новые столы не обходят замок стола
 const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
@@ -47,10 +53,12 @@ const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), ma
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const letterId = () => randomBytes(6).toString('hex');
 
-export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {} }) {
+export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, tg = telegram(env) }) {
   const secret = env.SESSION_SECRET, pepper = env.CODE_PEPPER;
   const adminCode = normalizeCode(env.ADMIN_CODE || '');
   const adminHash = adminCode && pepper ? Buffer.from(codeHash(adminCode, pepper)) : null;
+  const adminPin = String(env.ADMIN_PIN || '').trim();
+  const adminPinHash = isPin(adminPin) && pepper ? Buffer.from(pinHash(adminPin, pepper)) : null;
   const botBudget = Number(env.BOT_BUDGET_MS) || 20000;
 
   // --- вход
@@ -73,26 +81,41 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   const needAdmin = (u) => u.admin || http(403, 'not-admin', 'Это может сделать только администратор');
   const needMain = (u) => u.id === ADMIN_ID || http(403, 'not-main', 'Это может сделать только главный администратор');
 
+  async function mainAdmin() {
+    let user = await store.getUser(ADMIN_ID);
+    if (!user) {
+      user = { id: ADMIN_ID, name: env.ADMIN_NAME || 'Денис', admin: true, revoked: false, createdAt: now() };
+      await store.putUser(user);
+    }
+    return user;
+  }
+
+  /** Вход коротким кодом: лимит общий, длинный код при подборе продолжает работать. */
+  async function pinEntry(raw) {
+    const pin = typeof raw === 'string' ? raw.trim() : '';
+    if (!adminPinHash || !isPin(pin) || pin.length !== adminPin.length) return null;
+    if ((await store.hit('pin', PIN_WINDOW_MS)) > PIN_LIMIT) http(429, 'too-many', 'Слишком много попыток входа, попробуйте завтра');
+    return timingSafeEqual(Buffer.from(pinHash(pin, pepper)), adminPinHash) ? mainAdmin() : null;
+  }
+
   async function activate(body, ip) {
     if (!secret || !pepper) http(500, 'not-configured', 'Сервер не настроен');
     // каждая попытка считается, верная тоже: подбирать код под лимитом не получится
     if ((await store.hit(`act:${ip || 'unknown'}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) {
       http(429, 'too-many', 'Слишком много попыток входа, подождите несколько минут');
     }
-    const code = normalizeCode(body.code);
-    if (!code) http(401, 'bad-code', 'Код не подошёл');
-    const hash = Buffer.from(codeHash(code, pepper));
-    let user;
-    if (adminHash && hash.length === adminHash.length && timingSafeEqual(hash, adminHash)) {
-      user = await store.getUser(ADMIN_ID);
-      if (!user) {
-        user = { id: ADMIN_ID, name: env.ADMIN_NAME || 'Денис', admin: true, revoked: false, createdAt: now() };
-        await store.putUser(user);
+    let user = await pinEntry(body.code);
+    if (!user) {
+      const code = normalizeCode(body.code);
+      if (!code) http(401, 'bad-code', 'Код не подошёл');
+      const hash = Buffer.from(codeHash(code, pepper));
+      if (adminHash && hash.length === adminHash.length && timingSafeEqual(hash, adminHash)) {
+        user = await mainAdmin();
+      } else {
+        const id = await store.userIdByCode(hash.toString());
+        user = id && (await store.getUser(id));
+        if (!user || user.revoked) http(401, 'bad-code', 'Код не подошёл');
       }
-    } else {
-      const id = await store.userIdByCode(hash.toString());
-      user = id && (await store.getUser(id));
-      if (!user || user.revoked) http(401, 'bad-code', 'Код не подошёл');
     }
     return { token: signSession(user.id, secret, now(), user.sv || 0), user: publicUser(user) };
   }
@@ -229,6 +252,42 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { tour: publicTour(tour), players: tour.players.map((p) => p.name), avatars: tour.players.map(face), games: tourGames(tour, tours, await store.listHistory()) };
   }
 
+  // --- чат Telegram
+
+  /** Сообщение, о котором никто не просил: одно за окно на ключ. Сбой здесь не мешает пульсу и партии. */
+  async function tellOnce(key, message) {
+    if (!tg.on) return;
+    try {
+      if ((await store.hit(`tg:${key}`, CHAT_QUIET_MS)) === 1) await tg.say(message);
+    } catch (e) {
+      console.error('telegram', e.message);
+    }
+  }
+
+  /** Начало партии в чат. С ботами играют и для проверки, такие сообщения реже. */
+  function announce(t, u) {
+    const news = started(t);
+    return news.solo ? tellOnce(`solo:${u.id}`, news) : tg.say(news);
+  }
+
+  /** Позвать чат за стол. Замок снимается при сбое, чтобы отправку можно было сразу повторить. */
+  async function callChat(u, body) {
+    if (!tg.on) http(503, 'no-chat', 'Чат Telegram не подключён');
+    const { doc: t } = await load(String(body.code));
+    if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
+    if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Позвать может только тот, кто за столом');
+    const free = t.seats.filter((s) => s.kind === 'human' && !s.userId).length;
+    if (!free) http(409, 'no-seats', 'Свободных мест нет');
+    if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) http(429, 'too-many', 'Слишком часто, подождите пару минут');
+    const key = `tg:${t.code}`, token = letterId();
+    if (!(await store.lock(key, token, CHAT_CALL_MS))) http(429, 'too-many', 'Уже позвали, подождите пару минут');
+    if (!(await tg.say(invited(u.name, t, free)))) {
+      await store.unlock(key, token);
+      http(502, 'chat-failed', 'Не удалось отправить в чат, попробуйте позже');
+    }
+    return { ok: true };
+  }
+
   // --- кто на сайте и приглашения
 
   let people = { at: -Infinity, byId: new Map() };
@@ -254,8 +313,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const mine = marks.find((m) => m?.id === u.id);
     const avatar = u.avatar || null;
     if (!mine || mine.busy !== busy || mine.avatar !== avatar || t - mine.at >= MARK_EVERY_MS) {
-      await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, ONLINE_MS);
+      await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, AWAY_MS);
     }
+    if (!mine || t - mine.at > AWAY_MS) await tellOnce(`on:${u.id}`, arrived(u.name));
     return {
       me: publicUser(u),
       online: marks.filter((m) => m && m.id !== u.id && t - m.at <= ONLINE_MS).map(({ id, name, avatar: a, busy: b }) => ({ id, name, avatar: a || null, busy: b })),
@@ -352,6 +412,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const humans = t.seats.filter((s) => s.kind === 'human').map((s) => s.userId);
       const last = t.options.order === 'loser' && humans.every(Boolean) ? await store.companyLast(companyKey(humans)) : null;
       start(t, u.id, { last, now: now() });
+      return { commit: () => announce(t, u) };
     },
     async rematch(t, u) {
       if (t.next) return;
@@ -370,6 +431,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return {
         commit: async () => {
           for (const s of created.seats) if (s.kind === 'human') await store.addMyTable(s.userId, created.code);
+          await announce(created, u); // реванш сразу идет партией, отдельного start у него нет
         },
         rollback: () => store.delTable(created.code),
       };
@@ -426,7 +488,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const seg = String(path || '').split('/').filter(Boolean);
     const [head, ...rest] = seg;
     if (method === 'GET' && head === 'ping') {
-      return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.commit.slice(0, 7), store: store.kind };
+      return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.commit.slice(0, 7), store: store.kind, chat: tg.on };
     }
     if (method === 'POST' && head === 'activate') return activate(body, ip);
     if (method === 'GET' && head === 'avatar') return avatarFile(rest.join('/'));
@@ -440,6 +502,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
+    if (method === 'POST' && head === 'invite' && rest[0] === 'chat') return callChat(u, body);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
     if (method === 'GET' && head === 'stats') return stats(query);

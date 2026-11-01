@@ -7,6 +7,7 @@ import { cryptoRng } from '../game/random.js';
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 12;
 const CODE_MIN = 8, CODE_MAX = 20; // границы для кода, вписанного вручную
+const PIN_MIN = 4;
 // русские буквы, которые на клавиатуре выглядят как латинские в коде
 const CYR = { А: 'A', В: 'B', С: 'C', Е: 'E', Н: 'H', К: 'K', М: 'M', О: 'O', Р: 'P', Т: 'T', Х: 'X', У: 'Y' };
 // код ABCD-EFGH-JK23 внутри текста: мессенджер копирует сообщение целиком, вместе с именем
@@ -36,6 +37,14 @@ export function normalizeCode(input) {
 
 export function codeHash(code, pepper) {
   return createHmac('sha256', pepper).update(normalizeCode(code) || '').digest('hex');
+}
+
+/** Короткий код: только цифры и короче обычного кода, поэтому с кодом игрока он не совпадет. */
+export const isPin = (text) => /^[0-9]+$/.test(text) && text.length >= PIN_MIN && text.length < CODE_MIN;
+
+/** Отпечаток короткого кода: normalizeCode такой не пропускает, и codeHash дал бы один отпечаток на все короткие коды. */
+export function pinHash(pin, pepper) {
+  return createHmac('sha256', pepper).update(`pin:${pin}`).digest('hex');
 }
 
 const b64 = (s) => Buffer.from(s).toString('base64url');

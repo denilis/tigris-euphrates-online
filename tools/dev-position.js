@@ -3,7 +3,7 @@
 // очко за чудо, выбор войны.
 //   node tools/dev-position.js <phase> <userId Дениса> <userId Андрея> <userId Влада> [порт] [префикс кода]
 // Стол с таким кодом уже есть — сервер его не заменит: возьмите другой префикс.
-import { createTable, sit, setHero, start, submit, submitSeat, botDue } from '../game/table.js';
+import { createTable, sit, start, submit, submitSeat, botDue } from '../game/table.js';
 import { stateFromJSON } from '../game/serialize.js';
 import { legalMoves } from '../game/vendor/engine/engine.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
@@ -15,8 +15,7 @@ for (let seed = 1; seed <= 2000; seed++) {
   const code = prefix + String(seed).padStart(3, '0').slice(-3);
   const t = createTable({ code, host: users[0], now: Date.now() });
   sit(t, users[1], 1, 0);
-  sit(t, users[2], 2, 0);
-  ['lion', 'bull', 'bow'].forEach((h, i) => setHero(t, users[i].userId, i, h, 0));
+  sit(t, users[2], 2, 0); // герои свои: стол ставит их сам
   start(t, users[0].userId, { rng: makeRng(seed), now: Date.now() });
   const r = makeRng(seed + 7), draw = makeRng(seed + 9);
   for (let k = 0; k < 3000 && t.status === 'playing'; k++) {

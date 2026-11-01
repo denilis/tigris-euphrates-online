@@ -100,7 +100,7 @@ export function renderLobby(root, view, { act }) {
     <div class="lcard">
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
-      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button></div>
+      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canInvite ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
       ${canInvite ? `<h2>Пригласить (свободно мест: ${freeSeats})</h2><section class="online" id="lInvite"></section>` : ''}
 
       <h2>Места и герои</h2>
@@ -137,6 +137,15 @@ export function renderLobby(root, view, { act }) {
 
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
+  root.querySelector('#lChat')?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      await api('POST', 'invite/chat', { code: view.code });
+      toast('Приглашение отправлено в чат');
+    } catch (ex) { toast(ex.message); }
+    const b = root.querySelector('#lChat'); // пока шел запрос, лобби могло перерисоваться
+    if (b) b.disabled = false;
+  });
   mountTour(root.querySelector('#lTour'), view, act);
   if (canInvite) {
     mountOnline(root.querySelector('#lInvite'), {
