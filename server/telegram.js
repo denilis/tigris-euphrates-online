@@ -8,7 +8,8 @@ const tableUrl = (t) => `${SITE}#/t/${t.code}`;
 const tableName = (t) => t.title || t.code;
 
 export function telegram(env, { fetchFn = fetch, waitMs = WAIT_MS } = {}) {
-  const token = env.TELEGRAM_BOT_TOKEN, chat = env.TELEGRAM_CHAT_ID;
+  // значения вставляют руками в панели Vercel: лишний перевод строки не должен ломать адрес
+  const token = String(env.TELEGRAM_BOT_TOKEN || '').trim(), chat = String(env.TELEGRAM_CHAT_ID || '').trim();
   const on = Boolean(token && chat && env.VERCEL_ENV === 'production');
 
   /** Отправить сообщение с кнопкой-ссылкой. Текст простой: имена не разбираются как разметка. */
@@ -38,6 +39,13 @@ export const arrived = (name) => ({ text: `${name} сейчас на сайте`
 export const invited = (name, t, free) => ({
   text: `${name} зовёт на партию\nСтол ${tableName(t)}, свободно мест: ${free}`,
   button: 'Сесть за стол',
+  url: tableUrl(t),
+});
+
+/** Хозяин посадил выбранных людей за стол. */
+export const called = (name, t, names) => ({
+  text: `${name} зовёт за стол: ${names.join(', ')}\nСтол ${tableName(t)}`,
+  button: 'Открыть стол',
   url: tableUrl(t),
 });
 

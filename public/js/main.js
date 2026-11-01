@@ -2,7 +2,7 @@
 // Адреса: #/ — мои столы, #/t/КОД — стол, #/rules — правила (без входа), #/stats — статистика,
 // #/admin — коды (администраторы).
 import { api, session, watchTable } from './api.js';
-import { renderLobby } from './lobby.js';
+import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
 import { renderRules } from './rules.js';
@@ -15,12 +15,40 @@ const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
 let watcher = null;
 
+const bgToggle = document.getElementById('bgToggle');
+const STILL_KEY = 'tigris.backdrop.still'; // выбор на этом устройстве: неподвижная картинка вместо ролика
+const BACK_SPEED = 0.8, BACK_VIDEO = '/media/zastavka.mp4';
+
+/** Сохраненный выбор; без него неподвижная картинка у тех, кто просил систему меньше анимации. */
+function loadStill() {
+  try {
+    const saved = localStorage.getItem(STILL_KEY);
+    if (saved !== null) return saved === '1';
+  } catch { /* приватный режим: живем без памяти */ }
+  return matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+let still = loadStill(), backdropOn = true;
+backdrop.defaultPlaybackRate = BACK_SPEED; // при загрузке playbackRate сбрасывается к этому значению
+backdrop.playbackRate = BACK_SPEED;
+
 /** Ролик-заставка на всех экранах, кроме партии. Не запустился, остается картинка из poster. */
 function setBackdrop(on) {
-  backdrop.hidden = !on;
-  if (!on || matchMedia('(prefers-reduced-motion: reduce)').matches) backdrop.pause();
-  else backdrop.play().catch(() => {});
+  backdropOn = on;
+  backdrop.hidden = !on || still;
+  bgToggle.hidden = !on;
+  bgToggle.textContent = still ? 'Включить видео' : 'Остановить видео';
+  document.body.classList.toggle('stillbg', on && still);
+  if (!on || still) return backdrop.pause();
+  if (!backdrop.src) backdrop.src = BACK_VIDEO; // ролик качаем, только когда он нужен
+  backdrop.play().catch(() => {});
 }
+
+bgToggle.addEventListener('click', () => {
+  still = !still;
+  try { localStorage.setItem(STILL_KEY, still ? '1' : '0'); } catch { /* приватный режим: живем без памяти */ }
+  setBackdrop(backdropOn);
+});
 
 const go = (hash) => { location.hash = hash; };
 
@@ -154,7 +182,7 @@ function openTable(code) {
   let mode = null;
   watcher = watchTable(code, (v) => {
     const m = v.status === 'lobby' ? 'lobby' : 'game';
-    if (m !== mode) { app.innerHTML = ''; mode = m; }
+    if (m !== mode) { closePicker(); app.innerHTML = ''; mode = m; }
     setBusy(v.status === 'playing' && v.me != null);
     setBackdrop(m === 'lobby');
     if (m === 'lobby') renderLobby(app, v, { act, go });
@@ -237,6 +265,7 @@ async function renderAdmin() {
 function route() {
   watcher?.stop();
   watcher = null;
+  closePicker();
   setBackdrop(true);
   const s = session.get();
   const h = location.hash.replace(/^#\/?/, '');

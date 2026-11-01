@@ -1,8 +1,9 @@
 // Лобби стола: места, герои, боты, очередность и правила. Менять правила, места и ботов
 // может хозяин стола; героя выбирает тот, кто сидит; начать может любой сидящий.
 import { HEROES, HERONAME, STYLES, tokenImg, faceBg, esc, copy, toast } from './util.js';
-import { api } from './api.js';
-import { mountOnline } from './presence.js';
+import { api, session } from './api.js';
+import { onlineNow } from './presence.js';
+import { pickList } from './online.js';
 import { fitTours, tourChoice } from './season.js';
 
 const ORDER = [
@@ -11,9 +12,6 @@ const ORDER = [
   { id: 'custom', t: 'Вручную', d: 'Хозяин стола расставляет места, порядок сверху вниз.' },
 ];
 const COUNTING = { none: 'не считает', approx: 'примерно', exact: 'точно' };
-
-// выбранные для приглашения: лобби перерисовывается с каждым опросом, выбор должен пережить это
-const picked = new Set();
 
 // турниры меняются редко: лобби перерисовывается часто, а список обновляем раз в 20 секунд
 const TOURS_MS = 20000;
@@ -50,6 +48,53 @@ function mountTour(box, view, act) {
   }).catch(() => {});
 }
 
+/** Закрыть окно выбора: стола под ним больше нет на экране. */
+export const closePicker = () => document.querySelector('dialog.picker')?.close();
+
+/**
+ * Окно выбора игроков. Живет в body: лобби под ним перерисовывается с каждым опросом стола.
+ * По щелчку мимо не закрывается: второй щелчок двойного нажатия закрыл бы его сразу.
+ */
+function openPicker(view, act, seat) {
+  const free = view.seats.filter((s) => !s.taken).length;
+  const box = document.createElement('dialog');
+  box.className = 'picker';
+  box.innerHTML = `<div class="pickin">
+    <div class="pickhead"><h2>Кого позвать (свободно мест: ${free})</h2><button class="linkbtn" data-close type="button">Закрыть</button></div>
+    <div class="picklist" id="pickList"><p class="muted">Загружаю...</p></div>
+    <button class="btn primary" data-go type="button" disabled>Пригласить выбранных</button>
+  </div>`;
+  const list = box.querySelector('#pickList'), go = box.querySelector('[data-go]');
+  const chosen = new Set();
+  let sending = false;
+  const paint = () => {
+    list.querySelectorAll('input').forEach((c) => { c.disabled = sending || (!c.checked && chosen.size >= free); });
+    go.disabled = sending || !chosen.size;
+  };
+  box.addEventListener('close', () => box.remove());
+  box.querySelector('[data-close]').addEventListener('click', closePicker);
+  list.addEventListener('change', (e) => {
+    if (e.target.checked) chosen.add(e.target.value);
+    else chosen.delete(e.target.value);
+    paint();
+  });
+  go.addEventListener('click', async () => {
+    sending = true;
+    paint();
+    const v = await act({ action: 'invitePeople', ids: [...chosen], seat });
+    box.close();
+    if (v) toast(v.chat ? 'Игроки за столом, сообщение ушло в чат' : 'Игроки за столом, в чат сообщение не ушло');
+  });
+  document.body.append(box);
+  box.showModal();
+  api('GET', 'people').then((people) => {
+    const rows = pickList(people, view, onlineNow(), session.get()?.user?.id);
+    list.innerHTML = rows.map((p) => `<label class="pickrow"><input type="checkbox" value="${esc(p.id)}">${p.avatar ? `<i class="face" style="background-image:${faceBg(p)}"></i>` : ''}<span>${esc(p.name)}</span><small>${p.note}</small></label>`).join('')
+      || '<p class="muted">Все игроки уже за столом.</p>';
+    paint();
+  }).catch((e) => { list.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+}
+
 export function renderLobby(root, view, { act }) {
   const host = view.isHost, me = view.me;
   const freeSeats = view.seats.filter((s) => !s.taken).length;
@@ -69,8 +114,11 @@ export function renderLobby(root, view, { act }) {
     }).join('');
     let who;
     if (s.kind === 'bot') who = `<b>${esc(s.name || 'Бот')}</b>`;
-    else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}`;
-    else who = me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : '<span class="muted">Свободно</span>';
+    else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}${host && !mine ? `<button class="linkbtn" data-unseat="${s.id}">Убрать</button>` : ''}`;
+    else {
+      const free = `${me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : ''}${host ? `<button class="btn sm" data-people="${s.id}">Выбрать игрока</button>` : ''}`;
+      who = free || '<span class="muted">Свободно</span>';
+    }
     const kindSwitch = host && !(s.kind === 'human' && s.taken)
       ? `<span class="seg sm"><button data-kind="human" data-seat="${s.id}" class="${s.kind === 'human' ? 'on' : ''}">Человек</button><button data-kind="bot" data-seat="${s.id}" class="${s.kind === 'bot' ? 'on' : ''}">Бот</button></span>` : '';
     const move = host && view.options.order === 'custom'
@@ -101,7 +149,6 @@ export function renderLobby(root, view, { act }) {
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canInvite ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
-      ${canInvite ? `<h2>Пригласить (свободно мест: ${freeSeats})</h2><section class="online" id="lInvite"></section>` : ''}
 
       <h2>Места и герои</h2>
       ${host ? `<div class="opts"><span class="muted">Мест за столом</span><span class="seg">${[2, 3, 4].map((n) => `<button data-count="${n}" class="${view.seats.length === n ? 'on' : ''}">${n}</button>`).join('')}</span></div>` : ''}
@@ -147,17 +194,8 @@ export function renderLobby(root, view, { act }) {
     if (b) b.disabled = false;
   });
   mountTour(root.querySelector('#lTour'), view, act);
-  if (canInvite) {
-    mountOnline(root.querySelector('#lInvite'), {
-      button: 'Пригласить',
-      selected: picked,
-      exclude: (p) => view.seats.some((s) => s.name === p.name), // уже за столом
-      onSend: async (ids) => {
-        const r = await api('POST', 'invite', { code: view.code, to: ids });
-        toast(r.sent ? `Приглашений отправлено: ${r.sent}` : 'Некого приглашать');
-      },
-    });
-  }
+  on('[data-people]', 'click', (el) => openPicker(view, act, +el.dataset.people));
+  on('[data-unseat]', 'click', (el) => act({ action: 'unseat', seat: +el.dataset.unseat }));
   on('[data-sit]', 'click', (el) => act({ action: 'sit', seat: +el.dataset.sit }));
   on('[data-leave]', 'click', () => act({ action: 'leave' }));
   on('[data-hero]', 'click', (el) => act({ action: 'hero', seat: +el.dataset.seat, hero: el.dataset.hero }));

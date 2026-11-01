@@ -20,6 +20,17 @@ export function arrivals(prev, next) {
 /** Приглашения, на которые на этом устройстве еще не ответили. */
 export const pendingInvites = (inbox, handled) => inbox.filter((m) => m.kind === 'invite' && !handled.has(m.id));
 
+/** Кого можно позвать за стол: себя и сидящих нет, кто на сайте выше. online: null, пока пульса не было. */
+export function pickList(people, view, online, me = null) {
+  const seated = new Set(view.seats.map((s) => s.name));
+  const mark = new Map((online || []).map((p) => [p.id, p.busy]));
+  const rank = (p) => (!mark.has(p.id) ? 2 : mark.get(p.id) ? 1 : 0);
+  return people
+    .filter((p) => p.id !== me && !seated.has(p.name))
+    .map((p) => ({ ...p, note: !mark.has(p.id) ? '' : mark.get(p.id) ? 'в партии' : 'на сайте' }))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ru'));
+}
+
 /** Номер первого свободного места для человека или null. */
 export function freeSeat(view) {
   return view.seats.find((s) => s.kind === 'human' && !s.taken)?.id ?? null;

@@ -4,7 +4,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode } from './auth.js';
 import {
-  createTable, sit, leave, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
+  createTable, sit, leave, seatPeople, unseat, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
   start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
@@ -13,7 +13,7 @@ import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, arrived, invited, started } from './telegram.js';
+import { telegram, arrived, invited, called, started } from './telegram.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -288,6 +288,18 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { ok: true };
   }
 
+  /** Сообщение о посаженных за стол. Люди уже сидят, поэтому сбой здесь только возвращает false. */
+  async function chatPeople(u, t, names) {
+    if (!tg.on) return false;
+    try {
+      if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) return false;
+      return await tg.say(called(u.name, t, names));
+    } catch (e) {
+      console.error('telegram', e.message);
+      return false;
+    }
+  }
+
   // --- кто на сайте и приглашения
 
   let people = { at: -Infinity, byId: new Map() };
@@ -323,6 +335,34 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     };
   }
 
+  /** Все, кого можно позвать: для окна выбора в лобби. */
+  async function peopleList() {
+    const known = await knownPeople(true);
+    return [...known.values()].filter((x) => !x.revoked).map((x) => ({ id: x.id, name: x.name, avatar: x.avatar || null }));
+  }
+
+  /** Записи выбранных людей; чужой или отозванный номер отклоняет весь выбор. */
+  async function inviteesOf(ids, u) {
+    const list = [...new Set(Array.isArray(ids) ? ids : [])];
+    if (!list.length || list.length > 4) http(400, 'bad-invite', 'Выберите, кого пригласить');
+    const known = await knownPeople(true);
+    return list.map((id) => {
+      const p = known.get(id);
+      if (!p || p.revoked || p.id === u.id) http(400, 'bad-invite', 'Этого игрока нельзя пригласить');
+      return p;
+    });
+  }
+
+  /** Отказ по письму letter освобождает только то место, на которое посадили этим письмом. */
+  async function giveUpSeat(code, u, letter) {
+    for (let k = 0; k < 3; k++) {
+      const cur = await store.getTable(code);
+      if (!cur || cur.doc.status !== 'lobby' || seatOfUser(cur.doc, u.id)?.invited !== letter) return;
+      leave(cur.doc, u.id, now());
+      if (await store.putTable(cur.doc, cur.version, meta(cur.doc))) return;
+    }
+  }
+
   async function invite(u, body) {
     if (!Array.isArray(body.to) || !body.to.length || body.to.length > 12) http(400, 'bad-invite', 'Выберите, кого пригласить');
     const { doc: t } = await load(String(body.code));
@@ -344,6 +384,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     await store.dropLetter(u.id, m.id, INVITE_MS);
     if (m.kind === 'invite' && !body.accept) {
       await store.pushInbox(m.fromId, { id: letterId(), kind: 'declined', from: u.name, title: m.title, at: now() }, INVITE_MS);
+      if (m.seated) await giveUpSeat(m.code, u, m.id);
     }
     return { ok: true };
   }
@@ -399,6 +440,25 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   const ACTIONS = {
     sit: (t, u, b) => sit(t, { userId: u.id, name: u.name, avatar: u.avatar }, b.seat, now()),
     leave: (t, u) => leave(t, u.id, now()),
+    unseat: (t, u, b) => unseat(t, u.id, b.seat, now()),
+    async invitePeople(t, u, b) {
+      const chosen = await inviteesOf(b.ids, u);
+      const seated = chosen.map((p) => ({ userId: p.id, name: p.name, avatar: p.avatar, letter: letterId() }));
+      seatPeople(t, u.id, seated, now(), b.seat);
+      return {
+        commit: async () => {
+          for (const p of seated) {
+            try {
+              await store.addMyTable(p.userId, t.code);
+              await store.pushInbox(p.userId, { id: p.letter, kind: 'invite', seated: true, from: u.name, fromId: u.id, code: t.code, title: t.title || t.code, at: now() }, INVITE_MS);
+            } catch (e) {
+              console.error('invite', e.message); // люди уже за столом: сбой письма не отменяет посадку
+            }
+          }
+          return { chat: await chatPeople(u, t, seated.map((p) => p.name)) };
+        },
+      };
+    },
     hero: (t, u, b) => setHero(t, u.id, b.seat, b.hero, now()),
     options: (t, u, b) => setOptions(t, u.id, b.options || {}, now()),
     seatCount: (t, u, b) => setSeatCount(t, u.id, b.n, now()),
@@ -448,10 +508,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       await hooks?.rollback?.();
       http(409, 'stale', 'Стол уже изменился, обновите');
     }
-    await hooks?.commit?.();
+    const extra = await hooks?.commit?.(); // поля для ответа, например ушло ли сообщение в чат
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
-    return viewFor(t, u.id, { now: now() });
+    return { ...viewFor(t, u.id, { now: now() }), ...extra };
   }
 
   /**
@@ -505,6 +565,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'invite' && rest[0] === 'chat') return callChat(u, body);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
+    if (method === 'GET' && head === 'people') return peopleList();
     if (method === 'GET' && head === 'stats') return stats(query);
     if (method === 'GET' && head === 'tournaments') return toursInfo();
     if (method === 'POST' && head === 'tournaments') return newTour(u, body);

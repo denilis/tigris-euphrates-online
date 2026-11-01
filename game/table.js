@@ -85,7 +85,7 @@ function nameBots(t) {
     s.name = `Бот ${BOT_NAMES[s.bot.style]}${n > 1 ? ` ${n}` : ''}`;
   }
 }
-const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, avatar: null, hero: null });
+const emptyHuman = (id) => ({ id, kind: 'human', userId: null, name: null, avatar: null, hero: null, invited: null });
 function makeBot(t, id) {
   return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
@@ -140,9 +140,41 @@ export function leave(t, userId, now) {
   Object.assign(seat, emptyHuman(seat.id));
   // ушёл хост: стол переходит к следующему сидящему человеку
   if (userId === t.hostUserId) {
-    const next = t.seats.find((s) => s.kind === 'human' && s.userId);
+    // кого позвали, того может не быть на сайте: стол остался бы без хозяина под рукой
+    const next = t.seats.find((s) => s.kind === 'human' && s.userId && !s.invited);
     if (next) t.hostUserId = next.userId;
   }
+  touch(t, now);
+}
+
+/**
+ * Хозяин сажает выбранных людей на свободные места, начиная с firstSeat. При отказе стол
+ * не записывается, частичная посадка не страшна. invited: номер письма, по которому можно отказаться.
+ */
+export function seatPeople(t, hostId, users, now, firstSeat = null) {
+  needLobby(t);
+  needHost(t, hostId);
+  if (!users.length) fail('bad-invite', 'Выберите, кого пригласить');
+  const free = t.seats.filter((s) => s.kind === 'human' && !s.userId);
+  if (users.length > free.length) fail('no-seats', 'Свободных мест меньше, чем выбрано игроков', 409);
+  const at = free.findIndex((s) => s.id === firstSeat);
+  if (at > 0) free.unshift(...free.splice(at, 1));
+  users.forEach((u, i) => {
+    if (seatOfUser(t, u.userId)) fail('already-seated', `${u.name} уже за столом`, 409);
+    sit(t, u, free[i].id, now);
+    free[i].invited = u.letter || true;
+  });
+  t.hostUserId = hostId; // sit отдает пустой стол севшему, а хозяин здесь тот, кто зовет
+}
+
+/** Хозяин снимает человека с места, пока партия не началась. */
+export function unseat(t, hostId, seatId, now) {
+  needLobby(t);
+  needHost(t, hostId);
+  const seat = seatById(t, seatId);
+  if (seat.kind !== 'human' || !seat.userId) fail('seat-empty', 'На этом месте никого нет', 409);
+  if (seat.userId === hostId) fail('is-host', 'Себя можно убрать кнопкой «Встать»', 409);
+  Object.assign(seat, emptyHuman(seat.id));
   touch(t, now);
 }
 

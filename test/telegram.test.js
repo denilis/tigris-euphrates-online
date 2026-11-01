@@ -58,6 +58,17 @@ test('отправка: простой текст с кнопкой-ссылко
   assert.deepEqual(calls[0].body.reply_markup, { inline_keyboard: [[{ text: 'Открыть', url: SITE }]] });
 });
 
+test('отправка: пробелы и перевод строки вокруг значений не портят адрес', async () => {
+  const calls = [];
+  const fetchFn = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  await telegram({ ...LIVE, TELEGRAM_BOT_TOKEN: ' 123:SECRET\n', TELEGRAM_CHAT_ID: ' -100500 ' }, { fetchFn }).say({ text: 'x', button: 'y', url: SITE });
+  assert.equal(calls[0].url, 'https://api.telegram.org/bot123:SECRET/sendMessage');
+  assert.equal(calls[0].body.chat_id, '-100500');
+});
+
 test('отправка: только на основном сайте и только при полной настройке', async () => {
   const fetchFn = async () => assert.fail('в сеть ходить нельзя');
   const off = [

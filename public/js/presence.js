@@ -79,11 +79,15 @@ function onInviteClick(e) {
   paintInvites();
   api('POST', 'invites/answer', { id: m.id, accept: Boolean(yes) }).catch(() => {});
   if (no) return;
-  st.accepted.add(m.code);
+  if (!m.seated) st.accepted.add(m.code); // кого посадили, тому садиться не надо, а убранного письмо не вернет
+
   const hash = `#/t/${m.code}`;
   if (location.hash === hash) window.dispatchEvent(new Event('hashchange')); // уже на этом столе: перечитать и сесть
   else location.hash = hash;
 }
+
+/** Кто сейчас на сайте по последнему пульсу; null, пока пульса не было. */
+export const onlineNow = () => st.online;
 
 /** Приняли приглашение за этот стол? Ответ дается один раз. */
 export const takeAccepted = (code) => st.accepted.delete(code);
@@ -120,22 +124,22 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /**
- * Список людей на сайте с выбором. selected живет у вызывающего: экран перерисовывается
- * с каждым опросом стола, выбор не должен пропадать. onSend(ids) получает выбранных.
+ * Список людей на сайте с выбором. onSend(ids) получает выбранных.
  */
-export function mountOnline(el, { button, count = false, exclude = () => false, selected = new Set(), onSend }) {
+export function mountOnline(el, { button, count = false, onSend }) {
+  const selected = new Set();
   const paint = () => {
     if (!el.isConnected) {
       st.listeners.delete(paint);
       return;
     }
-    const list = (st.online || []).filter((p) => !exclude(p));
+    const list = st.online || [];
     const head = count ? `<div class="ohead">Сейчас на сайте: ${(st.online?.length || 0) + 1}</div>` : '';
     const face = (p) => (p.avatar ? `<i class="face" style="background-image:${faceBg(p)}"></i>` : '');
     const rows = list.map((p) => (p.busy
       ? `<div class="oitem">${face(p)}<span class="oname">${esc(p.name)}</span><small>в партии</small></div>`
       : `<label class="oitem"><input type="checkbox" data-pick="${esc(p.id)}" ${selected.has(p.id) ? 'checked' : ''}>${face(p)}<span class="oname">${esc(p.name)}</span></label>`)).join('');
-    const empty = !st.online ? 'Смотрю, кто на сайте...' : st.online.length ? 'Все, кто на сайте, уже за столом.' : 'Кроме вас сейчас никого нет.';
+    const empty = st.online ? 'Кроме вас сейчас никого нет.' : 'Смотрю, кто на сайте...';
     el.innerHTML = `${head}${rows || `<p class="muted small">${empty}</p>`}
       ${rows ? `<button class="btn sm" data-send ${selected.size ? '' : 'disabled'}>${button}</button>` : ''}`;
   };
