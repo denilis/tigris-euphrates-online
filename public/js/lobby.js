@@ -97,8 +97,8 @@ function openPicker(view, act, seat) {
 
 export function renderLobby(root, view, { act }) {
   const host = view.isHost, me = view.me;
-  const freeSeats = view.seats.filter((s) => !s.taken).length;
-  const canInvite = (me != null || host) && freeSeats > 0;
+  // в чат можно звать, пока есть свободное место или другой человек за столом
+  const canChat = (me != null || host) && view.seats.some((s) => s.kind === 'human' && s.id !== me);
   const ready = view.seats.every((s) => s.taken && s.hero);
   const canStart = ready && (me != null || host);
   const heroOwner = (h) => view.seats.find((s) => s.hero === h);
@@ -148,7 +148,7 @@ export function renderLobby(root, view, { act }) {
     <div class="lcard">
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
-      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canInvite ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
+      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
 
       <h2>Места и герои</h2>
       ${host ? `<div class="opts"><span class="muted">Мест за столом</span><span class="seg">${[2, 3, 4].map((n) => `<button data-count="${n}" class="${view.seats.length === n ? 'on' : ''}">${n}</button>`).join('')}</span></div>` : ''}

@@ -6,7 +6,8 @@ import { memoryStore } from '../server/store-memory.js';
 import { telegram, arrived, invited, started, SITE } from '../server/telegram.js';
 
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
-const LIVE = { VERCEL_ENV: 'production', TELEGRAM_BOT_TOKEN: '123:SECRET', TELEGRAM_CHAT_ID: '-100500' };
+const TOKEN = '123456789:SECRET-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const LIVE = { VERCEL_ENV: 'production', TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_CHAT_ID: '-100500' };
 const MINUTE = 60 * 1000, HOUR = 60 * MINUTE;
 
 /** Подставной Telegram: запоминает сообщения. fail: отвечать отказом. */
@@ -50,7 +51,7 @@ test('отправка: простой текст с кнопкой-ссылко
   const ok = await telegram(LIVE, { fetchFn }).say({ text: 'Привет <b>', button: 'Открыть', url: SITE });
   assert.equal(ok, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://api.telegram.org/bot123:SECRET/sendMessage');
+  assert.equal(calls[0].url, `https://api.telegram.org/bot${TOKEN}/sendMessage`);
   assert.equal(calls[0].init.method, 'POST');
   assert.equal(calls[0].body.chat_id, '-100500');
   assert.equal(calls[0].body.text, 'Привет <b>');
@@ -58,15 +59,33 @@ test('отправка: простой текст с кнопкой-ссылко
   assert.deepEqual(calls[0].body.reply_markup, { inline_keyboard: [[{ text: 'Открыть', url: SITE }]] });
 });
 
-test('отправка: пробелы и перевод строки вокруг значений не портят адрес', async () => {
-  const calls = [];
-  const fetchFn = async (url, init) => {
-    calls.push({ url, body: JSON.parse(init.body) });
-    return { ok: true, status: 200, json: async () => ({ ok: true }) };
-  };
-  await telegram({ ...LIVE, TELEGRAM_BOT_TOKEN: ' 123:SECRET\n', TELEGRAM_CHAT_ID: ' -100500 ' }, { fetchFn }).say({ text: 'x', button: 'y', url: SITE });
-  assert.equal(calls[0].url, 'https://api.telegram.org/bot123:SECRET/sendMessage');
-  assert.equal(calls[0].body.chat_id, '-100500');
+test('отправка: лишний текст вокруг токена не портит адрес', async () => {
+  const pasted = [
+    ` ${TOKEN}
+`,
+    `bot${TOKEN}`,
+    `Use this token to access the HTTP API: ${TOKEN} Keep your token secure`,
+    `https://api.telegram.org/bot${TOKEN}/getMe`,
+  ];
+  for (const value of pasted) {
+    const calls = [];
+    const fetchFn = async (url, init) => {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    };
+    const tg = telegram({ ...LIVE, TELEGRAM_BOT_TOKEN: value, TELEGRAM_CHAT_ID: ' -100500 ' }, { fetchFn });
+    assert.equal(tg.on, true, value);
+    await tg.say({ text: 'x', button: 'y', url: SITE });
+    assert.equal(calls[0].url, `https://api.telegram.org/bot${TOKEN}/sendMessage`, value);
+    assert.equal(calls[0].body.chat_id, '-100500');
+  }
+});
+
+test('отправка: значение не похоже на токен, чат считается не подключенным', async () => {
+  const fetchFn = async () => assert.fail('в сеть ходить нельзя');
+  for (const value of ['123:SECRET', TOKEN.slice(0, 20), 'SECRET-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'токен']) {
+    assert.equal(telegram({ ...LIVE, TELEGRAM_BOT_TOKEN: value }, { fetchFn }).on, false, value);
+  }
 });
 
 test('отправка: только на основном сайте и только при полной настройке', async () => {
@@ -322,6 +341,19 @@ async function ready(s, denis, andrey) {
   }
   return { code, start: () => post(denis, { action: 'start' }) };
 }
+
+test('позвать в чат: стол заполнен людьми, сообщение называет их', async () => {
+  const s = setup();
+  const { denis, andrey } = await pair(s);
+  const { code } = (await s.req('POST', 'tables', { token: denis.token })).body;
+  const post = (who, body) => s.req('POST', `tables/${code}`, { body, token: who.token });
+  await post(denis, { action: 'seatCount', n: 2 });
+  await post(andrey, { action: 'sit', seat: 1 });
+  const r = await s.req('POST', 'invite/chat', { body: { code }, token: denis.token });
+  assert.equal(r.status, 200);
+  assert.match(s.tg.sent.at(-1).text, /^Денис зовёт за стол: Андрей/);
+  assert.equal(s.tg.sent.at(-1).url, `${SITE}#/t/${code}`);
+});
 
 test('партия началась: сообщение со ссылкой, у партий людей без ограничения', async () => {
   const s = setup();

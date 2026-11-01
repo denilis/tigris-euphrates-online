@@ -276,12 +276,15 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const { doc: t } = await load(String(body.code));
     if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
     if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Позвать может только тот, кто за столом');
-    const free = t.seats.filter((s) => s.kind === 'human' && !s.userId).length;
-    if (!free) http(409, 'no-seats', 'Свободных мест нет');
+    const humans = t.seats.filter((s) => s.kind === 'human');
+    const free = humans.filter((s) => !s.userId).length;
+    const others = humans.filter((s) => s.userId && s.userId !== u.id).map((s) => s.name);
+    if (!free && !others.length) http(409, 'no-seats', 'Свободных мест нет');
     if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) http(429, 'too-many', 'Слишком часто, подождите пару минут');
     const key = `tg:${t.code}`, token = letterId();
     if (!(await store.lock(key, token, CHAT_CALL_MS))) http(429, 'too-many', 'Уже позвали, подождите пару минут');
-    if (!(await tg.say(invited(u.name, t, free)))) {
+    // стол полон: мест не предлагаем, а зовем тех, кого за него посадили
+    if (!(await tg.say(free ? invited(u.name, t, free) : called(u.name, t, others)))) {
       await store.unlock(key, token);
       http(502, 'chat-failed', 'Не удалось отправить в чат, попробуйте позже');
     }

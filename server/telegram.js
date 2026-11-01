@@ -1,6 +1,7 @@
 // Сообщения в чат компании через бота Telegram. Отправка не должна мешать игре: say не бросает
 // ошибок и ждет недолго. Пишет только основной сайт, превью и локальный сервер молчат.
 const WAIT_MS = 2500;
+const TOKEN = /\d{5,}:[\w-]{30,}/; // номер бота, двоеточие и длинный ключ
 
 export const SITE = 'https://tigris-euphrates-online.vercel.app/';
 
@@ -8,8 +9,9 @@ const tableUrl = (t) => `${SITE}#/t/${t.code}`;
 const tableName = (t) => t.title || t.code;
 
 export function telegram(env, { fetchFn = fetch, waitMs = WAIT_MS } = {}) {
-  // значения вставляют руками в панели Vercel: лишний перевод строки не должен ломать адрес
-  const token = String(env.TELEGRAM_BOT_TOKEN || '').trim(), chat = String(env.TELEGRAM_CHAT_ID || '').trim();
+  // значения вставляют руками в панели Vercel, вместе с токеном часто попадает лишний текст;
+  // без токена в значении чат не подключен, и /api/ping это покажет
+  const token = TOKEN.exec(String(env.TELEGRAM_BOT_TOKEN))?.[0], chat = String(env.TELEGRAM_CHAT_ID || '').trim();
   const on = Boolean(token && chat && env.VERCEL_ENV === 'production');
 
   /** Отправить сообщение с кнопкой-ссылкой. Текст простой: имена не разбираются как разметка. */
