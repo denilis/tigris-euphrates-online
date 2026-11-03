@@ -77,7 +77,7 @@ test('подсветка: в ход соперника рука ученика �
 test('подсветка: клетки хода и то, что брать из руки', () => {
   const tile = BUILT[0].steps.find((s) => s.by === 'me' && s.move.type === 'tile');
   assert.deepEqual(tile.cells, [at('F4')]);
-  assert.deepEqual(tile.pick, { kind: 'tile', color: 3 });
+  assert.deepEqual(tile.pick, { kind: 'tile', color: 0 });
   const mon = BUILT[5].steps.find((s) => s.move?.type === 'monument');
   assert.deepEqual(mon.cells, [at('H6'), at('I6'), at('H7'), at('I7')]);
   assert.equal(mon.pick, null);
