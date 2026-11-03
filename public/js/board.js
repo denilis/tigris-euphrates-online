@@ -114,26 +114,16 @@ export function trailSVG(marks) {
 
 // --- статичный слой: рамка, подписи, песок, река, сетка (меняется только с картой)
 let staticKey = null, staticSvg = '';
-function staticLayer(river) {
-  const key = river.join(',');
+function staticLayer(river, boardType = 'standard') {
+  const key = `${boardType}:${river.join(',')}`;
   if (key === staticKey) return staticSvg;
-  let rects = '';
-  for (const i of river) {
-    const x = cx(i), y = cy(i), gx = i % W, gy = i / W | 0;
-    // у края поля клетки реки вытянуты наружу, чтобы край не скруглялся
-    const x0 = gx === 0 ? x - 30 : x - 0.5, y0 = gy === 0 ? y - 30 : y - 0.5;
-    const x1 = gx === W - 1 ? x + C + 30 : x + C + 0.5, y1 = gy === H - 1 ? y + C + 30 : y + C + 0.5;
-    rects += `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="#fff"/>`;
-  }
+  const mapFile = `/img/board/${boardType}.png`;
+  const mapScale = C / 88;
+  const mapX = f1(G - 64 * mapScale), mapY = f1(G - 28 * mapScale);
+  const mapW = f1(1536 * mapScale), mapH = f1(1024 * mapScale);
   let s = `<defs>
-    <filter id="goo" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -13"/></filter>
-    <filter id="goo2" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -6"/></filter>
-    <filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4"/><feColorMatrix type="matrix" values="0 0 0 0 0.32 0 0 0 0 0.22 0 0 0 0 0.10 1.6 0 0 0 -0.62"/></filter>
-    <filter id="mottle" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="3" seed="9"/><feColorMatrix type="matrix" values="0 0 0 0 0.55 0 0 0 0 0.40 0 0 0 0 0.18 1.4 0 0 0 -0.55"/></filter>
-    <filter id="ripple" x="0" y="0" width="100%" height="100%"><feTurbulence type="turbulence" baseFrequency="0.012 0.09" numOctaves="2" seed="2"/><feColorMatrix type="matrix" values="0 0 0 0 0.85 0 0 0 0 0.93 0 0 0 0 1 0 0 2.2 0 -0.95"/></filter>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/></filter>
     <filter id="shadow2" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
-    <linearGradient id="water" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a8db5"/><stop offset="1" stop-color="#2c6488"/></linearGradient>
     <radialGradient id="gold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
@@ -143,8 +133,6 @@ function staticLayer(river) {
     <image id="tlcat" width="${C - 6}" height="${C - 6}" href="${catImg}" preserveAspectRatio="xMidYMid slice"/>
     <image id="tlun" width="${C - 6}" height="${C - 6}" href="${uniteImg}" preserveAspectRatio="xMidYMid slice"/>
     ${HEROES.flatMap((h) => [0, 1, 2, 3].map((c) => `<image id="tk_${h}_${c}" width="44" height="44" href="${tokenImg(h, c)}"/>`)).join('')}
-    <mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo)">${rects}</g></mask>
-    <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo2)">${rects}</g></mask>
   </defs>`;
   s += `<rect x="1" y="1" width="${VW - 2}" height="${VH - 2}" rx="8" fill="#14110e" stroke="#4a3b2b"/>`;
   for (let x = 0; x < W; x++) s += `<text x="${G + x * C + C / 2}" y="${G - 7}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${String.fromCharCode(65 + x)}</text>`;
@@ -152,11 +140,7 @@ function staticLayer(river) {
   const R = `x="${G}" y="${G}" width="${W * C}" height="${H * C}"`;
   s += `<g clip-path="url(#boardClip)">
     <rect ${R} fill="#d6bd88"/>
-    <rect ${R} filter="url(#mottle)" opacity=".55"/>
-    <rect ${R} filter="url(#grain)" opacity=".5"/>
-    <rect ${R} fill="#a88a55" mask="url(#bankM)"/>
-    <rect ${R} fill="url(#water)" mask="url(#riverM)"/>
-    <g mask="url(#riverM)"><rect ${R} filter="url(#ripple)" opacity=".55"/></g>
+    <image href="${mapFile}" x="${mapX}" y="${mapY}" width="${mapW}" height="${mapH}" preserveAspectRatio="none"/>
   </g>`;
   let grid = '';
   for (let x = 1; x < W; x++) grid += `M${G + x * C} ${G}V${G + H * C}`;
@@ -183,14 +167,15 @@ function uniteMark(x, y) {
  * conflict { k, kind, myExtra, me }, flash (клетка из журнала),
  * unite (тайл объединения, пока идут войны: не входит ни в одно царство, рисуется тайлом объединения).
  */
-export function renderBoard(svg, g, heroOf, opts = {}) {
+export function renderBoard(svg, g, heroOf, opts = {}, boardType = 'standard') {
   const b = g.board;
   // статичный слой (песок, река, картинки в defs) ставится один раз на карту: картинки не
   // создаются заново при каждой перерисовке и не мигают
-  const key = g.river.join(',');
+  const mapType = boardType === 'advanced' ? 'advanced' : 'standard';
+  const key = `${mapType}:${g.river.join(',')}`;
   if (svg.dataset.key !== key) {
     svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
-    svg.innerHTML = `<g>${staticLayer(g.river)}</g><g class="dyn"></g>`;
+    svg.innerHTML = `<g>${staticLayer(g.river, mapType)}</g><g class="dyn"></g>`;
     svg.dataset.key = key;
   }
   let s = '';

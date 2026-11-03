@@ -218,7 +218,7 @@ function draw() {
   const ob = root.querySelector('#gOwners');
   ob.textContent = ui.owners ? 'Метки: вкл' : 'Метки: выкл';
   ob.setAttribute('aria-pressed', String(ui.owners));
-  renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts());
+  renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts(), view.options.board);
   drawPlayers(d);
   drawStock(d);
   drawNow(d);
