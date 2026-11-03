@@ -11,11 +11,11 @@ import { fakeUpstash } from './fake-upstash.js';
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
 
 test('настройки по умолчанию и защита от мусора', () => {
-  const base = { side: 0, left: false, order: BLOCKS, shut: [] };
+  const base = { side: 0, left: false, handSide: false, order: BLOCKS, shut: [] };
   for (const bad of [null, undefined, 5, 'x', []]) assert.deepEqual(cleanLayout(bad), base);
   assert.deepEqual(cleanLayout({ side: 9999, left: 'да', order: ['log'], shut: ['чужое', 'log'] }), { ...base, shut: ['log'] });
   assert.equal(cleanLayout({ side: 300.5 }).side, 0);
-  const good = { side: 400, left: true, order: ['log', 'now', 'stock', 'players'], shut: ['stock'] };
+  const good = { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['stock'] };
   assert.deepEqual(cleanLayout(good), good);
 });
 
@@ -49,9 +49,10 @@ test('кнопка организатора: с ботами сдаться, с 
 });
 
 test('сервер принимает только форму настроек', () => {
-  assert.deepEqual(cleanPrefs({ side: 400, left: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'], лишнее: 'x'.repeat(5000) }),
-    { side: 400, left: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'] });
-  assert.deepEqual(cleanPrefs('мусор'), { side: 0, left: false, order: BLOCKS, shut: [] });
+  assert.deepEqual(cleanPrefs({ side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'], лишнее: 'x'.repeat(5000) }),
+    { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'] });
+  assert.equal(cleanPrefs({ handSide: 'да' }).handSide, false, 'рука сбоку только по true');
+  assert.deepEqual(cleanPrefs('мусор'), { side: 0, left: false, handSide: false, order: BLOCKS, shut: [] });
   assert.deepEqual(cleanPrefs({ side: 1e9, order: ['log', 'log', 'log', 'log'] }).order, BLOCKS);
 });
 
@@ -65,7 +66,7 @@ for (const [name, make] of [['память', memoryStore], ['Redis', () => redis
 
     assert.equal((await req('GET', 'prefs')).status, 401, 'без входа нельзя');
     assert.deepEqual((await req('GET', 'prefs', undefined, denis.token)).body, {}, 'пока пусто');
-    const mine = { side: 410, left: true, order: ['now', 'log', 'players', 'stock'], shut: ['stock'] };
+    const mine = { side: 410, left: true, handSide: true, order: ['now', 'log', 'players', 'stock'], shut: ['stock'] };
     assert.equal((await req('POST', 'prefs', mine, denis.token)).status, 200);
     assert.deepEqual((await req('GET', 'prefs', undefined, denis.token)).body, mine);
     assert.deepEqual((await req('GET', 'prefs', undefined, andrey.token)).body, {}, 'у Андрея свои настройки');

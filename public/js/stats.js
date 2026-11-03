@@ -77,6 +77,8 @@ const triple = (arr, place) => arr.map((v, i) => (place[i] === 1 ? `<b>${v}</b>`
 
 function tableLink(g) {
   if (g.source === 'bga') return `<a href="https://boardgamearena.com/table?table=${esc(g.table)}" target="_blank" rel="noopener">BGA ${esc(g.table)}</a>`;
+  // законченный стол хранится бессрочно: строка ведет на финальное поле партии
+  if (g.code) return `<a href="#/t/${esc(g.code)}">сайт ${esc(g.table || g.code)}</a>`;
   return `сайт ${esc(g.table)}`;
 }
 

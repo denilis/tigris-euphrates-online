@@ -19,7 +19,7 @@ export const fmtTotal = (ms) => {
 export function clockNow(g, at = Date.now()) {
   const c = g.clock;
   if (!c) return null;
-  const live = !g.over && !g.stopped && g.toMove != null;
+  const live = !g.over && !g.stopped && !g.paused && g.toMove != null; // на паузе часы стоят
   const now = at + (c.skew || 0);
   const confirm = g.phase === 'confirm';
   const run = !live || confirm ? 0 : Math.max(0, now - c.at);

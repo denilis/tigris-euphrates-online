@@ -29,7 +29,7 @@ const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['в
 // (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
 export const DEFAULT_OPTIONS = {
   board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief',
+  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief', monument: 'enamel',
 };
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
@@ -48,6 +48,8 @@ const OPTION_CHECKS = {
   tournament: (v) => typeof v === 'string' && /^[a-z0-9-]{1,24}$/.test(v),
   // вид поля (просьба Дениса 03.11): рельеф из текстур или простые клетки, на правила не влияет
   look: (v) => ['relief', 'cells'].includes(v),
+  // вид монумента (просьба Дениса 03.11): 1 печать, 2 кирпичная рамка, 3 зиккурат сверху; на правила не влияет
+  monument: (v) => ['enamel', 'frame', 'ziggurat'].includes(v),
 };
 const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
 const BOT_CHECKS = {
@@ -298,9 +300,14 @@ function needTurn(t, seatId) {
   return s;
 }
 
+const needRunning = (t) => {
+  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  if (t.game.paused) fail('paused', 'Партия на паузе', 409);
+};
+
 /** Ход человека: номер хода из списка допустимых и версия стола, которую он видел. */
 export function submit(t, userId, { version, index } = {}, { rng = cryptoRng(), now } = {}) {
-  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  needRunning(t);
   const seat = needSeated(t, userId);
   if (version !== t.version) fail('stale', 'Стол уже изменился, обновите', 409);
   const s = needTurn(t, seat.id);
@@ -311,6 +318,7 @@ export function submit(t, userId, { version, index } = {}, { rng = cryptoRng(), 
 
 /** Ход за место (бот): объект хода должен совпасть с одним из допустимых. */
 export function submitSeat(t, seatId, move, { rng = cryptoRng(), now } = {}) {
+  needRunning(t);
   const s = needTurn(t, seatId);
   const legal = legalMoves(s);
   const key = move && typeof move === 'object' ? canon(move) : null;
@@ -393,7 +401,7 @@ function applyLegal(t, s, move, rng, now) {
 
 /** Можно ли ходящему отменить последнее действие этого хода. */
 export function canUndo(t) {
-  if (t.status !== 'playing' || !t.game?.undo?.length) return false;
+  if (t.status !== 'playing' || t.game?.paused || !t.game?.undo?.length) return false;
   const s = stateFromJSON(t.game.state);
   if (s.over) return false;
   return CONFLICT.includes(s.phase) || (s.toMove === s.cur && UNDO_PHASES.includes(s.phase)); // в бою снимок живет до первого ответа
@@ -401,7 +409,7 @@ export function canUndo(t) {
 
 /** Отменить последнее действие своего хода: поле, рука и журнал как до него. */
 export function undo(t, userId, { version } = {}, { now } = {}) {
-  if (t.status !== 'playing') fail('not-playing', 'Партия не идёт', 409);
+  needRunning(t);
   const seat = needSeated(t, userId);
   if (version !== t.version) fail('stale', 'Стол уже изменился, обновите', 409);
   const g = t.game;
@@ -423,7 +431,37 @@ export function undo(t, userId, { version } = {}, { now } = {}) {
 
 /** Окно подтверждения истекло: ход пора завершить за игрока. */
 export function confirmDue(t, now) {
-  return t.status === 'playing' && t.game?.confirmBy != null && now >= t.game.confirmBy;
+  return t.status === 'playing' && !t.game?.paused && t.game?.confirmBy != null && now >= t.game.confirmBy;
+}
+
+/**
+ * Пауза (просьба Дениса 03.11): не успели доиграть, расходимся. Поставить может любой сидящий
+ * человек; часы, окно отмены, ходы и боты стоят. Продолжаем, когда все люди за столом нажали
+ * «Я на месте» (с ботами это один человек): ходящий получает полное время на ход.
+ */
+export function pause(t, userId, now) {
+  needRunning(t);
+  const seat = needSeated(t, userId);
+  const g = t.game;
+  spend(t, stateFromJSON(g.state), g.toMove, now); // время до паузы записано решающему
+  g.paused = { by: seat.id, at: now, ready: [] };
+  g.confirmBy = null;
+  touch(t, now);
+}
+
+/** «Я на месте»: когда на месте все люди за столом, партия продолжается. */
+export function ready(t, userId, now) {
+  if (t.status !== 'playing' || !t.game.paused) fail('not-paused', 'Партия не на паузе', 409);
+  const seat = needSeated(t, userId);
+  const g = t.game, p = g.paused;
+  if (!p.ready.includes(seat.id)) p.ready.push(seat.id);
+  if (t.seats.every((s) => s.kind !== 'human' || p.ready.includes(s.id))) {
+    g.paused = null;
+    if (g.clock) Object.assign(g.clock, { at: now, turnUsed: 0 });
+    // окно отмены открывается заново: за паузу его время не должно было уйти
+    if (stateFromJSON(g.state).phase === 'confirm' && g.undo?.length) g.confirmBy = now + timing(t).confirmMs;
+  }
+  touch(t, now);
 }
 
 /** Завершить ход за игрока, если окно подтверждения истекло; иначе false. */
@@ -450,7 +488,7 @@ function finish(t, s, now) {
 
 /** Место бота, если сейчас решает бот; иначе null. */
 export function botDue(t) {
-  if (t.status !== 'playing' || t.game.toMove == null) return null;
+  if (t.status !== 'playing' || t.game.paused || t.game.toMove == null) return null;
   const seat = t.seats.find((s) => s.id === t.game.toMove);
   return seat && seat.kind === 'bot' ? seat.id : null;
 }
@@ -461,6 +499,7 @@ export function historyEntry(t) {
   const r = t.game.result;
   return {
     id: t.game.id,
+    code: t.code, // статистика ведет на стол
     title: t.title || null,
     finishedAt: r.finishedAt,
     company: companyKey(t.seats.filter((s) => s.kind === 'human').map((s) => s.userId)),
@@ -499,7 +538,8 @@ export const ABANDON_MS = 2 * 3600 * 1000;
 
 /** Закрыть стол без итога (игрок пропал, передумали): в историю не идёт. */
 export function close(t, userId, now) {
-  const abandoned = Number.isFinite(now) && now - t.updatedAt >= ABANDON_MS && Boolean(seatOfUser(t, userId));
+  // партия на паузе стоит долго нарочно: брошенной она не считается
+  const abandoned = !t.game?.paused && Number.isFinite(now) && now - t.updatedAt >= ABANDON_MS && Boolean(seatOfUser(t, userId));
   if (!abandoned) needHost(t, userId);
   if (t.status === 'over' || t.status === 'closed') fail('not-playing', 'Стол уже закрыт или партия окончена', 409);
   t.status = 'closed';

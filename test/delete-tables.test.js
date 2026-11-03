@@ -89,13 +89,13 @@ test('удаление: идущую партию нельзя', async () => {
   assert.equal((await s.req('GET', `tables/${code}`, { token: P.denis.token })).body.status, 'playing');
 });
 
-test('удаление: завершенную досрочно нельзя', async () => {
+test('удаление: завершенную досрочно можно (решение Дениса 03.11), стол пропадает', async () => {
   const s = setup();
   const P = await company(s, 'Андрей');
   const { code, post, del } = await started(s, P);
   assert.equal((await post(P.denis, { action: 'close' })).status, 200);
-  assert.equal((await del(P.denis)).status, 409);
-  assert.equal((await s.req('GET', `tables/${code}`, { token: P.denis.token })).body.status, 'closed');
+  assert.equal((await del(P.denis)).status, 200);
+  assert.equal((await s.req('GET', `tables/${code}`, { token: P.denis.token })).status, 404);
 });
 
 test('удаление: законченную партию нельзя', async () => {
@@ -186,9 +186,9 @@ test('открытые столы: все игроки, только где па
   assert.deepEqual(Object.keys(r.body[0]).sort(), ['code', 'seats', 'title', 'updatedAt']);
 });
 
-test('кнопка удаления: у администратора и только пока партия не началась', () => {
-  assert.equal(canDelete({ status: 'lobby' }, { admin: true }), true);
-  for (const status of ['playing', 'over', 'closed']) assert.equal(canDelete({ status }, { admin: true }), false, status);
+test('кнопка удаления: у администратора, пока партия не началась или если ее завершили досрочно', () => {
+  for (const status of ['lobby', 'closed']) assert.equal(canDelete({ status }, { admin: true }), true, status);
+  for (const status of ['playing', 'over']) assert.equal(canDelete({ status }, { admin: true }), false, status);
   assert.equal(canDelete({ status: 'lobby' }, { admin: false }), false);
   assert.equal(canDelete({ status: 'lobby' }, undefined), false);
 });

@@ -22,7 +22,10 @@ function scramble(t, viewerP, r) {
     if (p === viewerP) return;
     pl.hand = shuffle4(pl.hand);
     pl.discarded = shuffle4(pl.discarded);
-    if (!t.options.openScore && !s.over) pl.score = pl.score.map((v) => v + Math.floor(r() * 5));
+    if (!t.options.openScore && !s.over) {
+      pl.score = pl.score.map((v) => v + Math.floor(r() * 5));
+      pl.treasures += Math.floor(r() * 3); // сокровища соперников закрыты вместе с очками (просьба Дениса 03.11)
+    }
   });
   s.bag = shuffle4(s.bag);
   s.removed = shuffle4(s.removed);
@@ -64,6 +67,10 @@ test('свой вид: своя рука, у соперников только �
     assert.equal(pl.handCount, 6);
   }
   assert.equal(typeof v.game.bagPct, 'number');
+  // 153 тайла минус 10 храмов обычной карты; в мешке столько, сколько не ушло на руки
+  assert.equal(v.game.bagStart, 153 - s.startTemples);
+  assert.equal(v.game.bagLeft, s.bag.reduce((a, b) => a + b, 0));
+  assert.equal(v.game.bagLeft + v.game.players.reduce((a, pl) => a + pl.handCount, 0), v.game.bagStart, 'на старте все, что не в мешке, на руках');
   const raw = JSON.stringify(v);
   for (const key of ['"bag":', '"removed":', '"userId":']) assert.ok(!raw.includes(key), `в виде есть ${key}`);
 });
@@ -71,12 +78,15 @@ test('свой вид: своя рука, у соперников только �
 test('закрытый счёт: чужих очков нет, свои есть; открытый: видны все; в конце видны все', () => {
   const closed = started(22);
   const vc = viewFor(closed, USERS.denis.userId);
-  for (const pl of vc.game.players) assert.equal(pl.score === null, pl.seat !== vc.me);
+  for (const pl of vc.game.players) {
+    assert.equal(pl.score === null, pl.seat !== vc.me);
+    assert.equal(pl.treasures === null, pl.seat !== vc.me, 'сокровища закрыты вместе с очками');
+  }
   const open = started(22, { openScore: true });
-  for (const pl of viewFor(open, USERS.denis.userId).game.players) assert.ok(Array.isArray(pl.score));
+  for (const pl of viewFor(open, USERS.denis.userId).game.players) assert.ok(Array.isArray(pl.score) && Number.isInteger(pl.treasures));
   playOut(closed, 22);
   const end = viewFor(closed, USERS.denis.userId);
-  for (const pl of end.game.players) assert.ok(Array.isArray(pl.score));
+  for (const pl of end.game.players) assert.ok(Array.isArray(pl.score) && Number.isInteger(pl.treasures));
   assert.ok(end.game.result);
 });
 

@@ -1,8 +1,9 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
+import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
 import { TRAIL_FRESH_MS, TRAIL_LAND_MS } from './trail.js';
+import { ALL_ON } from './layers.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -56,8 +57,15 @@ export function sealSVG(c1, c2, x, y, p) {
   return `<g transform="translate(${x},${y})">${g}</g>`;
 }
 
-/** Маленький монумент для панели выбора (свой svg со своими defs). */
-export function sealIcon(c1, c2, size = 46) {
+// --- монумент картинкой (выбор Дениса 03.11): три вида из ChatGPT в настройках стола, у каждого
+// 6 пар цветов (tools/monuments/recolor.py). Цвет 1 сверху слева, цвет 2 снизу справа, как у «Печати»
+export const MON_STYLES = ['enamel', 'frame', 'ziggurat'];
+export const monImg = (style, c1, c2) => `/img/monuments/${style}/${COLKEY[c1]}-${COLKEY[c2]}.webp`;
+const isMonImg = (style) => MON_STYLES.includes(style);
+
+/** Маленький монумент для панели выбора и запаса; style — вид из настроек стола. */
+export function sealIcon(c1, c2, size = 46, style = null) {
+  if (isMonImg(style)) return `<img class="monimg" src="${monImg(style, c1, c2)}" width="${size}" height="${size}" alt="" draggable="false">`;
   const p = `si${c1}${c2}`;
   return `<svg viewBox="0 0 120 120" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${sealSVG(c1, c2, 0, 0, p)}</svg>`;
 }
@@ -87,12 +95,26 @@ export function buildingIcon(c, size = 28) {
   return `<svg viewBox="0 0 60 60" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${buildingSVG(c, 0, 0, p)}</svg>`;
 }
 
+// Стрелка переноса лидера кончается за краем клетки (замечание Дениса 03.11): раньше она
+// заходила в клетку на 30 px от центра и по диагонали ложилась на кружок силы. Путь кончается
+// в 10 px от края клетки под любым углом, наконечник выступает за путь на 4 px, зазор около 6 px.
+const ARROW_GAP = 10;
+
+/** Путь стрелки из центра клетки from к клетке to. */
+export function arrowPath(from, to) {
+  const fx = cx(from) + C / 2, fy = cy(from) + C / 2, tx = cx(to) + C / 2, ty = cy(to) + C / 2;
+  const len = Math.hypot(tx - fx, ty - fy), ux = (tx - fx) / len, uy = (ty - fy) / len;
+  const stop = (C / 2 + ARROW_GAP) / Math.max(Math.abs(ux), Math.abs(uy)); // по лучу до квадрата чуть шире клетки
+  return `M${f1(fx + ux * 8)} ${f1(fy + uy * 8)}L${f1(tx - ux * stop)} ${f1(ty - uy * stop)}`;
+}
+
 /**
  * След хода соперника (просьба Дениса 30.10): рамка с номером действия держится до следующего
  * хода, первые секунды пульсирует, тайл или лидер садится на клетку, у перестановки стрелка.
  * Перерисовка не сбивает анимацию: отрицательная задержка равна возрасту отметки.
+ * numbers — слой «Ходы»: без него рамка и стрелка остаются, номера нет.
  */
-export function trailSVG(marks) {
+export function trailSVG(marks, numbers = true) {
   let s = '';
   for (const m of marks) {
     const x = cx(m.pos), y = cy(m.pos), side = m.size * C;
@@ -100,16 +122,29 @@ export function trailSVG(marks) {
     if (m.age < TRAIL_LAND_MS && m.ev === 'tile') s += `<use class="land" href="#tl${m.c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${delay}/>`;
     if (m.age < TRAIL_LAND_MS && m.ev === 'leader') s += `<use class="land" href="#tk_${m.hero || 'pot'}_${m.c}" x="${x + 8}" y="${y + 8}"${delay}/>`;
     if (m.from != null) {
-      const fx = cx(m.from) + C / 2, fy = cy(m.from) + C / 2, tx = x + C / 2, ty = y + C / 2;
-      const len = Math.hypot(tx - fx, ty - fy), ux = (tx - fx) / len, uy = (ty - fy) / len;
-      const d = `M${f1(fx + ux * 8)} ${f1(fy + uy * 8)}L${f1(tx - ux * 30)} ${f1(ty - uy * 30)}`;
-      s += `<path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${fx}" cy="${fy}" r="6"/>`;
+      const d = arrowPath(m.from, m.pos);
+      s += `<path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${cx(m.from) + C / 2}" cy="${cy(m.from) + C / 2}" r="6"/>`;
     }
     s += `<rect class="trail-back" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"/>`;
     s += `<rect class="trail${m.age < TRAIL_FRESH_MS ? ' fresh' : ''}" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"${delay}/>`;
-    s += `<g class="trail-no" transform="translate(${x + side - 12},${y + side - 12})"><circle r="9.5"/><text y="4.4" text-anchor="middle">${m.action}</text></g>`;
+    // номер желтым кругом (просьба Дениса 03.11): темный круг путался с поддержкой лидера
+    if (numbers) s += `<g class="trail-no" transform="translate(${x + side - 13},${y + side - 13})"><circle r="11"/><text y="5" text-anchor="middle">${m.action}</text></g>`;
   }
   return s;
+}
+
+/**
+ * Сокровище (просьба Дениса 03.11): белый деревянный кубик по центру храма, как ставят за
+ * настоящим столом. Снизу и справа видна боковая грань. У особого сокровища золотой ободок:
+ * его торговец берет первым.
+ */
+export function treasureSVG(i, special) {
+  const S = 22, x = cx(i) + (C - S) / 2, y = cy(i) + (C - S) / 2;
+  let s = special ? `<rect class="cube-ring" x="${x - 4}" y="${y - 4}" width="${S + 11}" height="${S + 11}" rx="6" fill="none" stroke="#e0b65a" stroke-width="2.5"/>` : '';
+  s += `<rect x="${x + 3}" y="${y + 3}" width="${S}" height="${S}" rx="3" fill="#b9ab8c" stroke="#5c4c30" stroke-width="1"/>`;
+  s += `<rect class="cube-top" x="${x}" y="${y}" width="${S}" height="${S}" rx="3" fill="url(#cubeTop)" stroke="#6b5a3a" stroke-width="1"/>`;
+  s += `<path d="M${x + 5} ${y + 8}q6 -2 12 1M${x + 4} ${y + 15}q7 2 14 -1" stroke="#a8946a" stroke-opacity=".35" stroke-width=".8" fill="none"/>`;
+  return `<g filter="url(#shadow)">${s}</g>`;
 }
 
 // --- статичный слой: рамка, подписи, песок, река, сетка (меняется только с картой и видом поля)
@@ -118,8 +153,8 @@ export function trailSVG(marks) {
 // поэтому совпадает с клетками точно.
 const SAND_TILE = 640, WATER_TILE = 420;
 let staticKey = null, staticSvg = '';
-function staticLayer(river, look = 'relief') {
-  const key = `${look}:${river.join(',')}`;
+function staticLayer(river, look = 'relief', monStyle = null) {
+  const key = `${look}:${monStyle}:${river.join(',')}`;
   if (key === staticKey) return staticSvg;
   let rects = '';
   for (const i of river) {
@@ -143,7 +178,7 @@ function staticLayer(river, look = 'relief') {
     ${ground}
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/></filter>
     <filter id="shadow2" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
-    <radialGradient id="gold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
+    <linearGradient id="cubeTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f3eee2"/><stop offset="1" stop-color="#ddd3bd"/></linearGradient>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
     <marker id="trailArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ffe08a" stroke="#1b1309" stroke-width=".8"/></marker>
@@ -152,6 +187,7 @@ function staticLayer(river, look = 'relief') {
     <image id="tlcat" width="${C - 6}" height="${C - 6}" href="${catImg}" preserveAspectRatio="xMidYMid slice"/>
     <image id="tlun" width="${C - 6}" height="${C - 6}" href="${uniteImg}" preserveAspectRatio="xMidYMid slice"/>
     ${HEROES.flatMap((h) => [0, 1, 2, 3].map((c) => `<image id="tk_${h}_${c}" width="44" height="44" href="${tokenImg(h, c)}"/>`)).join('')}
+    ${isMonImg(monStyle) ? [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]].map(([a, b]) => `<image id="mon${a}${b}" width="${2 * C - 6}" height="${2 * C - 6}" href="${monImg(monStyle, a, b)}"/>`).join('') : ''}
     <mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo)">${rects}</g></mask>
     <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo2)">${rects}</g></mask>
   </defs>`;
@@ -199,17 +235,20 @@ function uniteMark(x, y) {
  * opts: targets (клетки для хода), squares (левые верхние клетки монументов 2x2),
  * crosses (центры чуда), hit (клетки, где щелчок сработает), trail (след хода соперника),
  * conflict { k, kind, myExtra, me }, flash (клетка из журнала),
- * unite (тайл объединения, пока идут войны: не входит ни в одно царство, рисуется тайлом объединения).
+ * unite (тайл объединения, пока идут войны: не входит ни в одно царство, рисуется тайлом объединения),
+ * layers (слои из layers.js, по умолчанию все включены).
  * look — вид поля: relief или cells.
  */
 export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   const b = g.board;
+  const L = { ...ALL_ON, ...opts.layers };
+  const mon = isMonImg(opts.monument) ? opts.monument : null;
   // статичный слой (песок, река, картинки в defs) ставится один раз на карту: картинки не
   // создаются заново при каждой перерисовке и не мигают
-  const key = `${look}:${g.river.join(',')}`;
+  const key = `${look}:${mon}:${g.river.join(',')}`;
   if (svg.dataset.key !== key) {
     svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
-    svg.innerHTML = `<g>${staticLayer(g.river, look)}</g><g class="dyn"></g>`;
+    svg.innerHTML = `<g>${staticLayer(g.river, look, mon)}</g><g class="dyn"></g>`;
     svg.dataset.key = key;
   }
   let s = '';
@@ -246,8 +285,8 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
 
   // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;
   // полупрозрачный черный жетон — своего лидера нет, тайл идет царю
-  const kl = opts.owners ? kingdomLeaders(b, up) : null;
-  if (opts.owners) {
+  const kl = L.owners || L.monuments ? kingdomLeaders(b, up) : null;
+  if (L.owners) {
     const own = tileOwners(b, kl);
     let m = '';
     for (let i = 0; i < W * H; i++) {
@@ -258,22 +297,19 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     s += `<g filter="url(#shadow)">${m}</g>`;
   }
 
-  for (let i = 0; i < W * H; i++) {
-    if (!b.treasure[i]) continue;
-    const x = cx(i) + C - 15, y = cy(i) + 15;
-    const special = g.special.includes(i);
-    s += `<g filter="url(#shadow)"><circle cx="${x}" cy="${y}" r="9.5" fill="url(#gold)" stroke="${special ? '#fff3cf' : '#6b4a12'}" stroke-width="${special ? 2 : 1.2}"/><path d="M${x} ${y - 5}l4 5-4 5-4-5z" fill="#fff6d0" fill-opacity=".75"/></g>`;
-  }
+  for (let i = 0; i < W * H; i++) if (b.treasure[i]) s += treasureSVG(i, g.special.includes(i));
   if (g.wonderPos >= 0) {
     const x = cx(g.wonderPos) + C / 2, y = cy(g.wonderPos) + C / 2;
     s += `<g filter="url(#shadow2)"><path d="M${x - 70} ${y - 22}h48v-48h44v48h48v44h-48v48h-44v-48h-48z" fill="url(#bvg)" stroke="#94691f" stroke-width="2" opacity=".92"/>${rosette(x, y, 16)}</g>`;
   }
   for (const m of g.monuments) {
     if (m.pos < 0) continue;
-    s += sealSVG(m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
+    s += mon
+      ? `<use href="#mon${m.c1}${m.c2}" x="${cx(m.pos) + 3}" y="${cy(m.pos) + 3}" filter="url(#shadow2)"/>`
+      : sealSVG(m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
     // на каждой половине монумента жетон героя, чей лидер этого цвета стоит в том же царстве
     // (он получает очко за монумент в конце своего хода); нет лидера — пусто
-    const a = kl && kl.lead.get(kl.lab[m.pos]);
+    const a = L.monuments && kl.lead.get(kl.lab[m.pos]);
     if (!a) continue;
     for (const [c, ox, oy] of [[m.c1, 33, 35], [m.c2, 87, 85]]) {
       if (a[c] == null) continue;
@@ -307,7 +343,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     const p = v >> 2, c = v & 3, x = cx(i) + C / 2, y = cy(i) + C / 2;
     s += `<g filter="url(#shadow2)"><circle cx="${x}" cy="${y}" r="24.5" fill="${HEX[c]}"/><use href="#tk_${heroOf(p) || 'pot'}_${c}" x="${x - 22}" y="${y - 22}"/></g>
       <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${HEX[c]}" stroke-width="3"/>`;
-    if (cf && (i === cf.k.attPos || i === cf.k.defPos)) continue;
+    if (!L.support || (cf && (i === cf.k.attPos || i === cf.k.defPos))) continue;
     s += `<g class="sup" transform="translate(${x - 19},${y - 19})"><circle r="10.5" fill="#1b1713" stroke="${RING[c]}" stroke-width="2"/><text y="4.6" text-anchor="middle" font-size="13" font-weight="700" fill="#fff3cf">${sup[i]}</text></g>`;
   }
 
@@ -323,7 +359,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     }
   }
   if (up >= 0) s += uniteMark(cx(up), cy(up));
-  s += trailSVG(opts.trail || []);
+  s += trailSVG(opts.trail || [], L.moves);
 
   for (const i of opts.targets || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;

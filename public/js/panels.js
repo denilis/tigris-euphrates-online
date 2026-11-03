@@ -38,6 +38,7 @@ function apply() {
   if (cur.side) app.style.setProperty('--side', clampSide(cur.side, innerWidth) + 'px');
   else app.style.removeProperty('--side');
   app.classList.toggle('sideleft', cur.left);
+  app.classList.toggle('handside', cur.handSide);
   BLOCKS.forEach((id) => {
     const el = block(id);
     el.style.order = cur.order.indexOf(id);
@@ -45,6 +46,7 @@ function apply() {
     el.classList.toggle('shut', cur.shut.includes(id) && !(id === 'now' && nowOpen));
   });
   root.querySelector('#gSideMove').textContent = cur.left ? 'Панель справа' : 'Панель слева';
+  root.querySelector('#gHandMove').textContent = cur.handSide ? 'Рука под картой' : 'Рука сбоку';
 }
 
 function change(patch) {
@@ -138,6 +140,7 @@ export function initPanels(el) {
   bindSizer(root.querySelector('#gSizer'));
   bindBlocks(root.querySelector('#gSide'));
   root.querySelector('#gSideMove').addEventListener('click', () => change({ left: !cur.left }));
+  root.querySelector('#gHandMove').addEventListener('click', () => change({ handSide: !cur.handSide }));
   root.querySelector('#gLayoutReset').addEventListener('click', () => change(cleanLayout(null)));
   if (synced || !id) return;
   synced = true;

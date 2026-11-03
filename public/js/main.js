@@ -170,7 +170,7 @@ async function renderHome() {
         return `<a class="titem${myTurn ? ' turn' : ''}${del ? ' del' : ''}" href="#/t/${esc(t.code)}">
           <b>${esc(t.title || t.code)}</b>
           <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
-          <small>${STATUS[t.status] || ''}${myTurn ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
+          <small>${t.paused ? 'на паузе' : STATUS[t.status] || ''}${myTurn && !t.paused ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
           ${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}
         </a>`;
       }).join('') : '<p class="muted">Пока нет столов. Создайте новый или откройте стол по коду из приглашения.</p>';
@@ -211,7 +211,7 @@ function openTable(code) {
     if (m !== mode) { closePicker(); app.innerHTML = ''; mode = m; }
     setBusy(v.status === 'playing' && v.me != null);
     setBackdrop(m === 'lobby');
-    if (m === 'lobby') renderLobby(app, v, { act, go });
+    if (m === 'lobby') renderLobby(app, v, { act, go, bar: topbar(''), bindBar: bindTopbar });
     else renderGame(app, v, { act, go });
     if (takeAccepted(code)) sitInvited(v);
   }, (e) => {

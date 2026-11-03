@@ -5,12 +5,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode } from './auth.js';
 import {
   createTable, sit, leave, seatPeople, unseat, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
-  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay,
+  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
+import { keepFinishedOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
 import { telegram, inChat, invited, called } from './telegram.js';
@@ -244,6 +245,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   async function stats(query) {
+    await keepFinishedOnce(store); // один раз после выкладки: старые законченные столы без срока и с кодом в истории
     const tours = await allTours();
     const tour = tours.find((t) => t.id === query.tour) || SEASON;
     const users = await store.listUsers();
@@ -356,6 +358,15 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function invite(u, body) {
     if (!Array.isArray(body.to) || !body.to.length || body.to.length > 12) http(400, 'bad-invite', 'Выберите, кого пригласить');
     const { doc: t } = await load(String(body.code));
+    // партия на паузе: зовем назад тех, кто уже за столом, по номерам мест (адреса игроков в вид не попадают)
+    if (t.status === 'playing' && t.game?.paused) {
+      if (!seatOfUser(t, u.id)) http(403, 'not-seated', 'Позвать может только тот, кто за столом');
+      const back = t.seats.filter((s) => s.kind === 'human' && s.userId && s.userId !== u.id && body.to.includes(s.id));
+      for (const s of back) {
+        await store.pushInbox(s.userId, { id: letterId(), kind: 'invite', seated: true, from: u.name, fromId: u.id, code: t.code, title: t.title || t.code, at: now() }, INVITE_MS);
+      }
+      return { sent: back.length };
+    }
     if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
     if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Пригласить может только тот, кто за столом');
     const known = await knownPeople(true);
@@ -401,7 +412,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    */
   async function deleteTable(code) {
     const { doc: t, version } = await load(code);
-    if (t.status !== 'lobby') http(409, 'not-lobby', 'Удалить можно только стол, где партия не начиналась');
+    // законченная партия хранится для статистики; досрочно завершенную итога нет, ее можно удалить
+    if (t.status !== 'lobby' && t.status !== 'closed') http(409, 'not-lobby', 'Удалить можно стол, где партия не начиналась или завершена досрочно');
     t.status = 'deleted';
     t.version = version + 1;
     if (!(await store.putTable(t, version, ''))) http(409, 'stale', 'Стол уже изменился, обновите');
@@ -451,6 +463,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const docs = await store.getTables(codes);
     return docs.filter((t) => t && t.status !== 'deleted').map((t) => ({
       code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
+      paused: Boolean(t.game?.paused),
       me: seatOfUser(t, u.id)?.id ?? null,
       toMove: t.game?.toMove ?? null,
       seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero })),
@@ -458,6 +471,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   const ACTIONS = {
+    pause: (t, u) => pause(t, u.id, now()),
+    ready: (t, u) => ready(t, u.id, now()),
     sit: (t, u, b) => sit(t, { userId: u.id, name: u.name, avatar: u.avatar }, b.seat, now()),
     leave: (t, u) => leave(t, u.id, now()),
     unseat: (t, u, b) => unseat(t, u.id, b.seat, now()),

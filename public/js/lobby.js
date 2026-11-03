@@ -12,6 +12,8 @@ const ORDER = [
   { id: 'custom', t: 'Вручную', d: 'Хозяин стола расставляет места, порядок сверху вниз.' },
 ];
 const COUNTING = { none: 'не считает', approx: 'примерно', exact: 'точно' };
+// вид монумента (выбор Дениса 03.11): номер, как Денис их называл, и короткое имя
+const MONUMENTS = [['enamel', '1 Печать'], ['frame', '2 Рамка'], ['ziggurat', '3 Зиккурат']];
 
 // турниры меняются редко: лобби перерисовывается часто, а список обновляем раз в 20 секунд
 const TOURS_MS = 20000;
@@ -95,7 +97,7 @@ function openPicker(view, act, seat) {
   }).catch((e) => { list.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
 }
 
-export function renderLobby(root, view, { act }) {
+export function renderLobby(root, view, { act, bar = '', bindBar }) {
   const host = view.isHost, me = view.me;
   const canChat = (me != null || host) && chatAllowed(view, session.get()?.user?.name);
   const ready = view.seats.every((s) => s.taken && s.hero);
@@ -143,9 +145,11 @@ export function renderLobby(root, view, { act }) {
   const o = view.options;
   const dis = host ? '' : 'disabled';
   const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.' : '';
-  root.innerHTML = `<div class="lobby">
+  // сверху меню сайта, как на других страницах (просьба Дениса 03.11): раньше из лобби был
+  // только путь через «Мои столы»
+  root.innerHTML = `${bar}<div class="lobby">
     <div class="lcard">
-      <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1><a class="linkbtn" href="#/">Мои столы</a></div>
+      <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
 
@@ -160,6 +164,7 @@ export function renderLobby(root, view, { act }) {
       <div class="opts">
         <span class="seg"><button data-board="standard" class="${o.board === 'standard' ? 'on' : ''}" ${dis}>Обычное поле</button><button data-board="advanced" class="${o.board === 'advanced' ? 'on' : ''}" ${dis}>Продвинутое поле</button></span>
         <span class="seg" title="Вид поля, на правила не влияет. В партии каждый может сменить его для себя">${[['relief', 'Рельеф'], ['cells', 'Клетки']].map(([id, t]) => `<button data-look="${id}" class="${(o.look ?? 'relief') === id ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
+        <span class="seg monseg" title="Вид монумента на поле, на правила не влияет">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}</button>`).join('')}</span>
         <label><input type="checkbox" data-opt="englishSupport" ${o.englishSupport ? 'checked' : ''} ${dis}> Английская поддержка</label>
         <label><input type="checkbox" data-opt="buildings" ${o.buildings ? 'checked' : ''} ${dis}> Здания</label>
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
@@ -183,6 +188,7 @@ export function renderLobby(root, view, { act }) {
   </div>`;
 
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
+  bindBar?.();
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
   root.querySelector('#lChat')?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true;
@@ -208,6 +214,7 @@ export function renderLobby(root, view, { act }) {
   on('input[name=ord]', 'change', (el) => act({ action: 'options', options: { order: el.value } }));
   on('[data-board]', 'click', (el) => act({ action: 'options', options: { board: el.dataset.board } }));
   on('[data-look]', 'click', (el) => act({ action: 'options', options: { look: el.dataset.look } }));
+  on('[data-monument]', 'click', (el) => act({ action: 'options', options: { monument: el.dataset.monument } }));
   on('[data-opt]', 'change', (el) => act({ action: 'options', options: { [el.dataset.opt]: el.checked } }));
   on('[data-time]', 'click', (el) => act({ action: 'options', options: { [el.dataset.time]: +el.dataset.val } }));
   root.querySelector('#lStart').addEventListener('click', () => act({ action: 'start' }));

@@ -30,6 +30,21 @@ export function memoryStore() {
       set(`m:${doc.code}`, meta);
       return true;
     },
+    /** Коды всех столов. В памяти срока хранения нет, поэтому keepTable ничего не делает. */
+    async tableCodes() {
+      return [...kv.keys()].filter((k) => k.startsWith('t:') && alive(k) !== null).map((k) => k.slice(2));
+    },
+    async keepTable() {},
+    async patchHistory(id, patch) {
+      const cur = alive(`hist:${id}`);
+      if (cur !== null) set(`hist:${id}`, JSON.stringify({ ...JSON.parse(cur), ...patch }));
+    },
+    async getFlag(name) {
+      return alive(`flag:${name}`) !== null;
+    },
+    async setFlag(name) {
+      set(`flag:${name}`, '1');
+    },
     async poll(code) {
       const v = alive(`v:${code}`);
       if (v === null) return null;

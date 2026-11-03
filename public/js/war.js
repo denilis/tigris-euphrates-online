@@ -12,20 +12,34 @@ export function warActive(view) {
   return Boolean(g && g.legal && !g.over && PHASES.includes(g.phase));
 }
 
-/** Бой идет, решает соперник, а смотрящий в нем участвует: окно остается, только без решений. */
-export function warWaiting(view) {
+/** Бой в фазе поддержки, который смотрящий сам сейчас не решает; null, если такого нет. */
+function openConflict(view) {
   const g = view.game;
-  if (!g || g.legal || g.over || g.stopped || view.me == null) return false;
-  const k = g.phase === 'revoltSupport' ? g.ctx?.revolt : g.phase === 'warSupport' ? g.ctx?.war : null;
-  return Boolean(k) && (k.att === view.me || k.def === view.me);
+  if (!g || g.legal || g.over || g.stopped) return null;
+  return (g.phase === 'revoltSupport' ? g.ctx?.revolt : g.phase === 'warSupport' ? g.ctx?.war : null) || null;
 }
 
-/** Нарисовать окно в box; вернуть 'decide', если решает смотрящий, 'wait', если он ждет, иначе false. */
+/** Бой идет, решает соперник, а смотрящий в нем участвует: окно остается, только без решений. */
+export function warWaiting(view) {
+  const k = openConflict(view);
+  return Boolean(k) && view.me != null && (k.att === view.me || k.def === view.me);
+}
+
+/**
+ * Бой идет без смотрящего (просьба Дениса 03.11): третий игрок и зритель видят то же окно,
+ * что ждущий участник: силу сторон на поле и тайлы атаки, как только атакующий их отправил.
+ */
+export function warWatching(view) {
+  const k = openConflict(view);
+  return Boolean(k) && k.att !== view.me && k.def !== view.me;
+}
+
+/** Нарисовать окно в box; вернуть 'decide', если решает смотрящий, 'wait', если он ждет, 'watch', если смотрит чужой бой, иначе false. */
 export function renderWarDock(box, view, ui, { move, redraw, undo }) {
-  const active = warActive(view);
-  box.hidden = !active && !warWaiting(view);
+  const active = warActive(view), watch = warWatching(view);
+  box.hidden = !active && !watch && !warWaiting(view);
   if (box.hidden) return false;
-  const state = active ? 'decide' : 'wait';
+  const state = active ? 'decide' : watch ? 'watch' : 'wait';
   const g = view.game, me = view.me, legal = g.legal;
   const seat = (id) => view.seats.find((s) => s.id === id);
   const name = (id) => (id === me ? 'Вы' : seat(id)?.name || 'Бот');
@@ -64,7 +78,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   const k = isRevolt ? g.ctx.revolt : g.ctx.war;
   const color = isRevolt ? 0 : k.color; // в восстании поддержка храмами
   const isAtt = k.attN === null; // решает атакующий
-  const iAtt = k.att === me;
+  const iAtt = k.att === me, iDef = k.def === me;
   const myP = g.order.indexOf(me);
   const pl = g.players[myP];
   const opp = iAtt ? k.def : k.att;
@@ -82,7 +96,8 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     </div>`;
 
   const title = isRevolt ? `Восстание: ${LEADER[k.leaderColor]}` : `Война за ${COLNAME[color]}`;
-  const who = iAtt ? `Вы атакуете, защищается ${esc(name(opp))}.` : `Атакует ${esc(name(opp))}, вы защищаетесь.`;
+  const who = watch ? `Атакует ${esc(name(k.att))}, защищается ${esc(name(k.def))}.`
+    : iAtt ? `Вы атакуете, защищается ${esc(name(opp))}.` : `Атакует ${esc(name(opp))}, вы защищаетесь.`;
   const cause = !isRevolt && g.ctx.unite ? `Тайл на ${cellName(g.ctx.pos)} объединил два царства. ` : '';
   // ходящий без лидера этого цвета в войне не участвует: атакует следующий по очереди участник
   const why = !isRevolt && k.att !== g.cur ? ` У ходящего (${esc(name(g.cur))}) нет ${COLGEN[color]} лидера в этих царствах, поэтому атакует следующий по очереди участник.` : '';
@@ -90,10 +105,10 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   const top = `<div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
     <p class="msub">${cause}${who}${why} ${strength}</p>`;
 
-  // решает соперник: видно, что уже известно обоим, своей руки и исхода здесь нет
+  // решает соперник или смотрим чужой бой: видно, что уже известно всем, руки и исхода здесь нет
   if (!active) {
     const attSide = isAtt ? side(k.att, 'атака', 'att', k.attBoard, 0, k.attBoard, iAtt, 'решает') : side(k.att, 'атака', 'att', k.attBoard, k.attN, k.attBoard + k.attN, iAtt, null);
-    const defSide = side(k.def, 'защита', 'def', k.defBoard, 0, k.defBoard, !iAtt, isAtt ? 'вы ответите следом' : 'решает');
+    const defSide = side(k.def, 'защита', 'def', k.defBoard, 0, k.defBoard, iDef, isAtt ? (iDef ? 'вы ответите следом' : 'ответит следом') : 'решает');
     box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
       ${top}
       <div class="sides">${attSide}${defSide}</div>

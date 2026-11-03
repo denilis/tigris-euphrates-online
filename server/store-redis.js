@@ -4,9 +4,12 @@
 export const CAS_PUT = `local cur = redis.call('GET', KEYS[1])
 if cur == false then cur = '' end
 if cur ~= ARGV[1] then return 0 end
-redis.call('SET', KEYS[2], ARGV[3], 'EX', ARGV[5])
-redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[5])
-redis.call('SET', KEYS[3], ARGV[4], 'EX', ARGV[5])
+local function put(key, value)
+  if tonumber(ARGV[5]) > 0 then redis.call('SET', key, value, 'EX', ARGV[5]) else redis.call('SET', key, value) end
+end
+put(KEYS[2], ARGV[3])
+put(KEYS[1], ARGV[2])
+put(KEYS[3], ARGV[4])
 return 1`;
 export const CAS_USER = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
@@ -21,7 +24,10 @@ redis.call('LPUSH', KEYS[1], ARGV[1])
 redis.call('LTRIM', KEYS[1], 0, 19)
 return 1`;
 
-const TABLE_TTL = 90 * 24 * 3600; // законченные и брошенные столы живут 90 дней
+// лобби, идущие и досрочно завершенные столы живут 90 дней после последней записи; законченная
+// партия хранится бессрочно (решение Дениса 03.11): на нее ведет статистика, стол весит 35-40 КБ
+const TABLE_TTL = 90 * 24 * 3600;
+const ttlOf = (doc) => (doc.status === 'over' ? 0 : TABLE_TTL);
 
 /**
  * Клиент Upstash REST: exec(['GET', 'key']) → result. Запрос обрывается через timeoutMs
@@ -73,8 +79,34 @@ export function redisStore({ exec, prefix = '' }) {
     },
     async putTable(doc, expected, meta = '') {
       const r = await exec(['EVAL', CAS_PUT, 3, k(`v:${doc.code}`), k(`t:${doc.code}`), k(`m:${doc.code}`),
-        expected === null ? '' : String(expected), String(doc.version), JSON.stringify(doc), meta, TABLE_TTL]);
+        expected === null ? '' : String(expected), String(doc.version), JSON.stringify(doc), meta, ttlOf(doc)]);
       return Number(r) === 1;
+    },
+    /** Коды всех столов в базе (обход SCAN порциями). */
+    async tableCodes() {
+      const out = [];
+      let cursor = '0';
+      do {
+        const [next, keys] = await exec(['SCAN', cursor, 'MATCH', k('t:*'), 'COUNT', 200]);
+        for (const key of keys) out.push(key.slice(k('t:').length));
+        cursor = String(next);
+      } while (cursor !== '0');
+      return out;
+    },
+    /** Снять срок хранения со стола. */
+    async keepTable(code) {
+      for (const p of ['t', 'v', 'm']) await exec(['PERSIST', k(`${p}:${code}`)]);
+    },
+    /** Дописать поля в запись истории, если она есть. */
+    async patchHistory(id, patch) {
+      const cur = parse(await exec(['GET', k(`hist:${id}`)]));
+      if (cur) await exec(['SET', k(`hist:${id}`), JSON.stringify({ ...cur, ...patch })]);
+    },
+    async getFlag(name) {
+      return (await exec(['GET', k(`flag:${name}`)])) !== null;
+    },
+    async setFlag(name) {
+      await exec(['SET', k(`flag:${name}`), '1']);
     },
     async poll(code) {
       const [v, m, lock] = await exec(['MGET', k(`v:${code}`), k(`m:${code}`), k(`lock:${code}`)]);

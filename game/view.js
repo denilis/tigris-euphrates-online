@@ -83,7 +83,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
   const s = stateFromJSON(g.state);
   const order = g.order;
   const myP = mine ? order.indexOf(mine.id) : -1;
-  const playing = table.status === 'playing' && !s.over;
+  const playing = table.status === 'playing' && !s.over && !g.paused; // на паузе никто не решает
   const decides = playing && myP >= 0 && s.toMove === myP;
   const showAll = table.options.openScore || s.over;
   const legal = decides ? legalMoves(s) : null;
@@ -114,13 +114,19 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
       seat: order[p],
       leaders: [...pl.leaders],
       cats: pl.cats,
-      treasures: pl.treasures,
+      // сокровища соперников закрыты вместе с очками (просьба Дениса 03.11): кто взял кубик,
+      // видно в журнале, как за настоящим столом, а сколько их у кого, не видно
+      treasures: p === myP || showAll ? pl.treasures : null,
       handCount: sum(pl.hand),
       score: p === myP || showAll ? [...pl.score] : null,
     })),
     hand: myP >= 0 ? [...s.players[myP].hand] : null,
     discarded: myP >= 0 ? [...s.players[myP].discarded] : null,
     bagPct: Math.round((100 * sum(s.bag)) / (TILES - s.startTemples)),
+    // сколько тайлов в мешке и сколько было после выкладки храмов (просьба Дениса 03.11): процент сам
+    // по себе не начинался со 100, игроки сразу добирают по 6
+    bagLeft: sum(s.bag),
+    bagStart: TILES - s.startTemples,
     ctx: publicCtx(s.ctx, order),
     legal,
     preview: decides ? seatPreview(conflictPreview(s, legal), order) : null,
@@ -131,6 +137,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     canUndo: playing && myP === s.cur && canUndo(table) && !(g.confirmBy != null && now != null && now >= g.confirmBy),
     clock: clockView(table, now),
     stopped: table.status === 'closed', // организатор завершил партию досрочно: итога нет
+    paused: g.paused ? { by: g.paused.by, at: g.paused.at, ready: [...g.paused.ready] } : null,
     result: g.result || null,
   };
   return v;

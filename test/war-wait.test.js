@@ -1,7 +1,7 @@
 // Панель боя у того, кто ждет ответа: не пропадает, решений в ней нет, чужого не показывает.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { warActive, warWaiting, renderWarDock } from '../public/js/war.js';
+import { warActive, warWaiting, warWatching, renderWarDock } from '../public/js/war.js';
 import { battlesIn, seenAfterUndo } from '../public/js/battle.js';
 import { momentKey } from '../public/js/util.js';
 
@@ -39,17 +39,38 @@ test('панель: у участника, пока решает соперни�
   assert.equal(warWaiting(view(1, { toMove: 0 })), true, 'защитник ждет атакующего');
 });
 
-test('панель: не показывается третьему игроку, зрителю и тому, кто сам решает', () => {
-  assert.equal(warWaiting(view(2)), false, 'третий игрок');
-  assert.equal(warWaiting(view(null)), false, 'зритель');
-  assert.equal(warWaiting(view(0, { legal: [{ n: 0 }] })), false, 'решает сам');
-  assert.equal(warWaiting(view(0, { phase: 'action', conflict: null })), false, 'боя нет');
-  const over = view(0);
-  over.game.over = true;
-  assert.equal(warWaiting(over), false, 'партия окончена');
-  const stopped = view(0);
-  stopped.game.stopped = true;
-  assert.equal(warWaiting(stopped), false, 'организатор завершил партию посреди боя');
+test('панель: третий игрок и зритель смотрят бой (просьба Дениса 03.11), участник ждет', () => {
+  assert.equal(warWaiting(view(2)), false, 'третий игрок не участник');
+  assert.equal(warWatching(view(2)), true, 'третий игрок смотрит');
+  assert.equal(warWatching(view(null)), true, 'зритель смотрит');
+  assert.equal(warWatching(view(0)), false, 'участник не зритель');
+  for (const v of [view(0, { legal: [{ n: 0 }] }), view(2, { phase: 'action', conflict: null })]) {
+    assert.equal(warWaiting(v) || warWatching(v), false, 'решает сам или боя нет');
+  }
+  for (const flag of ['over', 'stopped']) {
+    const v = view(2);
+    v.game[flag] = true;
+    assert.equal(warWatching(v), false, `${flag}: партия кончилась посреди боя`);
+  }
+});
+
+test('панель третьего игрока: обе стороны, сила на поле, тайлы атаки после отправки, без «вы»', () => {
+  const { box } = dock();
+  const state = renderWarDock(box, view(2, { conflict: k({ attN: 2 }) }), { collapsed: false, chosen: new Set() }, calls());
+  assert.equal(state, 'watch');
+  assert.equal(box.hidden, false);
+  assert.match(box.innerHTML, /Атакует Денис, защищается Соня/);
+  assert.match(box.innerHTML, /<div class="stot">5<\/div>/, 'атака 3 на поле + 2 из руки');
+  assert.match(box.innerHTML, /4<small>\+\?<\/small>/, 'ответ защитника пока неизвестен');
+  assert.match(box.innerHTML, /Ждём решения: Соня/);
+  assert.ok(!/class="sbox[^"]*mine/.test(box.innerHTML), 'ни одна сторона не своя');
+  for (const hidden of ['Вы атакуете', 'вы защищаетесь', 'вы ответите', 'id="wSend"', 'class="myhand"', 'class="orows"']) {
+    assert.ok(!box.innerHTML.includes(hidden), hidden);
+  }
+  const first = dock();
+  renderWarDock(first.box, view(null, { toMove: 0 }), { collapsed: false, chosen: new Set() }, calls());
+  assert.match(first.box.innerHTML, /3<small>\+\?<\/small>/, 'атакующий еще решает');
+  assert.match(first.box.innerHTML, /ответит следом/);
 });
 
 test('панель: восстание берется из своего поля', () => {

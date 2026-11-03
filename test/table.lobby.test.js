@@ -20,7 +20,7 @@ test('новый стол: хост на первом месте, по умол�
   assert.equal(t.seats[0].name, 'Денис');
   assert.deepEqual(t.options, {
     board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-    turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief',
+    turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief', monument: 'enamel',
   });
   assert.equal(t.seats[3].bot.style, 'universal');
   assert.ok(t.seats[3].hero, 'боту сразу назначен герой');
@@ -79,9 +79,11 @@ test('настройки: имена из прототипа (constructor, toStr
   assert.equal(code(() => setBot(t, host, 3, { style: 'constructor' }, T0)), 'bad-option', 'стиль не из списка');
   assert.equal(code(() => setBot(t, host, 3, { style: 'toString' }, T0)), 'bad-option');
   assert.equal(code(() => setOptions(t, host, { look: 'map' }, T0)), 'bad-option', 'вид поля не из списка');
-  assert.deepEqual(Object.keys(t.options).sort(), ['board', 'buildings', 'confirmSeconds', 'englishSupport', 'look', 'openScore', 'order', 'tournament', 'turnSeconds', 'wonder']);
+  assert.equal(code(() => setOptions(t, host, { monument: 'drawn' }, T0)), 'bad-option', 'монумент не из списка');
+  assert.deepEqual(Object.keys(t.options).sort(), ['board', 'buildings', 'confirmSeconds', 'englishSupport', 'look', 'monument', 'openScore', 'order', 'tournament', 'turnSeconds', 'wonder']);
   assert.deepEqual(Object.keys(t.seats[3].bot).sort(), ['counting', 'errors', 'risk', 'strength', 'style']);
-  setOptions(t, host, { board: 'standard', turnSeconds: 45, look: 'cells' }, T0);
+  setOptions(t, host, { board: 'standard', turnSeconds: 45, look: 'cells', monument: 'ziggurat' }, T0);
+  assert.equal(t.options.monument, 'ziggurat');
   assert.equal(t.options.board, 'standard');
   assert.equal(t.options.look, 'cells');
 });

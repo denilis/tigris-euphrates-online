@@ -2,7 +2,7 @@
   --bg:#1b1713; --frame:#14110e; --card:#2a2119; --card2:#33281e; --line:#4a3b2b;
   --text:#e8dcc4; --muted:#a8987c; --gold:#e0b65a; --gold2:#b8903e;
   --att:#ff8a5c; --def:#7cc4ff;
-  --top:52px; --hand:118px; --side:300px; --dock:430px;
+  --top:52px; --hand:118px; --side:360px; --dock:430px;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -196,6 +196,10 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .seg button.on{background:var(--gold);color:#1b1713;font-weight:600}
 .seg button[disabled]:not(.on){opacity:.5}
 .seg.sm button{min-height:30px;padding:3px 9px;font-size:12.5px}
+.seg.monseg button{display:inline-flex;align-items:center;gap:6px;padding:4px 10px}
+.seg.monseg img{border-radius:4px;flex:none}
+.stock .mons .monimg{width:100%;max-width:80px;height:auto;display:block}
+.monopt .monimg{display:block}
 .heroes{display:flex;gap:10px;flex-wrap:wrap}
 .hero{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:0;font-size:11.5px;color:var(--muted)}
 .hero i{width:46px;height:46px;border-radius:50%;background-size:cover;border:3px solid transparent;box-shadow:0 2px 5px rgba(0,0,0,.6)}
@@ -232,11 +236,37 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .code b{color:var(--gold);letter-spacing:.1em}
 .badges{display:flex;gap:6px;flex-wrap:wrap;min-width:0;overflow:hidden;max-height:24px}
 .badge{font-size:11.5px;border:1px solid var(--gold2);color:var(--gold);border-radius:20px;padding:1px 9px;white-space:nowrap}
+/* ползунки слоев поля: на узком окне первыми прячутся бейджи, ползунки видны всегда */
+.layers{display:flex;gap:10px;align-items:center;flex-shrink:0}
+.sw{display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:4px 2px;color:var(--muted);font:inherit;font-size:12.5px;white-space:nowrap;cursor:pointer}
+.sw i{position:relative;width:26px;height:15px;border-radius:999px;background:#3a3128;border:1px solid var(--line);transition:background .15s}
+.sw i::after{content:"";position:absolute;top:1px;left:1px;width:11px;height:11px;border-radius:50%;background:#8d8170;transition:transform .15s,background .15s}
+.sw[aria-checked="true"]{color:var(--text)}
+.sw[aria-checked="true"] i{background:var(--gold2);border-color:var(--gold)}
+.sw[aria-checked="true"] i::after{transform:translateX(11px);background:#fff3cf}
+.sw:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
+.app.lesson .layers{display:none}
 .meta{margin-left:auto;display:flex;gap:14px;white-space:nowrap;color:var(--muted)}
 .meta b{color:var(--text)}
 .nav{display:flex;gap:6px}
 .navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
+/* сигналы «ваш ход» (просьба Дениса 03.11): золотая рамка поля, три вспышки в начале хода,
+   после выхода времени мигает надпись в свободном поле слева (при панели слева справа) */
+.app.myturn .boardwrap{box-shadow:inset 0 0 0 3px var(--gold)}
+.app.myturn-start .boardwrap{animation:turnGlow .8s ease-in-out 3}
+@keyframes turnGlow{50%{box-shadow:inset 0 0 0 7px #ffe08a,inset 0 0 44px rgba(255,224,138,.35)}}
+.nudge{position:fixed;left:16px;top:calc(var(--top) + 16px);z-index:45;width:200px;padding:14px 16px;border-radius:12px;border:2px solid #ffd23f;background:#2a1a0e;color:#ffe08a;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.6);pointer-events:none;animation:nudge 1s steps(1) infinite}
+.nudge[hidden]{display:none}
+.nudge b{display:block;font:700 24px/1.1 Cinzel,Georgia,serif}
+.nudge span{display:block;font-size:15px;margin-top:4px}
+.nudge i{display:block;font:700 19px/1.2 Cinzel,Georgia,serif;margin-top:6px;color:#ff8a7a;font-variant-numeric:tabular-nums}
+@keyframes nudge{50%{background:#b8432f;color:#fff3cf;border-color:#fff3cf}}
+.sideleft .nudge{left:auto;right:16px}
+.nudge.slim,.sideleft .nudge.slim{top:7px;left:50%;right:auto;transform:translateX(-50%);width:auto;padding:5px 18px;display:flex;align-items:baseline;gap:12px;white-space:nowrap}
+.nudge.slim b{font-size:18px}
+.nudge.slim span,.nudge.slim i{margin-top:0}
+@media (prefers-reduced-motion:reduce){.nudge,.app.myturn-start .boardwrap{animation:none}}
 .boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
 #board{width:100%;height:100%;display:block}
 .cell-hit{fill:transparent}
@@ -252,8 +282,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .trail.fresh{animation:trailPulse 1s ease-in-out 3}
 .trail-arrow{fill:none;stroke:#ffe08a;stroke-width:2.6;stroke-dasharray:7 5}
 .trail-from{fill:#ffe08a;stroke:#1b1309;stroke-width:1.5}
-.trail-no circle{fill:#1b1713;stroke:#ffe08a;stroke-width:1.6}
-.trail-no text{fill:#ffe08a;font-size:13px;font-weight:700}
+.trail-no circle{fill:#ffd23f;stroke:#1b1309;stroke-width:1.6}
+.trail-no text{fill:#1b1309;font-size:14px;font-weight:800}
 .land{transform-box:fill-box;transform-origin:center;animation:land .45s ease-out forwards}
 @keyframes trailPulse{50%{stroke-width:7;stroke-opacity:.6}}
 @keyframes land{0%{transform:scale(1.5);opacity:.3}80%{transform:scale(1);opacity:1}100%{transform:scale(1);opacity:0}}
@@ -276,31 +306,38 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .side section{border-bottom:1px solid var(--line);padding:10px 12px}
 .side h3{margin:0 0 7px;font:600 11px/1 "Segoe UI",sans-serif;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
 .players{display:flex;flex-direction:column;gap:6px}
-.stock{display:flex;flex-direction:column;gap:5px}
-.stock .row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.stock .lbl{flex:0 0 72px;font-size:12px;color:var(--muted)}
+/* запас крупно (просьба Дениса 03.11): монументы по три в ряд до 80 px, здания по 44 px */
+.stock{display:flex;flex-direction:column;gap:6px}
+.stock .slbl{font-size:12.5px;color:var(--muted)}
+.stock .mons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;justify-items:center}
+.stock .mons svg{width:100%;max-width:80px;height:auto}
+.stock .blds{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .stock .sit{display:inline-flex}
 .stock .sit.built{opacity:.28;filter:grayscale(.7)}
-.stock .wonderico{width:26px;height:26px;margin-left:8px}
-@media (max-width:1200px){.stock .lbl{flex-basis:100%}}
-.pc{background:var(--card);border:1px solid transparent;border-radius:8px;padding:7px 9px;display:grid;grid-template-columns:34px 1fr auto;gap:2px 8px;align-items:center}
+.stock .wonderico{width:40px;height:40px;margin-left:4px}
+/* игроки крупнее (просьба Дениса 03.11): шрифт 13-16 px, лидеры жетонами двумя группами */
+.pc{background:var(--card);border:1px solid transparent;border-radius:8px;padding:9px 11px;display:grid;grid-template-columns:46px 1fr auto;gap:5px 10px;align-items:center}
 .pc.active{border-color:var(--gold2)}
 .pc.deciding{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 0 14px rgba(224,182,90,.25)}
-.pc .av{grid-row:span 2;width:34px;height:34px;border-radius:50%;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6)}
-.pc .nm{font-weight:600;display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
-.pc .nm small{font-weight:400;color:var(--muted)}
+.pc .av{grid-row:span 3;align-self:start;width:46px;height:46px;border-radius:50%;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.pc .nm{font-weight:600;font-size:16px;display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
+.pc .nm small{font-weight:400;font-size:13px;color:var(--muted)}
 .tag{font-size:10.5px;border-radius:4px;padding:0 5px;background:#4a3b2b;color:var(--text);font-weight:500}
+.pc .tag{font-size:12px;padding:1px 6px}
 .tag.gold{background:var(--gold);color:#1b1713}
-.pc .tm{font-size:11.5px;color:var(--muted);white-space:nowrap}
-.pc .row{grid-column:2 / 4;display:flex;gap:7px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap}
-.cnt{display:inline-flex;align-items:center;gap:3px;font-weight:600;color:var(--text)}
-.cnt .coin{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff2b8,#e8b84a 45%,#8a5f17);box-shadow:0 0 0 1px #6b4a12}
-.cnt .cat{width:13px;height:13px;border-radius:2px;background-size:cover}
-.dots{display:flex;gap:3px}
-.dot{width:11px;height:11px;border-radius:50%;border:2px solid}
+.pc .tm{font-size:13px;color:var(--muted);white-space:nowrap}
+.pc .leaders{grid-column:2 / 4;display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center}
+.lgrp{display:inline-flex;align-items:center;gap:4px}
+.lgrp small{font-size:12px;color:var(--muted);margin-right:2px}
+.lgrp em{font-size:12.5px;font-style:normal;color:var(--muted)}
+.ltok{width:24px;height:24px;border-radius:50%;background-size:cover;border:2px solid;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.pc .row{grid-column:2 / 4;display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted);white-space:nowrap}
+.cnt{display:inline-flex;align-items:center;gap:4px;font-weight:600;color:var(--text)}
+.cnt .cube{width:13px;height:13px;border-radius:2px;background:linear-gradient(135deg,#fff,#ddd3bd);box-shadow:2px 2px 0 #b9ab8c,0 0 0 1px #6b5a3a}
+.cnt .cat{width:15px;height:15px;border-radius:2px;background-size:cover}
 .sc{display:flex;gap:3px;margin-left:auto}
-.sc.hid{font-size:11.5px;color:var(--muted);font-style:italic}
-.sc span{min-width:19px;text-align:center;border-radius:4px;color:#fff;font-weight:600;font-size:12px;padding:0 3px}
+.sc.hid{font-size:13px;color:var(--muted);font-style:italic}
+.sc span{min-width:26px;text-align:center;border-radius:4px;color:#fff;font-weight:700;font-size:14px;padding:1px 4px}
 .now{background:linear-gradient(180deg,#2c2218,#1f1913)}
 .now p{margin:0 0 6px;font-size:13px}
 .nowbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
@@ -311,7 +348,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .clk.low{color:#f0a640}
 .clk.neg{color:#ff5a4a;animation:clkneg 1s ease-in-out infinite}
 @keyframes clkneg{50%{opacity:.55}}
-.ptime{grid-column:2 / 4;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.ptime{grid-column:2 / 4;font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted)}
 .ptime b{color:#ff6b5a;font-weight:600}
 @media (prefers-reduced-motion:reduce){.clk.neg{animation:none}}
 .colorbtn i{width:12px;height:12px;border-radius:3px;display:inline-block}
@@ -329,6 +366,23 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .log li:hover{color:#fff}
 .log li i{font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums}
 .log li u{text-decoration:none;font-weight:600}
+/* журнал по полочкам (просьба Дениса 03.11): бой мини-таблицей, очки цветными плашками */
+.lbody{min-width:0}
+.lwar{margin:4px 0;padding:4px 6px 5px;border:1px solid var(--line);border-radius:6px;background:#211a13}
+.lwt{display:flex;align-items:center;gap:6px;font-weight:600}
+.lwt .lb{margin-left:auto}
+.lwt .cdot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 1px #cfc6b4}
+.lwtab{width:100%;border-collapse:collapse;margin-top:2px;font-variant-numeric:tabular-nums}
+.lwtab td{padding:1px 4px 1px 0;color:var(--muted);white-space:nowrap}
+.lwtab td:first-child{color:var(--text);white-space:normal}
+.lwtab tr.win td{color:var(--text);font-weight:600}
+.lwtab tr.win td:last-child{color:var(--gold)}
+.lnote{font-size:11.5px;color:var(--muted);margin-top:2px}
+.lpts{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;align-items:center;margin-top:4px}
+.lpts .lpw{font-weight:600}
+.pchip{display:inline-flex;align-items:center;gap:3px;min-width:24px;justify-content:center;margin-right:3px;border-radius:4px;padding:0 5px;color:#fff;font-weight:700;font-size:12px;line-height:17px}
+.pchip.k{box-shadow:0 0 0 1px #cfc6b4}
+.pchip small{font-weight:400;font-size:10.5px;opacity:.9}
 .hand{grid-area:hand;container-type:inline-size;background:var(--frame);border-top:1px solid var(--line);display:flex;flex-direction:column;padding:6px 14px 8px;gap:6px;min-width:0}
 .hint{font-size:13px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hrow{display:flex;align-items:flex-end;gap:18px;min-width:0}
@@ -340,11 +394,9 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .ht.sel{transform:translateY(-8px);box-shadow:0 0 0 3px var(--gold),0 8px 14px rgba(0,0,0,.6)}
 .hl{width:52px;height:52px;border-radius:50%;background-size:cover;border:3px solid;padding:0;position:relative;box-shadow:0 2px 5px rgba(0,0,0,.6)}
 .hl.sel{box-shadow:0 0 0 3px var(--gold),0 0 14px rgba(224,182,90,.6)}
-.hl.onb.idle{filter:grayscale(.6) brightness(.75)}
 .hl.onb::after{content:"на поле";position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);font-size:9.5px;background:#000c;color:#ddd;padding:0 4px;border-radius:3px;white-space:nowrap}
 .ht.used{filter:grayscale(1) brightness(.45)}
 .idle{cursor:default}
-.hand.locked .grp .items{opacity:.6}
 .acts{margin-left:auto;display:flex;gap:8px;align-items:flex-end}
 .acts .btn{white-space:nowrap}
 /* рука равна ширине карты: на невысоком окне карта уже, и тайлы в руке мельче */
@@ -356,7 +408,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .app.conflict{--sidew:max(var(--side),var(--dock))}
 .app.conflict .sizer{visibility:hidden}
 .app.conflict .side{visibility:hidden}
-.app.conflict .top,.app.conflict .hand{filter:brightness(.4) saturate(.6)}
+/* шапка и рука гаснут только у того, кто решает в бою; ждущий и смотрящий видят руку целиком (просьба Дениса 03.11) */
+.app.conflict.locked .top,.app.conflict.locked .hand{filter:brightness(.4) saturate(.6)}
 .app.locked .top,.app.locked .boardwrap,.app.locked .hand{pointer-events:none}
 .modal.dock{position:fixed;right:0;bottom:0;top:0;width:var(--dock);z-index:50;display:flex;flex-direction:column;background:linear-gradient(180deg,#2e2419,#1c1712);border-left:1px solid var(--gold2);box-shadow:-20px 0 60px rgba(0,0,0,.55);animation:dockin .2s ease-out}
 @media (min-width:901px){.modal.dock{grid-area:side;position:relative;inset:auto;width:auto;min-width:0;min-height:0}}
@@ -514,6 +567,35 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @media (prefers-reduced-motion:reduce){.lessoncell{animation:none}}
 
 /* ---------- узкие экраны ---------- */
+/* пауза (просьба Дениса 03.11): поле видно сквозь затемнение, нажимается только карточка */
+.pausebox{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(10,8,6,.5);pointer-events:none}
+.pausebox[hidden]{display:none}
+.pcard2{pointer-events:auto;width:min(430px,calc(100vw - 32px));background:linear-gradient(180deg,#2c2218,#1f1913);border:1px solid var(--gold2);border-radius:14px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.pcard2 h2{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:22px}
+.pcard2 .mnote{margin-top:10px;text-align:left}
+.preadys{list-style:none;margin:6px 0 12px;padding:0;display:grid;gap:6px}
+.preadys li{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:8px;padding:6px 10px;min-height:40px}
+.preadys li span{width:18px;text-align:center;color:var(--muted)}
+.preadys li.ok span{color:#7bd389}
+.preadys li small{font-weight:400;color:var(--muted)}
+.preadys li .btn{margin-left:auto}
+#pReady{width:100%;min-height:42px}
+/* рука сбоку (просьба Дениса 03.11): нижняя строка уходит, рука столбиком в свободном поле со стороны
+   карты, карта растет в высоту. Только на компьютере и не в уроке: там своя сетка */
+@media (min-width:901px){
+  .app.handside:not(.lesson){--handw:236px;--mapw:min(calc(100vw - var(--sidew) - var(--handw) - 8px),calc((100dvh - var(--top) - 20px)*1.4348 + 20px));grid-template-columns:minmax(0,1fr) var(--handw) var(--mapw) 8px var(--sidew) minmax(0,1fr);grid-template-rows:var(--top) minmax(0,1fr);grid-template-areas:"top top top top top top" ". hand board sizer side ."}
+  .app.handside.sideleft:not(.lesson){grid-template-columns:minmax(0,1fr) var(--sidew) 8px var(--mapw) var(--handw) minmax(0,1fr);grid-template-areas:"top top top top top top" ". side sizer board hand ."}
+  .app.handside:not(.lesson) .hand{border-top:0;border-right:1px solid var(--line);overflow-y:auto;padding:10px 12px;gap:10px}
+  .app.handside.sideleft:not(.lesson) .hand{border-right:0;border-left:1px solid var(--line)}
+  .app.handside:not(.lesson) .hint{white-space:normal}
+  .app.handside:not(.lesson) .hrow{flex-direction:column;align-items:stretch;gap:14px}
+  .app.handside:not(.lesson) .grp .items{flex-wrap:wrap;gap:6px}
+  .app.handside:not(.lesson) .grp>span{font-size:10.5px}
+  .app.handside:not(.lesson) .ht{width:58px;height:58px}
+  .app.handside:not(.lesson) .hl{width:48px;height:48px}
+  .app.handside:not(.lesson) .acts{margin-left:0;flex-direction:column;align-items:stretch;gap:6px}
+  .app.handside:not(.lesson) .acts .btn{white-space:normal;max-width:none;padding:0 12px;font-size:14px}
+}
 @media (max-width:1200px){:root{--side:250px;--dock:390px}.badges{display:none}}
 @media (max-width:900px){
   .app{height:auto;min-height:100dvh;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;grid-template-areas:"top" "board" "hand" "side"}
@@ -527,6 +609,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
   .meta{margin-left:0}
   .nav{flex-wrap:wrap}
+  .layers{flex-wrap:wrap;flex-shrink:1}
   .navbtn{padding:7px 8px}
   .boardwrap{padding:6px}
   #board{height:auto}

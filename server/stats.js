@@ -41,7 +41,7 @@ function tourGame(tour, e) {
   const vectors = seats.map((s) => s.vector);
   const place = placesFromVectors(vectors);
   const [d, m, y] = tableDay(e.finishedAt).split('.');
-  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', score: vectors.map((v) => v[0]), place, pts: seasonPoints(place) };
+  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', code: e.code || null, score: vectors.map((v) => v[0]), place, pts: seasonPoints(place) };
 }
 
 export const siteGame = (e) => tourGame(SEASON, e);

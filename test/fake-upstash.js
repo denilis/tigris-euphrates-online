@@ -6,6 +6,7 @@ import { upstash, CAS_PUT, CAS_USER, UNLOCK, MINE_PUSH, RATE_HIT } from '../serv
 /** Поддельный Upstash: принимает тело запроса как настоящий и отвечает { result }. */
 export function fakeUpstash() {
   const kv = new Map(), sets = new Map(), lists = new Map(), ttl = new Map();
+  const expiry = new Map(); // срок хранения в секундах, как его поставила запись стола (EX)
   const commands = [];
   const run = (cmd) => {
     const [name, ...a] = cmd;
@@ -20,6 +21,15 @@ export function fakeUpstash() {
         return 'OK';
       }
       case 'DEL': return a.reduce((n, key) => n + (kv.delete(key) ? 1 : 0), 0);
+      case 'PERSIST': return expiry.delete(a[0]) ? 1 : 0;
+      case 'SCAN': {
+        // курсор отдаем порциями по COUNT, чтобы проверить обход в несколько запросов
+        const re = new RegExp('^' + a[a.indexOf('MATCH') + 1].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+        const all = [...kv.keys()].filter((key) => re.test(key));
+        const from = Number(a[0]), count = Number(a[a.indexOf('COUNT') + 1]);
+        const next = from + count >= all.length ? '0' : String(from + count);
+        return [next, all.slice(from, from + count)];
+      }
       case 'APPEND': { kv.set(a[0], (kv.get(a[0]) ?? '') + a[1]); return kv.get(a[0]).length; }
       case 'PEXPIRE': return kv.has(a[0]) ? 1 : 0;
       case 'SADD': { const s = sets.get(a[0]) || new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
@@ -33,9 +43,11 @@ export function fakeUpstash() {
       case 'EVAL': {
         const [script, , ...rest] = a;
         if (script === CAS_PUT) {
-          const [kv1, kt, km, expected, ver, doc, meta] = rest;
+          const [kv1, kt, km, expected, ver, doc, meta, sec] = rest;
           if ((kv.get(kv1) ?? '') !== expected) return 0;
           kv.set(kt, doc); kv.set(kv1, ver); kv.set(km, meta);
+          // как SET: с EX срок ставится заново, без EX снимается
+          for (const key of [kt, kv1, km]) if (Number(sec) > 0) expiry.set(key, Number(sec)); else expiry.delete(key);
           return 1;
         }
         if (script === CAS_USER) {
@@ -72,5 +84,5 @@ export function fakeUpstash() {
     for (const x of cmd) assert.equal(typeof x, 'string', 'все аргументы строками');
     return { ok: true, status: 200, json: async () => ({ result: run(cmd) }) };
   };
-  return { exec: upstash({ url: 'https://fake', token: 'tok', fetchImpl }), commands };
+  return { exec: upstash({ url: 'https://fake', token: 'tok', fetchImpl }), commands, expiry };
 }
