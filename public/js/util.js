@@ -1,7 +1,7 @@
 // Общие названия, склонения и мелкие помощники интерфейса.
 export const W = 16, H = 11;
 export const HEX = ['#b8432f', '#2d6a93', '#3d7a46', '#1f1f1f'];
-export const RING = ['#b8432f', '#2d6a93', '#3d7a46', '#cfc6b4']; // у черного светлая обводка
+export const RING = ['#b8432f', '#2d6a93', '#3d7a46', '#cfc6b4']; // для темных панелей: у черного светлая обводка, на поле кольцо цвета HEX
 export const COLKEY = ['red', 'blue', 'green', 'black'];
 export const COLNAME = ['красный', 'синий', 'зеленый', 'черный'];
 export const COLADJPL = ['красных', 'синих', 'зеленых', 'черных'];

@@ -1,5 +1,5 @@
 // Рисунки к правилам: участки из rules-scenes.js теми же тайлами и жетонами, что на поле.
-import { HEX, RING, tileImg, catImg, uniteImg, tokenImg } from './util.js';
+import { HEX, tileImg, catImg, uniteImg, tokenImg } from './util.js';
 import { monDefs, sealSVG, buildingSVG } from './board.js';
 import { SCENES, FIGURES, parseScene, cellAt } from './rules-scenes.js';
 
@@ -11,7 +11,7 @@ const tile = (href, x, y) => `<image href="${href}" x="${x + 3}" y="${y + 3}" wi
 function leader({ c, owner }, x, y) {
   const cx = x + C / 2, cy = y + C / 2;
   return `<circle cx="${cx}" cy="${cy}" r="24.5" fill="${HEX[c]}"/><image href="${tokenImg(HERO[owner], c)}" x="${cx - 22}" y="${cy - 22}" width="44" height="44"/>`
-    + `<circle cx="${cx}" cy="${cy}" r="23.5" fill="none" stroke="${RING[c]}" stroke-width="3"/>`;
+    + `<circle cx="${cx}" cy="${cy}" r="23.5" fill="none" stroke="${HEX[c]}" stroke-width="3"/>`;
 }
 
 function treasure(x, y) {
