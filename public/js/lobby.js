@@ -159,6 +159,7 @@ export function renderLobby(root, view, { act }) {
       <h2>Правила стола</h2>
       <div class="opts">
         <span class="seg"><button data-board="standard" class="${o.board === 'standard' ? 'on' : ''}" ${dis}>Обычное поле</button><button data-board="advanced" class="${o.board === 'advanced' ? 'on' : ''}" ${dis}>Продвинутое поле</button></span>
+        <span class="seg" title="Вид поля, на правила не влияет. В партии каждый может сменить его для себя">${[['relief', 'Рельеф'], ['cells', 'Клетки']].map(([id, t]) => `<button data-look="${id}" class="${(o.look ?? 'relief') === id ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
         <label><input type="checkbox" data-opt="englishSupport" ${o.englishSupport ? 'checked' : ''} ${dis}> Английская поддержка</label>
         <label><input type="checkbox" data-opt="buildings" ${o.buildings ? 'checked' : ''} ${dis}> Здания</label>
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
@@ -206,6 +207,7 @@ export function renderLobby(root, view, { act }) {
   on('[data-max]', 'click', (el) => act({ action: 'bot', seat: +el.dataset.max, settings: { strength: 100, errors: 0, counting: 'exact' } }));
   on('input[name=ord]', 'change', (el) => act({ action: 'options', options: { order: el.value } }));
   on('[data-board]', 'click', (el) => act({ action: 'options', options: { board: el.dataset.board } }));
+  on('[data-look]', 'click', (el) => act({ action: 'options', options: { look: el.dataset.look } }));
   on('[data-opt]', 'change', (el) => act({ action: 'options', options: { [el.dataset.opt]: el.checked } }));
   on('[data-time]', 'click', (el) => act({ action: 'options', options: { [el.dataset.time]: +el.dataset.val } }));
   root.querySelector('#lStart').addEventListener('click', () => act({ action: 'start' }));

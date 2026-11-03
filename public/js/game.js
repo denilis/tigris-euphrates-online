@@ -23,6 +23,17 @@ function loadOwners() {
   try { return localStorage.getItem('tigris.owners') !== 'off'; } catch { return true; }
 }
 
+// вид поля: как выбрал хозяин стола, но игрок может сменить его для себя, браузер помнит по столу
+const LOOKS = ['relief', 'cells'];
+function lookOf(view) {
+  if (ui.lookCode !== view.code) {
+    ui.lookCode = view.code;
+    try { ui.look = localStorage.getItem('tigris.look.' + view.code); } catch { ui.look = null; }
+  }
+  if (LOOKS.includes(ui.look)) return ui.look;
+  return LOOKS.includes(view.options.look) ? view.options.look : 'relief';
+}
+
 function resetFor(view) {
   // новый момент партии: прежний выбор больше не к месту
   const key = momentKey(view);
@@ -38,7 +49,7 @@ const SKELETON = `<div class="app" id="game">
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
     <div class="meta"><span>мешок <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span></div>
-    <nav class="nav"><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
+    <nav class="nav"><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><button class="navbtn" id="gOwners" title="Показать, к чьему лидеру идет каждый тайл"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <div class="sizer" id="gSizer" role="separator" aria-orientation="vertical" title="Потяните, чтобы изменить ширину панели. Двойной щелчок вернет ширину по умолчанию"></div>
@@ -86,6 +97,11 @@ export function renderGame(root, view, { act, go, lesson = null }) {
     root.querySelector('#gOwners').addEventListener('click', () => {
       ui.owners = !ui.owners;
       try { localStorage.setItem('tigris.owners', ui.owners ? 'on' : 'off'); } catch { /* без памяти */ }
+      draw();
+    });
+    root.querySelector('#gLook').addEventListener('click', () => {
+      ui.look = lookOf(current) === 'relief' ? 'cells' : 'relief';
+      try { localStorage.setItem('tigris.look.' + current.code, ui.look); } catch { /* без памяти */ }
       draw();
     });
   }
@@ -218,7 +234,9 @@ function draw() {
   const ob = root.querySelector('#gOwners');
   ob.textContent = ui.owners ? 'Метки: вкл' : 'Метки: выкл';
   ob.setAttribute('aria-pressed', String(ui.owners));
-  renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts(), view.options.board);
+  const look = lookOf(view);
+  root.querySelector('#gLook').textContent = look === 'relief' ? 'Поле: рельеф' : 'Поле: клетки';
+  renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts(), look);
   drawPlayers(d);
   drawStock(d);
   drawNow(d);

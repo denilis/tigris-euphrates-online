@@ -29,7 +29,7 @@ const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['в
 // (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
 export const DEFAULT_OPTIONS = {
   board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto',
+  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief',
 };
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
@@ -46,6 +46,8 @@ const OPTION_CHECKS = {
   confirmSeconds: (v) => Number.isInteger(v) && v >= 0 && v <= 60,
   // auto — по составу, none — не в зачет, иначе номер турнира
   tournament: (v) => typeof v === 'string' && /^[a-z0-9-]{1,24}$/.test(v),
+  // вид поля (просьба Дениса 03.11): рельеф из текстур или простые клетки, на правила не влияет
+  look: (v) => ['relief', 'cells'].includes(v),
 };
 const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
 const BOT_CHECKS = {
