@@ -772,3 +772,70 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .newgame .ngempty{margin:10px 0 0}
 .newgame .ngrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:760px){.newgame .ngrow{grid-template-columns:1fr}}
+
+/* журнал удалений (04.11) */
+.dlog{display:grid;grid-template-columns:92px 1fr auto auto;gap:4px 12px;align-items:center;background:var(--card);border-radius:10px;padding:8px 14px}
+.dlog .when{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.dlog .what b{color:var(--gold);letter-spacing:.06em}
+.dlog .what small{display:block;color:var(--muted)}
+.dlog .who{color:var(--text)}
+.dlog.back .what{color:#8fd18a}
+@media (max-width:760px){.dlog{grid-template-columns:1fr auto}.dlog .when{grid-column:1 / 3}.dlog .acts{grid-row:2 / 4;grid-column:2}}
+
+/* ---------- лобби глиняной табличкой (схема одобрена Денисом 04.11) ----------
+   Фон: текстура глины, края чуть неровные. Буквы «выбиты»: темный текст со светлым краем снизу.
+   Линии «процарапаны»: темная черта и светлая под ней. Выбранное вдавлено в темную глину. */
+.lcard.clay{
+  --ink:#3a2412; --ink2:#6a4826; --cut:rgba(70,40,14,.5); --lip:rgba(255,238,205,.55); --pad:28px;
+  position:relative;color:var(--ink);color-scheme:light;
+  background:#c99d68 url(/img/clay/clay.webp) 0 0/512px 512px repeat;
+  border:0;border-radius:26px 20px 28px 18px / 18px 28px 20px 26px;padding:0 var(--pad);overflow:hidden;
+  box-shadow:inset 0 2px 1px rgba(255,240,210,.5),inset 0 -4px 8px rgba(80,45,15,.35),inset 0 0 50px rgba(110,70,30,.28),0 24px 64px rgba(0,0,0,.6);
+}
+.lcard.clay .band{height:52px;margin:0 calc(var(--pad) * -1);background:url(/img/clay/band.webp) 0 50%/auto 52px repeat-x}
+.lcard.clay .band.top{margin-bottom:16px;box-shadow:0 1px 0 var(--lip),0 -1px 0 var(--cut) inset}
+.lcard.clay .band.bot{margin-top:20px;box-shadow:0 -1px 0 var(--cut),0 1px 0 var(--lip) inset}
+.lcard.clay h1{color:#4a2c13;text-shadow:0 1px 0 var(--lip),0 -1px 0 rgba(50,25,8,.45);font-weight:700}
+.lcard.clay .sub,.lcard.clay .muted{color:var(--ink2)}
+.lcard.clay h2{display:flex;align-items:center;gap:12px;color:#5a3818;text-shadow:0 1px 0 var(--lip)}
+.lcard.clay h2::after{content:"";flex:1;height:0;border-top:1.5px solid var(--cut);box-shadow:0 1px 0 var(--lip)}
+.lcard.clay .invite{background:rgba(110,70,32,.16);box-shadow:inset 0 2px 5px rgba(60,30,10,.4),inset 0 -1px 0 var(--lip)}
+.lcard.clay .invite code{color:var(--ink)}
+.lcard.clay .seat{background:none;border-radius:0;margin:0;padding:12px 4px;border-bottom:1.5px solid var(--cut);box-shadow:0 1px 0 var(--lip)}
+.lcard.clay .seat .num small{color:var(--ink2)}
+.lcard.clay .who b{color:var(--ink)}
+.lcard.clay .btn{background:linear-gradient(#dcb987,#c49565);border:1px solid rgba(80,45,15,.5);color:var(--ink);box-shadow:inset 0 1px 0 rgba(255,242,215,.7),0 2px 3px rgba(60,30,10,.35)}
+.lcard.clay .btn:hover:not([disabled]){background:linear-gradient(#e5c493,#cc9f6e)}
+.lcard.clay .btn.primary{font-weight:700}
+.lcard.clay .linkbtn{color:var(--ink2)}
+.lcard.clay .linkbtn:hover{color:#24140a}
+.lcard.clay .iconbtn{border-color:rgba(80,45,15,.45);color:var(--ink)}
+.lcard.clay .seg{border-color:rgba(80,45,15,.45);background:rgba(255,238,205,.18)}
+.lcard.clay .seg button{color:var(--ink)}
+.lcard.clay .seg button.on,.lcard.clay .opt.on{background:rgba(105,62,26,.3);color:#24140a;box-shadow:inset 0 2px 5px rgba(45,22,6,.5),inset 0 -1px 0 var(--lip)}
+.lcard.clay .seg button.on{font-weight:700}
+.lcard.clay .opt{background:rgba(255,238,205,.16);border-color:rgba(80,45,15,.3)}
+.lcard.clay .opt.on{border-color:rgba(80,45,15,.55)}
+.lcard.clay .opt span{color:var(--ink2)}
+.lcard.clay input,.lcard.clay .opt input,.lcard.clay .opts input,.lcard.clay .botset input[type=range]{accent-color:#7a4a1e}
+.lcard.clay select,.lcard.clay .botset select,.lcard.clay .opts select{background:rgba(255,240,212,.45);color:var(--ink);border:1px solid rgba(80,45,15,.45)}
+.lcard.clay .botset{color:var(--ink2);border-top:1.5px dashed var(--cut)}
+.lcard.clay .botset b{color:var(--ink)}
+.lcard.clay .hero{color:var(--ink2)}
+.lcard.clay .hero.on{color:#24140a}
+.lcard.clay .hero.on i{border-color:#7a4a1e;box-shadow:0 0 0 2px rgba(255,238,205,.6),0 2px 6px rgba(45,22,6,.55)}
+.lcard.clay .here{color:var(--ink2)}
+.lcard.clay .here::before{border-color:#7a5a3a}
+.lcard.clay .here.on{color:#2c6e31;font-weight:600}
+/* «Начать партию»: круглый оттиск печати; пока начать нельзя, оттиск бледный */
+.lcard.clay .seal{width:128px;height:128px;min-height:0;padding:0 16px;border-radius:50%;border:3px solid #5a3214;
+  background:radial-gradient(circle at 50% 42%,#93602f 0 55%,#74461d 56% 62%,#8d5b2b 63%);color:#f6e2bd;
+  font:700 14px/1.2 Cinzel,Georgia,serif;letter-spacing:.06em;text-transform:uppercase;text-align:center;text-shadow:0 -1px 0 rgba(30,14,4,.7);
+  box-shadow:inset 0 4px 8px rgba(30,14,4,.55),inset 0 -2px 3px rgba(255,220,170,.25),0 1px 0 var(--lip)}
+.lcard.clay .seal:hover:not([disabled]){background:radial-gradient(circle at 50% 42%,#a06a35 0 55%,#7d4c20 56% 62%,#986230 63%)}
+.lcard.clay .seal[disabled]{opacity:.42;filter:saturate(.5)}
+@media (max-width:760px){
+  .lcard.clay{--pad:16px;padding:0 var(--pad)}
+  .lcard.clay .band{height:40px;background-size:auto 40px}
+  .lcard.clay .seal{width:112px;height:112px;font-size:12.5px}
+}

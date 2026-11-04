@@ -39,7 +39,7 @@ export function chatNote(chat) {
 /** Вопрос перед удалением стола: кроме себя называем всех людей за ним. */
 export function deleteQuestion(t, myName) {
   const others = t.seats.filter((s) => s.kind === 'human' && s.name && s.name !== myName).map((s) => s.name);
-  return `Удалить стол ${t.title || t.code}?${others.length ? ` За столом: ${others.join(', ')}.` : ''} Вернуть его будет нельзя.`;
+  return `Удалить стол ${t.title || t.code}?${others.length ? ` За столом: ${others.join(', ')}.` : ''} Вернуть его можно в течение 90 дней из журнала удалений.`;
 }
 
 /** Кого можно позвать за стол: себя и сидящих нет, кто на сайте выше. online: null, пока пульса не было. */

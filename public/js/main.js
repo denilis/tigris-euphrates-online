@@ -12,6 +12,7 @@ import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion } from './online.js';
+import { deletionsHTML, bindRestore } from './deletions.js';
 import { esc, toast, copy, faceBg } from './util.js';
 
 const app = document.getElementById('app');
@@ -196,6 +197,7 @@ async function renderHome() {
     ${welcomeHidden() ? '' : welcomeHTML(session.get()?.user)}
     <div class="homehead"><h1>Мои столы</h1><a class="btn primary" href="#/new">Начать игру</a></div>
     <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
+    <div id="myDel"></div>
     ${welcomeHidden() ? '<p class="small"><button class="linkbtn" id="welcomeShow">О сайте</button></p>' : ''}
   </main></div>`;
   bindTopbar();
@@ -225,9 +227,28 @@ async function renderHome() {
         e.preventDefault(); // кнопка внутри ссылки на стол
         removeTable(list[+b.dataset.del], load);
       }));
+      await loadMyDel(load);
     } catch (e) { toast(e.message); }
   };
   await load();
+}
+
+/** «Удаленные мной (N)» под «Моими столами» (04.11): свои удаления и кнопка «Вернуть». */
+let myDelOpen = false;
+async function loadMyDel(reload) {
+  const me = session.get()?.user?.id;
+  const list = (await api('GET', 'deletions')).filter((e) => e.by === me);
+  const box = app.querySelector('#myDel');
+  if (!box) return;
+  const n = list.filter((e) => e.canRestore).length;
+  box.innerHTML = list.length ? `<p class="small"><button class="linkbtn" id="myDelBtn" type="button" aria-expanded="${myDelOpen}">Удаленные мной (${n})</button></p>
+    <div class="tables" id="myDelList" ${myDelOpen ? '' : 'hidden'}>${deletionsHTML(list)}</div>` : '';
+  box.querySelector('#myDelBtn')?.addEventListener('click', (e) => {
+    myDelOpen = !myDelOpen;
+    e.currentTarget.setAttribute('aria-expanded', String(myDelOpen));
+    box.querySelector('#myDelList').hidden = !myDelOpen;
+  });
+  bindRestore(box, { api, toast, done: reload });
 }
 
 // --- стол
@@ -285,8 +306,11 @@ async function renderAdmin() {
     <div id="newCode"></div>
     <div id="users" class="tables"></div>
     ${admin ? `<h2>Открытые столы всех игроков</h2>
-    <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока. Идущие и сыгранные партии удалить нельзя.</p>
-    <div id="openTables" class="tables"></div>` : ''}
+    <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока.</p>
+    <div id="openTables" class="tables"></div>
+    <h2>Журнал удалений</h2>
+    <p class="muted">Все удаления и возвраты столов, новые сверху. Удаленный стол хранится 90 дней: за это время его можно вернуть.</p>
+    <div id="delLog" class="tables"></div>` : ''}
   </main></div>`;
   bindTopbar();
   const showCode = (name, code) => {
@@ -335,7 +359,12 @@ async function renderAdmin() {
       <span class="acts"><button class="btn sm" data-del="${i}" type="button">Удалить</button></span>
     </div>`).join('') : '<p class="muted">Открытых столов нет.</p>';
     box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => removeTable(list[+b.dataset.del], reloadTables)));
+    const log = app.querySelector('#delLog');
+    if (!log) return;
+    log.innerHTML = deletionsHTML(await api('GET', 'deletions'));
+    bindRestore(log, { api, toast, done: reloadTables });
   };
+  // удаление и возврат меняют оба списка: открытые столы и журнал
   const reloadTables = () => loadTables().catch((e) => toast(e.message));
   if (admin) reloadTables();
   app.querySelector('#newUser').addEventListener('submit', async (e) => {

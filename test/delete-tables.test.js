@@ -314,7 +314,7 @@ test('открытые столы: все игроки, только где па
 
 test('вопрос перед удалением: себя не называем', () => {
   const t = { code: 'ABC234', title: '01.11.2026.8', seats: [{ kind: 'human', name: 'Денис' }, { kind: 'human', name: 'Андрей' }, { kind: 'human', name: 'Влад' }, { kind: 'bot', name: 'Бот' }] };
-  assert.equal(deleteQuestion(t, 'Денис'), 'Удалить стол 01.11.2026.8? За столом: Андрей, Влад. Вернуть его будет нельзя.');
+  assert.equal(deleteQuestion(t, 'Денис'), 'Удалить стол 01.11.2026.8? За столом: Андрей, Влад. Вернуть его можно в течение 90 дней из журнала удалений.');
   const empty = { code: 'ABC234', title: null, seats: [{ kind: 'human', name: 'Денис' }, { kind: 'human', name: null }] };
-  assert.equal(deleteQuestion(empty, 'Денис'), 'Удалить стол ABC234? Вернуть его будет нельзя.');
+  assert.equal(deleteQuestion(empty, 'Денис'), 'Удалить стол ABC234? Вернуть его можно в течение 90 дней из журнала удалений.');
 });

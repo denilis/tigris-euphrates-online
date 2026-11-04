@@ -171,8 +171,11 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
     : waiting.length ? `Ждем за столом: ${waiting.map((s) => s.name).join(', ')}.` : '';
   // сверху меню сайта, как на других страницах (просьба Дениса 03.11): раньше из лобби был
   // только путь через «Мои столы»
+  // лобби глиняной табличкой (схема одобрена Денисом 04.11): полосы клинописи сверху и снизу,
+  // буквы выбиты, места разделены процарапанными линиями, «Начать партию» оттиском печати
   root.innerHTML = `${bar}<div class="lobby">
-    <div class="lcard">
+    <div class="lcard clay">
+      <div class="band top" aria-hidden="true"></div>
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
@@ -206,8 +209,9 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
       <div class="lfoot">
         ${notReady ? `<span class="muted">${notReady}</span>` : ''}
         ${me == null && !host ? '<span class="muted">Сядьте на свободное место, чтобы играть.</span>' : ''}
-        ${host ? `<button class="btn primary" id="lStart" ${canStart ? '' : 'disabled'}>Начать партию</button>` : '<span class="muted">Партию начнет хозяин стола, когда все будут на месте.</span>'}
+        ${host ? `<button class="btn primary seal" id="lStart" ${canStart ? '' : 'disabled'}>Начать партию</button>` : '<span class="muted">Партию начнет хозяин стола, когда все будут на месте.</span>'}
       </div>
+      <div class="band bot" aria-hidden="true"></div>
     </div>
   </div>`;
 
