@@ -2,6 +2,7 @@
 // из переноса и партии сайта с этими тремя. Партия попадает в турнир по составу людей (бот для
 // состава не нужен) или по выбору организатора в лобби. Место бот занимает: см. tourGame.
 import { BGA_GAMES } from './season-bga.js';
+import { BGA_DETAILS } from './season-bga-details.js';
 import { placesFromVectors } from '../game/order.js';
 import { tableDay } from '../game/table.js';
 
@@ -47,14 +48,14 @@ function tourGame(tour, e) {
   const allPts = seasonPoints(all); // деленное с ботом первое место тоже деленное
   const pick = (arr) => seats.map((s) => arr[e.seats.indexOf(s)]);
   const [d, m, y] = tableDay(e.finishedAt).split('.');
-  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', code: e.code || null, score: vectors.map((v) => v[0]), place: pick(all), pts: pick(allPts) };
+  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', code: e.code || null, score: vectors.map((v) => v[0]), place: pick(all), pts: pick(allPts), details: seats.map((s) => s.d ?? null) };
 }
 
 export const siteGame = (e) => tourGame(SEASON, e);
 
 /** Все партии турнира от старых к новым. tours — все турниры, history — партии сайта в любом порядке. */
 export function tourGames(tour, tours, history) {
-  const bga = tour.builtin ? BGA_GAMES.map(([date, table, score, place, pts]) => ({ date, source: 'bga', table: String(table), score, place, pts })) : [];
+  const bga = tour.builtin ? BGA_GAMES.map(([date, table, score, place, pts]) => ({ date, source: 'bga', table: String(table), score, place, pts, details: BGA_DETAILS[table] ?? null })) : [];
   const site = [...history].sort((a, b) => a.finishedAt - b.finishedAt).filter((e) => tourOf(e, tours)?.id === tour.id).map((e) => tourGame(tour, e));
   return [...bga, ...site];
 }

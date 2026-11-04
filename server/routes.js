@@ -11,7 +11,7 @@ import { viewFor } from '../game/view.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
-import { keepFinishedOnce } from './keep.js';
+import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
 import { telegram, inChat, invited, called } from './telegram.js';
@@ -246,6 +246,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   async function stats(query) {
     await keepFinishedOnce(store); // один раз после выкладки: старые законченные столы без срока и с кодом в истории
+    await detailsOnce(store); // один раз после выкладки: подробности старых партий для статистики турнира
     const tours = await allTours();
     const tour = tours.find((t) => t.id === query.tour) || SEASON;
     const users = await store.listUsers();

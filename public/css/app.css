@@ -176,6 +176,30 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .stats .games b{color:var(--gold);font-weight:600}
 .stats .games a{text-decoration:none}
 @media (max-width:760px){.stats .podium,.stats .charts{grid-template-columns:1fr}}
+/* подробности турнира (этап 2, 04.11) */
+.stats .dash[hidden]{display:none}
+.stats .dash .charts{margin-top:10px}
+.stats .dwide{margin-top:10px}
+.stats .dcards{display:grid;grid-template-columns:repeat(var(--n,3),1fr);gap:10px}
+.stats .dcard{background:var(--card);border-radius:10px;border-top:3px solid var(--tone);padding:12px 14px}
+.stats .dcard .who{display:flex;align-items:center;gap:8px;font-size:17px}
+.stats .dcard dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:10px 0 0;border-top:1px solid var(--line);padding-top:8px}
+.stats .dcard dt{color:var(--muted);font-size:12.5px}
+.stats .dcard dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.stats .dcard dd small{color:var(--tone);margin-left:4px}
+.stats .face.mono{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;color:#1b1713;font:700 12px/1 "Segoe UI",sans-serif;font-style:normal}
+.stats .recs{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.stats .recs li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;border-bottom:1px solid #3a2e22;padding:4px 0}
+.stats .recs li:last-child{border-bottom:0}
+.stats .recs span{color:var(--muted);flex:0 0 290px;font-size:13px}
+.stats .recs a{text-decoration:none}
+.stats .awards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.stats .award{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#1b1713}
+.stats .award .atitle{font-family:Cinzel,Georgia,serif;font-size:16px;color:var(--gold)}
+.stats .award .awho{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 4px}
+.stats .award .awho .face{width:26px;height:26px}
+.stats .award .atext{font-size:12px;color:var(--muted)}
+@media (max-width:760px){.stats .dcards{grid-template-columns:1fr}.stats .recs span{flex-basis:100%}}
 
 /* ---------- лобби ---------- */
 .lobby{padding:24px 16px 40px;display:flex;justify-content:center}

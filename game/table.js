@@ -6,6 +6,7 @@ import { BOARDS } from './vendor/engine/boards.js';
 import { STYLE_LABELS } from './vendor/bot/styles.js';
 import { stateFromJSON, stateToJSON } from './serialize.js';
 import { cryptoRng, seededRng, newSeed } from './random.js';
+import { gameDetails } from './details.js';
 import { playOrder, companyKey, placesFromVectors } from './order.js';
 import { journalEntries } from './journal.js';
 
@@ -507,6 +508,7 @@ export function botDue(t) {
 export function historyEntry(t) {
   if (t.status !== 'over' || !t.game.result) fail('not-over', 'Партия не закончена', 409);
   const r = t.game.result;
+  const det = gameDetails(t.game.log, r); // подробности для статистики турнира (04.11)
   return {
     id: t.game.id,
     code: t.code, // статистика ведет на стол
@@ -519,7 +521,7 @@ export function historyEntry(t) {
       const seat = seatById(t, x.seatId);
       return {
         seatId: x.seatId, kind: seat.kind, userId: seat.kind === 'human' ? seat.userId : null,
-        name: seat.name, hero: seat.hero, place: x.place, vector: x.vector,
+        name: seat.name, hero: seat.hero, place: x.place, vector: x.vector, d: det[x.seatId],
       };
     }),
   };
