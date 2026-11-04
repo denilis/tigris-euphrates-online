@@ -23,7 +23,7 @@ test('«Стол с ботами»: вы и три бота, хозяин нач
 });
 
 test('приветствие: «Начать игру» первым разделом, «Мои столы» только список партий', () => {
-  assert.deepEqual(SECTIONS.map((s) => s[0]), ['#/new', '#/', '#/stats', '#/rules', '#/learn', '#/admin']);
+  assert.deepEqual(SECTIONS.map((s) => s[0]), ['#/new', '#/tables', '#/stats', '#/rules', '#/learn', '#/admin']);
   assert.doesNotMatch(SECTIONS[1][2], /новый стол/);
 });
 

@@ -6,7 +6,7 @@ import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
 import { renderReplay } from './replay.js';
-import { welcomeHTML, welcomeHidden, setWelcomeHidden } from './welcome.js';
+import { welcomeHTML } from './welcome.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
@@ -71,7 +71,7 @@ function topbar(active) {
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <nav>
       <a href="#/new" class="newgame${active === 'new' ? ' on' : ''}">Начать игру</a>
-      <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
+      <a href="#/tables" class="${active === 'tables' ? 'on' : ''}">Мои столы</a>
       <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/rules" class="${active === 'rules' ? 'on' : ''}">Правила</a>
       <a href="#/learn" class="${active === 'learn' ? 'on' : ''}">Обучение</a>
@@ -201,17 +201,32 @@ function renderNew() {
   });
 }
 
+/**
+ * Главная (просьба Дениса 04.11, схема из сессии этапов 3-5): глиняная табличка с приветствием и
+ * шестью разделами, без списка столов. Если где-то ждут хода игрока, на «Моих столах» метка.
+ */
+async function renderStart() {
+  app.innerHTML = `<div class="page">${topbar('')}<div class="lobby"><div class="lcard clay start">
+    <div class="band top" aria-hidden="true"></div>
+    ${welcomeHTML(session.get()?.user)}
+    <div class="band bot" aria-hidden="true"></div>
+  </div></div></div>`;
+  bindTopbar();
+  let list;
+  try { list = await api('GET', 'tables'); } catch { return; } // метка не главное: главная работает и без нее
+  const n = list.filter((t) => t.status === 'playing' && !t.paused && t.me != null && t.toMove === t.me).length;
+  const card = app.querySelector('.wlink[href="#/tables"] b');
+  if (card && n) card.insertAdjacentHTML('beforeend', ` <em class="wturn">ваш ход: ${n}</em>`);
+}
+
+/** «Мои столы» (#/tables): все партии игрока. */
 async function renderHome() {
-  app.innerHTML = `<div class="page">${topbar('home')}<main class="pcard">
-    ${welcomeHidden() ? '' : welcomeHTML(session.get()?.user)}
+  app.innerHTML = `<div class="page">${topbar('tables')}<main class="pcard">
     <div class="homehead"><h1>Мои столы</h1><a class="btn primary" href="#/new">Начать игру</a></div>
     <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
     <div id="myDel"></div>
-    ${welcomeHidden() ? '<p class="small"><button class="linkbtn" id="welcomeShow">О сайте</button></p>' : ''}
   </main></div>`;
   bindTopbar();
-  app.querySelector('#welcomeHide')?.addEventListener('click', () => { setWelcomeHidden(true); renderHome(); });
-  app.querySelector('#welcomeShow')?.addEventListener('click', () => { setWelcomeHidden(false); renderHome(); });
   const load = async () => {
     try {
       const list = await api('GET', 'tables');
@@ -224,8 +239,7 @@ async function renderHome() {
           <b>${esc(t.title || t.code)}</b>
           <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
           <small>${t.paused ? 'на паузе' : STATUS[t.status] || ''}${myTurn && !t.paused ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
-          ${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}
-          ${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}
+          ${t.replay || del ? `<span class="tacts">${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}</span>` : ''}
         </a>`;
       }).join('') : '<p class="muted">Пока нет столов. Новую партию собирают на странице «Начать игру».</p>';
       el.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', (e) => {
@@ -294,7 +308,7 @@ function openTable(code) {
   }, (e) => {
     if (e.status === 404) {
       closePicker(); // стол могли удалить, пока было открыто окно выбора игроков
-      app.innerHTML = `<div class="page">${topbar('')}<main class="pcard"><h1>Стола ${esc(code)} нет</h1><p>Возможно, его удалили. Проверьте код в приглашении.</p><a class="btn" href="#/">К моим столам</a></main></div>`;
+      app.innerHTML = `<div class="page">${topbar('')}<main class="pcard"><h1>Стола ${esc(code)} нет</h1><p>Возможно, его удалили. Проверьте код в приглашении.</p><a class="btn" href="#/tables">К моим столам</a></main></div>`;
       bindTopbar();
       watcher?.stop();
     } else if (e.code !== 'network') toast(e.message);
@@ -424,10 +438,11 @@ function route() {
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'new') return renderNew();
+  if (h === 'tables') return renderHome();
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
   if (h === 'me') return renderProfile(app, topbar(''), bindTopbar);
-  return renderHome();
+  return renderStart();
 }
 
 window.addEventListener('hashchange', route);

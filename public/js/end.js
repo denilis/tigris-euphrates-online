@@ -46,7 +46,7 @@ export function renderEnd(box, view, { act, go }) {
       <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn primary" id="eHome">К столам</button></div>
     </div>`;
     box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
-    box.querySelector('#eHome').addEventListener('click', () => go('#/'));
+    box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
     return;
   }
   const seat = (id) => view.seats.find((s) => s.id === id);
@@ -77,7 +77,7 @@ export function renderEnd(box, view, { act, go }) {
     ${view.me != null && !view.next ? '<p class="mnote">В реванше тот же состав и правила, первым ходит последнее место.</p>' : ''}
   </div>`;
   box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
-  box.querySelector('#eHome').addEventListener('click', () => go('#/'));
+  box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
   box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
   // картинка итога (этап 4, 04.11): модуль грузится по нажатию, поле берется с экрана партии
   box.querySelector('#ePicture').addEventListener('click', async () => (await import('./endshot.js')).openPicture(view, document.querySelector('#board')));
