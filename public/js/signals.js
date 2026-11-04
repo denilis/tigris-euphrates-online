@@ -21,19 +21,28 @@ export function newEntries(prev, view) {
 }
 
 /**
- * Звуки событий (просьба Дениса 04.11): бой, победа в своем бою, монумент, катастрофа,
- * сокровище, конец партии. Не больше трех за раз, по важности.
+ * Звуки событий (просьба Дениса 04.11): бой; в своем бою у победителя фанфары, у проигравшего
+ * грустный звук; монумент, катастрофа, сокровище; конец партии: первое место фанфары, последнее
+ * грустный звук, остальные аккорд. Не больше трех за раз, по важности. result — итог партии из вида.
  */
-export function eventSounds(entries, me) {
+export function eventSounds(entries, me, result = null) {
   const has = (...evs) => entries.some((e) => evs.includes(e.ev));
   const out = [];
-  if (has('gameOver')) out.push('gameover');
+  if (has('gameOver')) {
+    const mine = me == null ? null : result?.seats?.find((x) => x.seatId === me);
+    const worst = result?.seats?.length ? Math.max(...result.seats.map((x) => x.place)) : null;
+    out.push(!mine ? 'gameover' : mine.place === 1 ? 'fanfare' : mine.place === worst ? 'defeat' : 'gameover');
+  }
   if (has('war', 'revolt')) out.push('battle');
-  if (me != null && entries.some((e) => (e.ev === 'war' || e.ev === 'revolt') && e.winner === me)) out.push('victory');
+  if (me != null) {
+    const mine = entries.filter((e) => (e.ev === 'war' || e.ev === 'revolt') && [e.att, e.def, e.winner, e.loser].includes(me));
+    if (mine.some((e) => e.winner === me)) out.push('victory');
+    else if (mine.length) out.push('defeat');
+  }
   if (has('monument', 'wonder')) out.push('monument');
   if (has('catastrophe')) out.push('catastrophe');
   if (has('treasure')) out.push('treasure');
-  return out.slice(0, 3);
+  return [...new Set(out)].slice(0, 3);
 }
 
 /** Звуки при переходе от prev к next. При первом взгляде на стол тишина. */
@@ -108,29 +117,70 @@ function rumble(at, dur, gain) {
   src.stop(t + dur + 0.02);
 }
 
+/** Медный тон (фанфары, грустная труба): пила через мягкий фильтр, можно со скольжением и вибрато. */
+function brass(freq, at, dur, gain, to = null, vibrato = 0) {
+  const t = ac.currentTime + at, o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(freq, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  if (vibrato) {
+    const lfo = ac.createOscillator(), depth = ac.createGain();
+    lfo.frequency.value = 5.5;
+    depth.gain.value = vibrato;
+    lfo.connect(depth).connect(o.frequency);
+    lfo.start(t);
+    lfo.stop(t + dur + 0.05);
+  }
+  f.type = 'lowpass';
+  f.frequency.value = 1700;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.03);
+  g.gain.setValueAtTime(gain, t + dur * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(f).connect(g).connect(ac.destination);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
 // звуки событий: [длительность, как играть со сдвигом at]
 const EVENT = {
-  battle: [0.55, (at) => { tone(130, at, 0.22, 0.22, 'sine', 48); tone(120, at + 0.26, 0.26, 0.2, 'sine', 42); }],
-  victory: [0.5, (at) => { tone(523, at, 0.14, 0.07, 'triangle'); tone(659, at + 0.12, 0.14, 0.07, 'triangle'); tone(784, at + 0.24, 0.26, 0.08, 'triangle'); }],
-  monument: [1.2, (at) => { tone(440, at, 1.2, 0.06); tone(880, at, 0.9, 0.05); tone(1320, at, 0.6, 0.025); }],
-  catastrophe: [0.9, (at) => { rumble(at, 0.85, 0.18); tone(62, at, 0.8, 0.12, 'sine', 40); }],
-  treasure: [0.35, (at) => { tone(2093, at, 0.12, 0.04); tone(2637, at + 0.07, 0.2, 0.035); }],
-  gameover: [1.4, (at) => { for (const f of [392, 494, 587]) tone(f, at, 1.4, 0.05); }],
+  battle: [0.55, (at) => { tone(130, at, 0.22, 0.26, 'sine', 48); tone(120, at + 0.26, 0.26, 0.24, 'sine', 42); }],
+  // «ту-ту-дун»: фанфары победителю боя
+  victory: [0.85, (at) => { brass(392, at, 0.12, 0.17); brass(392, at + 0.14, 0.12, 0.17); for (const [f, v] of [[523, 0.2], [659, 0.12], [784, 0.1]]) brass(f, at + 0.28, 0.55, v); }],
+  // грустная труба проигравшему: четыре ноты вниз, последняя с дрожью
+  defeat: [1.5, (at) => { brass(311, at, 0.28, 0.16); brass(294, at + 0.3, 0.28, 0.16); brass(277, at + 0.6, 0.28, 0.16); brass(262, at + 0.9, 0.6, 0.17, 247, 6); }],
+  fanfare: [1.6, (at) => { [523, 659, 784].forEach((f, i) => brass(f, at + i * 0.13, 0.14, 0.17)); for (const [f, v] of [[523, 0.16], [659, 0.12], [784, 0.11], [1047, 0.1]]) brass(f, at + 0.42, 1.0, v); }],
+  monument: [1.2, (at) => { tone(440, at, 1.2, 0.09); tone(880, at, 0.9, 0.07); tone(1320, at, 0.6, 0.035); }],
+  catastrophe: [0.9, (at) => { rumble(at, 0.85, 0.24); tone(62, at, 0.8, 0.16, 'sine', 40); }],
+  treasure: [0.35, (at) => { tone(2093, at, 0.12, 0.06); tone(2637, at + 0.07, 0.2, 0.05); }],
+  // игрок зашел за стол в лобби: дверной звонок из двух нот
+  arrive: [0.45, (at) => { tone(659, at, 0.18, 0.16); tone(880, at + 0.14, 0.3, 0.16); }],
+  gameover: [1.4, (at) => { for (const f of [392, 494, 587]) tone(f, at, 1.4, 0.07); }],
 };
 
+/** «Ваш ход» (Денис 04.11: громче и мажорно, «сходи»): колокольчики вверх до-ми-соль-до. */
+function chimeAt(at) {
+  [523, 659, 784].forEach((f, i) => { tone(f, at + i * 0.11, 0.3, 0.2); tone(f * 2, at + i * 0.11, 0.2, 0.05, 'triangle'); });
+  tone(1047, at + 0.33, 0.7, 0.22);
+  tone(2094, at + 0.33, 0.4, 0.05, 'triangle');
+}
+
+/** Напоминание, когда время хода вышло: два коротких «динь» вверх. */
+function remindAt(at) {
+  tone(784, at, 0.22, 0.2);
+  tone(1047, at + 0.18, 0.35, 0.22);
+}
+
 /** Сыграть звуки из soundsFor и eventSounds, если звук включен и браузер его разрешил. */
-export function play({ tick, chime, events = [] }) {
-  if (!(tick || chime || events.length) || !soundOn() || !ac || ac.state !== 'running') return;
+export function play({ tick, chime, remind, events = [] }) {
+  if (!(tick || chime || remind || events.length) || !soundOn() || !ac || ac.state !== 'running') return;
   let at = 0;
   for (const name of events) {
     const [dur, fn] = EVENT[name] || [0, () => {}];
     fn(at);
     at += dur * 0.8;
   }
-  if (chime) {
-    tone(660, at, 0.22, 0.12);
-    tone(990, at + 0.15, 0.32, 0.1);
-  } else if (tick && !events.length) {
-    tone(220, 0, 0.07, 0.05, 'triangle');
-  }
+  if (chime) chimeAt(at);
+  else if (remind) remindAt(at);
+  else if (tick && !events.length) tone(220, 0, 0.07, 0.07, 'triangle');
 }

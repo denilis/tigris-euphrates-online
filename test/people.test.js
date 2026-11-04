@@ -127,14 +127,16 @@ test('главный ставит и снимает галочку, снятие
   const s = setup();
   const { denis, player, id } = await withPlayer(s);
   const asMain = (admin) => s.req('POST', `admin/users/${id}/admin`, { body: { admin }, token: denis.token });
-  assert.equal((await s.req('GET', 'admin/users', { token: player.token })).status, 403);
+  // список кодов открыт всем игрокам (04.11), но не администратор видит только приглашенных им
+  const seen = async () => (await s.req('GET', 'admin/users', { token: player.token })).body.length;
+  assert.equal(await seen(), 0);
   assert.equal((await asMain(true)).status, 200);
-  assert.equal((await s.req('GET', 'admin/users', { token: player.token })).status, 200);
+  assert.ok(await seen() >= 2, 'администратор видит всех');
   const list = (await s.req('GET', 'admin/users', { token: denis.token })).body;
   assert.equal(list.find((u) => u.id === id).admin, true);
   assert.equal(list.find((u) => u.id === 'u-admin').main, true);
   await asMain(false);
-  assert.equal((await s.req('GET', 'admin/users', { token: player.token })).status, 403);
+  assert.equal(await seen(), 0, 'снятие действует сразу');
   assert.equal((await s.req('POST', 'admin/users/u-admin/admin', { body: { admin: false }, token: denis.token })).status, 403, 'с себя не снять');
   assert.equal((await s.req('POST', 'admin/users/u-admin/revoke', { body: {}, token: denis.token })).status, 403);
 });

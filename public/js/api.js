@@ -65,6 +65,8 @@ export function watchTable(code, onView, onError) {
     if (appendLog && view?.game && v.game) v.game.log = [...view.game.log, ...v.game.log];
     // часы сервера против своих: таймеры считаем по серверу
     if (v.game?.clock?.now) v.game.clock.skew = v.game.clock.now - Date.now();
+    // кто на месте, знает опрос, а не вид стола: при смене вида в лобби не теряем
+    if (v.status === 'lobby' && v.here == null && view?.here) v.here = view.here;
     view = v;
     version = v.version;
     onView(v);
@@ -82,7 +84,13 @@ export function watchTable(code, onView, onError) {
     if (stopped || busy) return schedule();
     busy = true;
     try {
-      const p = await api('GET', `tables/${code}/poll`);
+      // в лобби опрос заодно отмечает «на месте» и приносит, кто за столом (04.11)
+      const lobby = view?.status === 'lobby';
+      const p = await api('GET', `tables/${code}/poll${lobby ? '?here=1' : ''}`);
+      if (lobby && Array.isArray(p.here) && p.version === version && String(p.here) !== String(view.here)) {
+        view = { ...view, here: p.here };
+        onView(view);
+      }
       if (p.version !== version) await fetchView();
       if (p.botDue && !p.locked && !ticking) {
         ticking = true;

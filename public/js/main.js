@@ -6,6 +6,7 @@ import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
 import { renderReplay } from './replay.js';
+import { welcomeHTML, welcomeHidden, setWelcomeHidden } from './welcome.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
@@ -60,9 +61,10 @@ function topbar(active) {
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <nav>
       <a href="#/rules" class="${active === 'rules' ? 'on' : ''}">Правила</a>
+      <a href="#/learn" class="${active === 'learn' ? 'on' : ''}">Обучение</a>
       <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
-      ${u?.admin ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
+      ${u ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
       <a class="me" href="#/me" title="Мой профиль">${u?.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i>` : ''}${esc(u?.name || '')}</a>
       <button class="linkbtn" id="logout">Выйти</button>
     </nav>
@@ -70,7 +72,7 @@ function topbar(active) {
 }
 
 // шапка для тех, кто читает правила без входа
-const GUEST_BAR = `<header class="bar"><a class="brand" href="#/">Тигр и Евфрат</a><nav><a href="#/">Войти</a></nav></header>`;
+const GUEST_BAR = `<header class="bar"><a class="brand" href="#/">Тигр и Евфрат</a><nav><a href="#/rules">Правила</a><a href="#/learn">Обучение</a><a href="#/">Войти</a></nav></header>`;
 
 function bindTopbar() {
   app.querySelector('#logout')?.addEventListener('click', () => {
@@ -131,6 +133,7 @@ const STATUS = { lobby: 'собирается', playing: 'идет партия'
 
 async function renderHome() {
   app.innerHTML = `<div class="page">${topbar('home')}<main class="pcard">
+    ${welcomeHidden() ? '' : welcomeHTML(session.get()?.user)}
     <h1>Мои столы</h1>
     <div class="row">
       <button class="btn primary" id="newTable">Новый стол</button>
@@ -138,8 +141,11 @@ async function renderHome() {
     </div>
     <section class="online" id="onlineBox"></section>
     <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
+    ${welcomeHidden() ? '<p class="small"><button class="linkbtn" id="welcomeShow">О сайте</button></p>' : ''}
   </main></div>`;
   bindTopbar();
+  app.querySelector('#welcomeHide')?.addEventListener('click', () => { setWelcomeHidden(true); renderHome(); });
+  app.querySelector('#welcomeShow')?.addEventListener('click', () => { setWelcomeHidden(false); renderHome(); });
   mountOnline(app.querySelector('#onlineBox'), {
     count: true,
     button: 'Создать стол и пригласить выбранных',
@@ -233,15 +239,19 @@ function openTable(code) {
 // --- коды игроков (администраторы)
 
 async function renderAdmin() {
+  // роли (04.11): администратор видит всех и отзывает коды; игрок заводит новых и видит приглашенных им
+  const admin = Boolean(session.get()?.user?.admin);
   app.innerHTML = `<div class="page">${topbar('admin')}<main class="pcard">
     <h1>Коды игроков</h1>
-    <p class="muted">Каждому игроку свой код. Код показывается один раз: сразу отправьте его игроку. Отозванный код перестает работать на всех устройствах. Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
-    <form id="newUser" class="join"><input id="newName" placeholder="Имя игрока" maxlength="30" aria-label="Имя игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
+    <p class="muted">${admin
+      ? 'Каждому игроку свой код. Код показывается один раз: сразу отправьте его игроку. Отозванный код перестает работать на всех устройствах.'
+      : 'Пригласите нового игрока: впишите его имя, и он получит свой код для входа. Код показывается один раз: сразу отправьте его игроку. Ниже те, кого вы пригласили.'} Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
+    <form id="newUser" class="join"><input id="newName" placeholder="Имя нового игрока" maxlength="30" aria-label="Имя нового игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
     <div id="newCode"></div>
     <div id="users" class="tables"></div>
-    <h2>Открытые столы всех игроков</h2>
+    ${admin ? `<h2>Открытые столы всех игроков</h2>
     <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока. Идущие и сыгранные партии удалить нельзя.</p>
-    <div id="openTables" class="tables"></div>
+    <div id="openTables" class="tables"></div>` : ''}
   </main></div>`;
   bindTopbar();
   const showCode = (name, code) => {
@@ -252,14 +262,15 @@ async function renderAdmin() {
     const users = await api('GET', 'admin/users');
     const iAmMain = users.find((u) => u.id === session.get()?.user?.id)?.main;
     app.querySelector('#newAdminBox').hidden = !iAmMain;
-    app.querySelector('#users').innerHTML = users.map((u) => {
+    app.querySelector('#users').innerHTML = users.length ? users.map((u) => {
       const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
       const may = !u.main && (iAmMain || !u.admin);
+      const by = admin && u.invitedBy ? `<span class="muted">пригласил: ${esc(u.invitedBy)}</span>` : '';
       return `<div class="titem static">
-        <b>${esc(u.name)}</b><span>${u.main ? 'главный' : u.revoked ? 'код отозван' : 'код действует'}</span>${flag}
-        ${may ? `<span class="acts"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}</span>` : ''}
+        <b>${esc(u.name)}</b><span>${u.main ? 'главный' : u.revoked ? 'код отозван' : 'код действует'}</span>${flag}${by}
+        ${may ? `<span class="acts"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}</span>` : ''}
       </div>`;
-    }).join('');
+    }).join('') : `<p class="muted">${admin ? 'Игроков пока нет.' : 'Вы пока никого не пригласили.'}</p>`;
     app.querySelectorAll('[data-admin]').forEach((b) => b.addEventListener('change', async () => {
       await api('POST', `admin/users/${b.dataset.admin}/admin`, { admin: b.checked }).catch((e) => toast(e.message));
       load();
@@ -291,7 +302,7 @@ async function renderAdmin() {
     box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => removeTable(list[+b.dataset.del], reloadTables)));
   };
   const reloadTables = () => loadTables().catch((e) => toast(e.message));
-  reloadTables();
+  if (admin) reloadTables();
   app.querySelector('#newUser').addEventListener('submit', async (e) => {
     e.preventDefault();
     const $ = (id) => app.querySelector(id);
@@ -334,7 +345,7 @@ function route() {
   startPresence();
   setBusy(false);
   if (h === 'rules') return renderRules(app, topbar('rules'), bindTopbar);
-  if (LEARN.test(h)) return showLearn(h.match(LEARN), topbar('rules'));
+  if (LEARN.test(h)) return showLearn(h.match(LEARN), topbar('learn'));
   const rp = h.match(/^t\/([A-Za-z0-9]{6})\/replay(?:\/(\d+))?$/); // просмотр партии по ходам (04.11)
   if (rp) return renderReplay(app, rp[1].toUpperCase(), topbar(''), bindTopbar, +(rp[2] || 0));
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);

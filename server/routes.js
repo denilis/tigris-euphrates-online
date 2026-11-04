@@ -41,6 +41,11 @@ const TITLE_DAY_MS = 3 * 24 * 3600 * 1000; // счетчик столов за �
 // чтение это один MGET, а отметка обновляется реже: 10 человек укладываются в бесплатный лимит
 const ONLINE_MS = 90 * 1000; // без отметки дольше человек уже не на сайте
 const MARK_EVERY_MS = 45 * 1000;
+// «на месте за столом» в лобби (просьба Дениса 04.11): страница лобби отмечается при опросе не чаще
+// раза в 8 с, отметка свежая 20 с и живет в базе 25 с
+const HERE_EVERY_MS = 8 * 1000;
+const HERE_FRESH_MS = 20 * 1000;
+const HERE_TTL_MS = 25 * 1000;
 const MARK_TTL_MS = 15 * 60 * 1000; // сколько отметка живет в базе
 const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульса, чтобы не читать его каждый раз
 const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
@@ -138,21 +143,30 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { code, hash };
   }
 
+  /**
+   * Коды игроков. Роли (просьба Дениса 04.11): администратор как раньше; подтвержденный игрок
+   * (любой с действующим кодом) заводит новых игроков, видит тех, кого пригласил сам, и может выдать
+   * им новый код. Отзыв кода и права администратора только у администраторов.
+   */
   async function adminUsers(method, rest, body, u) {
-    needAdmin(u);
     if (method === 'GET' && !rest.length) {
-      return (await store.listUsers()).map((x) => ({ ...publicUser(x), revoked: Boolean(x.revoked), createdAt: x.createdAt }));
+      const all = await store.listUsers();
+      const names = new Map(all.map((x) => [x.id, x.name]));
+      const list = u.admin ? all : all.filter((x) => x.invitedBy === u.id);
+      return list.map((x) => ({ ...publicUser(x), revoked: Boolean(x.revoked), createdAt: x.createdAt, invitedBy: x.invitedBy ? names.get(x.invitedBy) || null : null }));
     }
     if (method === 'POST' && !rest.length) {
       const name = String(body.name || '').trim();
       if (!name || name.length > 30) http(400, 'bad-name', 'Имя от 1 до 30 знаков');
       if (body.admin) needMain(u);
+      // игрок без прав администратора заводит не больше 10 человек в сутки
+      if (!u.admin && (await store.hit(`newplayer:${u.id}`, 24 * 3600 * 1000)) > 10) http(429, 'too-many', 'Сегодня вы уже завели много игроков, попробуйте завтра');
       // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы
       const same = (await store.listUsers()).some((x) => x.name.trim().toLowerCase() === name.toLowerCase());
       if (same) http(409, 'name-taken', 'Такое имя уже есть');
       const id = 'u-' + randomBytes(6).toString('hex');
       const { code, hash } = await claimCode(body.code, id, u);
-      const user = { id, name, admin: Boolean(body.admin), revoked: false, codeHash: hash, createdAt: now() };
+      const user = { id, name, admin: Boolean(body.admin), revoked: false, codeHash: hash, createdAt: now(), invitedBy: u.id };
       await store.putUser(user);
       forgetPeople();
       return { user: publicUser(user), code };
@@ -160,6 +174,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const [id, op] = rest;
     const user = await store.getUser(id);
     if (!user) http(404, 'no-user', 'Нет такого игрока');
+    // не администратор: только новый код тому, кого пригласил сам
+    if (!u.admin && !(method === 'POST' && op === 'code' && user.invitedBy === u.id && !user.admin)) needAdmin(u);
     // главного не трогает никто, назначенных администраторов только главный
     if (user.id === ADMIN_ID) http(403, 'not-main', 'Главного администратора менять нельзя');
     if (user.admin) needMain(u);
@@ -501,6 +517,22 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     };
   }
 
+  /**
+   * Места людей, которые сейчас на месте за столом: открыли его страницу за последние 20 с.
+   * me — отметить смотрящего (его страница стола открыта). Боты в список не входят: они всегда тут.
+   */
+  async function hereAt(t, me) {
+    const humans = t.seats.filter((s) => s.kind === 'human' && s.userId);
+    const ids = [...new Set([...(me ? [me] : []), ...humans.map((s) => s.userId)])];
+    const at = await store.readHere(t.code, ids);
+    const t0 = now();
+    if (me && !(t0 - (at[me] ?? -Infinity) < HERE_EVERY_MS)) {
+      await store.touchHere(t.code, me, t0, HERE_TTL_MS);
+      at[me] = t0;
+    }
+    return humans.filter((s) => t0 - (at[s.userId] ?? -Infinity) <= HERE_FRESH_MS).map((s) => s.id);
+  }
+
   async function myTables(u) {
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
@@ -548,6 +580,11 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     undo: (t, u, b) => undo(t, u.id, { version: b.version }, { now: now() }),
     close: (t, u) => close(t, u.id, now()),
     async start(t, u) {
+      // начинает только хозяин стола и только когда все приглашенные люди на месте (просьба Дениса 04.11)
+      if (u.id !== t.hostUserId) http(403, 'not-host', 'Начать партию может только хозяин стола');
+      const here = await hereAt(t, u.id);
+      const wait = t.seats.filter((s) => s.kind === 'human' && s.userId && s.userId !== u.id && !here.includes(s.id));
+      if (wait.length) http(409, 'not-here', `Ждем за столом: ${wait.map((s) => s.name).join(', ')}`);
       const humans = t.seats.filter((s) => s.kind === 'human').map((s) => s.userId);
       const last = t.options.order === 'loser' && humans.every(Boolean) ? await store.companyLast(companyKey(humans)) : null;
       start(t, u.id, { last, now: now() });
@@ -630,10 +667,16 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'activate') return activate(body, ip);
     if (method === 'GET' && head === 'avatar') return avatarFile(rest.join('/'));
     if (head === 'tables' && rest.length === 2 && rest[1] === 'poll' && method === 'GET') {
-      await auth(token, { light: true });
+      const who = await auth(token, { light: true });
       const p = await store.poll(rest[0]);
       if (!p) http(404, 'no-table', 'Нет такого стола');
-      return { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
+      const out = { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
+      // в лобби: кто на месте за столом, и отметка смотрящего
+      if (query.here) {
+        const r = await store.getTable(rest[0]);
+        if (r?.doc.status === 'lobby') out.here = await hereAt(r.doc, who.id);
+      }
+      return out;
     }
     if (method === 'POST' && head === 'beat') return beat(await auth(token, { light: true }), body);
     const u = await auth(token);

@@ -51,7 +51,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     return state;
   }
   box.className = 'modal dock';
-  const undoBtn = g.canUndo ? '<button class="btn" id="wUndo">Отменить нападение</button>' : '';
+  // нападение не отменяется (решение Дениса 04.11): кнопки «Отменить нападение» нет
 
   // --- выбор, какая война первой
   if (g.phase === 'warChoose') {
@@ -65,11 +65,10 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
       <div class="mtop"><h2>Какая война первая?</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
       <p class="msub">Тайл на ${cellName(g.ctx.pos)} объединил царства, где сошлись лидеры сразу нескольких цветов. Остальные войны пойдут следом.</p>
       <div class="orows">${rows}</div>
-      <div class="mfoot">${undoBtn}<div class="mnote">Пока вы не решите, партия стоит.</div></div>
+      <div class="mfoot"><div class="mnote">Пока вы не решите, партия стоит.</div></div>
     </div>`;
     box.querySelectorAll('[data-idx]').forEach((b) => b.addEventListener('click', () => move(+b.dataset.idx)));
     box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
-    box.querySelector('#wUndo')?.addEventListener('click', undo);
     return state;
   }
 
@@ -112,10 +111,9 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
       ${top}
       <div class="sides">${attSide}${defSide}</div>
-      <div class="mfoot">${undoBtn}<div class="mnote">Ждём решения: ${esc(name(g.toMove))}.</div></div>
+      <div class="mfoot"><div class="mnote">Ждём решения: ${esc(name(g.toMove))}.</div></div>
     </div>`;
     box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
-    box.querySelector('#wUndo')?.addEventListener('click', undo);
     return state;
   }
 
@@ -137,22 +135,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   const minC = Math.min(...pl.score);
   const chips = SCORE_ORDER.map((c) => `<span class="${pl.score[c] === minC ? 'weak' : ''}" style="background:${HEX[c]}" title="${COLNAME[c]}">${pl.score[c]}</span>`).join('');
 
-  // точный исход каждого варианта (сервер прогнал движком)
-  const rows = (g.preview?.options || []).map((o) => {
-    const iWin = o.winner === me;
-    const after = pl.score.slice();
-    if (iWin) after[o.pointsColor] += o.points;
-    const fin = finalScore(after, pl.treasures);
-    const lost = o.removedTiles;
-    const label = o.n === 0 ? 'Не добавлять' : `Добавить ${o.n}`;
-    const leaderLost = isRevolt ? LEADERACC[k.leaderColor] : LEADERACC[color];
-    let text = iWin
-      ? `побеждаете вы: +${o.points} к ${COLDAT[o.pointsColor]}, ваш ${COLNAME[o.pointsColor]} ${pl.score[o.pointsColor]} станет ${after[o.pointsColor]}. ${esc(name(opp))} теряет ${leaderLost}${lost ? ` и ${lost} ${plural(lost, color)}` : ''}.`
-      : `побеждает ${esc(name(o.winner))}: +${o.points} к ${COLDAT[o.pointsColor]}. Вы теряете ${leaderLost}${lost ? ` и ${lost} ${plural(lost, color)}` : ''}.`;
-    if (o.leadersReturned.length) text += ` Без храма уходят с поля: ${o.leadersReturned.map((x) => `${LEADER[x.c]} (${esc(name(x.seat))})`).join(', ')}.`;
-    const finText = fin === myFinal ? `итог по слабейшему не меняется: ${fin}` : `итог по слабейшему: ${myFinal}, станет ${fin}`;
-    return `<div class="orow${n === o.n ? ' on' : ''}${iWin ? ' win' : ' lose'}"><b>${label}</b><span>${text}</span><small>${finText}</small></div>`;
-  }).join('');
+  // подсказки с исходом каждого варианта убраны (Денис 04.11: «не понимаю смысла, не нужны»)
 
   const english = view.options.englishSupport;
   const allowed = legalNs.filter((x) => x > 0);
@@ -175,10 +158,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
       <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при 2</small></div>
       <div><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
     </div>
-    <div class="orows">${rows}</div>
-    ${isAtt ? '<p class="msub">Исход посчитан на случай, если защитник ничего не добавит.</p>' : ''}
     <div class="mfoot">
-      ${undoBtn}
       <button class="btn" id="wZero">Не добавлять</button>
       <button class="btn primary" id="wSend"${n > 0 && ok ? '' : ' disabled'}>${n > 0 ? `Отправить ${n} ${plural(n, color)}` : 'Выберите тайлы в руке'}</button>
       <div class="mnote">Пока вы не решите, партия стоит.</div>
@@ -193,6 +173,5 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
   box.querySelector('#wZero').addEventListener('click', () => move(legal.findIndex((m) => m.n === 0)));
   box.querySelector('#wSend').addEventListener('click', () => { if (n > 0 && ok) move(legal.findIndex((m) => m.n === n)); });
-  box.querySelector('#wUndo')?.addEventListener('click', undo);
   return state;
 }

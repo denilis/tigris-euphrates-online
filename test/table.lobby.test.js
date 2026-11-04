@@ -142,7 +142,7 @@ test('ручная очерёдность: хост переставляет м�
   assert.equal(code(() => moveSeat(t, USERS.vlad.userId, 0, 1, T0)), 'not-host');
 });
 
-test('старт: нужны занятые места и герои; начать может любой сидящий человек', () => {
+test('старт: нужны занятые места и герои; начинает только хозяин стола (04.11)', () => {
   // гости без постоянных героев: выбирают сами
   const [a, b, c] = ['Аня', 'Боря', 'Вера'].map((name, i) => ({ userId: `u-${i}`, name }));
   const t = createTable({ code: 'ABC123', host: a, now: T0 });
@@ -151,11 +151,12 @@ test('старт: нужны занятые места и герои; начат
   sit(t, c, 2, T0);
   setHero(t, a.userId, 0, 'lion', T0);
   setHero(t, b.userId, 1, 'bull', T0);
-  assert.equal(code(() => start(t, b.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
+  assert.equal(code(() => start(t, a.userId, { last: null, rng: makeRng(1), now: T0 })), 'seats-not-ready');
   setHero(t, c.userId, 2, 'bow', T0);
-  assert.equal(code(() => start(t, 'u-stranger', { last: null, rng: makeRng(1), now: T0 })), 'not-seated');
+  assert.equal(code(() => start(t, c.userId, { last: null, rng: makeRng(1), now: T0 })), 'not-host', 'сидящий, но не хозяин');
+  assert.equal(code(() => start(t, 'u-stranger', { last: null, rng: makeRng(1), now: T0 })), 'not-host');
   const v = t.version;
-  start(t, c.userId, { last: null, rng: makeRng(1), now: T0 });
+  start(t, a.userId, { last: null, rng: makeRng(1), now: T0 });
   assert.equal(t.status, 'playing');
   assert.ok(t.version > v);
   assert.equal(t.game.order.length, 4);

@@ -1,10 +1,11 @@
 // Лобби стола: места, герои, боты, очередность и правила. Менять правила, места и ботов
-// может хозяин стола; героя выбирает тот, кто сидит; начать может любой сидящий.
+// может хозяин стола; героя выбирает тот, кто сидит; начинает хозяин стола, когда все люди на месте (04.11).
 import { HEROES, HERONAME, STYLES, tokenImg, faceBg, esc, copy, toast } from './util.js';
 import { api, session } from './api.js';
 import { onlineNow } from './presence.js';
 import { pickList, chatAllowed, chatNote } from './online.js';
 import { fitTours, tourChoice } from './season.js';
+import { play } from './signals.js';
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -97,11 +98,33 @@ function openPicker(view, act, seat) {
   }).catch((e) => { list.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
 }
 
+// кто уже был на месте у этого стола: новых показываем всплывающей строкой и звонком
+const seenHere = { code: null, ids: new Set(), ready: false };
+function arrivals(view, here) {
+  if (seenHere.code !== view.code) Object.assign(seenHere, { code: view.code, ids: new Set(here), ready: Array.isArray(view.here) });
+  if (!Array.isArray(view.here)) return; // опрос еще не ответил: не знаем, кто на месте
+  if (!seenHere.ready) {
+    seenHere.ids = new Set(here); // первый ответ опроса: кто уже сидел, тот не «зашел»
+    seenHere.ready = true;
+    return;
+  }
+  const fresh = view.seats.filter((s) => here.has(s.id) && !seenHere.ids.has(s.id) && s.id !== view.me);
+  seenHere.ids = new Set(here);
+  if (!fresh.length) return;
+  toast(`${fresh.map((s) => s.name).join(', ')} ${fresh.length > 1 ? 'зашли' : 'зашел'} за стол`);
+  play({ events: ['arrive'] });
+}
+
 export function renderLobby(root, view, { act, bar = '', bindBar }) {
   const host = view.isHost, me = view.me;
   const canChat = (me != null || host) && chatAllowed(view, session.get()?.user?.name);
   const ready = view.seats.every((s) => s.taken && s.hero);
-  const canStart = ready && (me != null || host);
+  // кто на месте за столом (просьба Дениса 04.11): опрос лобби приносит места людей, открывших стол
+  const here = new Set([...(view.here || []), ...(me != null ? [me] : [])]);
+  const waiting = view.seats.filter((s) => s.kind === 'human' && s.taken && !here.has(s.id));
+  // начинает только хозяин стола и только когда все люди на месте
+  const canStart = ready && host && !waiting.length;
+  arrivals(view, here);
   const heroOwner = (h) => view.seats.find((s) => s.hero === h);
   const link = location.origin + location.pathname + location.search + '#/t/' + view.code;
 
@@ -115,7 +138,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
     }).join('');
     let who;
     if (s.kind === 'bot') who = `<b>${esc(s.name || 'Бот')}</b>`;
-    else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}${host && !mine ? `<button class="linkbtn" data-unseat="${s.id}">Убрать</button>` : ''}`;
+    else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}${here.has(s.id) ? '<span class="here on" title="открыл стол">на месте</span>' : '<span class="here" title="еще не открыл стол">еще не зашел</span>'}${host && !mine ? `<button class="linkbtn" data-unseat="${s.id}">Убрать</button>` : ''}`;
     else {
       const free = `${me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : ''}${host ? `<button class="btn sm" data-people="${s.id}">Выбрать игрока</button>` : ''}`;
       who = free || '<span class="muted">Свободно</span>';
@@ -144,7 +167,8 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
 
   const o = view.options;
   const dis = host ? '' : 'disabled';
-  const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.' : '';
+  const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.'
+    : waiting.length ? `Ждем за столом: ${waiting.map((s) => s.name).join(', ')}.` : '';
   // сверху меню сайта, как на других страницах (просьба Дениса 03.11): раньше из лобби был
   // только путь через «Мои столы»
   root.innerHTML = `${bar}<div class="lobby">
@@ -176,13 +200,13 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
         <span class="muted">На ход</span><span class="seg">${[20, 30, 45, 60, 90].map((n) => `<button data-time="turnSeconds" data-val="${n}" class="${(o.turnSeconds ?? 30) === n ? 'on' : ''}" ${dis}>${n} с</button>`).join('')}</span>
         <span class="muted">Окно отмены</span><span class="seg">${[[0, 'нет'], [10, '10 с'], [20, '20 с'], [30, '30 с']].map(([n, t]) => `<button data-time="confirmSeconds" data-val="${n}" class="${(o.confirmSeconds ?? 10) === n ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
       </div>
-      <p class="muted small">Ход не отнимается: когда время выходит, таймер уходит в минус и горит красным, у каждого копится общее время за партию. После второго действия ход еще можно отменить, пока идет окно отмены. Нападение можно отменить, пока соперник не ответил. Сброс тайлов не отменяется.</p>
+      <p class="muted small">Ход не отнимается: когда время выходит, таймер уходит в минус и горит красным, у каждого копится общее время за партию. После второго действия ход еще можно отменить, пока идет окно отмены. Нападение и сброс тайлов не отменяются.</p>
       ${host ? '' : '<p class="muted small">Правила, места и ботов меняет хозяин стола.</p>'}
 
       <div class="lfoot">
         ${notReady ? `<span class="muted">${notReady}</span>` : ''}
         ${me == null && !host ? '<span class="muted">Сядьте на свободное место, чтобы играть.</span>' : ''}
-        <button class="btn primary" id="lStart" ${canStart ? '' : 'disabled'}>Начать партию</button>
+        ${host ? `<button class="btn primary" id="lStart" ${canStart ? '' : 'disabled'}>Начать партию</button>` : '<span class="muted">Партию начнет хозяин стола, когда все будут на месте.</span>'}
       </div>
     </div>
   </div>`;
@@ -217,5 +241,5 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
   on('[data-monument]', 'click', (el) => act({ action: 'options', options: { monument: el.dataset.monument } }));
   on('[data-opt]', 'change', (el) => act({ action: 'options', options: { [el.dataset.opt]: el.checked } }));
   on('[data-time]', 'click', (el) => act({ action: 'options', options: { [el.dataset.time]: +el.dataset.val } }));
-  root.querySelector('#lStart').addEventListener('click', () => act({ action: 'start' }));
+  root.querySelector('#lStart')?.addEventListener('click', () => act({ action: 'start' }));
 }

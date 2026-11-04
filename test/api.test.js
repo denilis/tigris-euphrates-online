@@ -37,9 +37,15 @@ async function startedTable(req, P) {
   const post = (who, body) => req('POST', `tables/${code}`, { body, token: who.token });
   await post(P.andrey, { action: 'sit', seat: 1 });
   await post(P.vlad, { action: 'sit', seat: 2 });
-  const s = await post(P.vlad, { action: 'start' });
+  await arrive(req, code, P.andrey, P.vlad); // с 04.11 начинают, когда все за столом
+  const s = await post(P.denis, { action: 'start' });
   assert.equal(s.status, 200, JSON.stringify(s.body));
   return code;
+}
+
+/** Игроки открыли стол: опрос лобби отмечает «на месте» (04.11). */
+async function arrive(req, code, ...who) {
+  for (const p of who) await req('GET', `tables/${code}/poll`, { token: p.token, query: { here: '1' } });
 }
 
 /** Доиграть: боты через bot-tick, люди случайным допустимым ходом. */
@@ -78,13 +84,25 @@ test('без кода ничего нельзя; админ входит сво�
   assert.equal((await req('GET', 'ping')).body.ok, true);
 });
 
-test('админ выдаёт и отзывает коды; не админ не может', async () => {
+test('админ выдаёт и отзывает коды; игрок заводит новых, видит своих, отзывать не может (04.11)', async () => {
   const { req } = setup();
   const P = await people(req);
   assert.equal(P.andrey.user.name, 'Андрей');
-  assert.equal((await req('POST', 'admin/users', { body: { name: 'Икс' }, token: P.andrey.token })).status, 403);
+  // роли 04.11: подтвержденный игрок заводит нового игрока и видит только тех, кого пригласил сам
+  const x = await req('POST', 'admin/users', { body: { name: 'Икс', admin: true }, token: P.andrey.token });
+  assert.equal(x.status, 403, 'администратора заводит только главный');
+  const ok = await req('POST', 'admin/users', { body: { name: 'Икс' }, token: P.andrey.token });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.user.admin, false);
+  const own = (await req('GET', 'admin/users', { token: P.andrey.token })).body;
+  assert.deepEqual(own.map((u) => [u.name, u.invitedBy]), [['Икс', 'Андрей']]);
+  assert.equal((await req('GET', 'admin/users', { token: P.vlad.token })).body.length, 0, 'чужих не видно');
+  assert.equal((await req('POST', `admin/users/${ok.body.user.id}/revoke`, { token: P.andrey.token })).status, 403, 'отзыв только у администратора');
+  assert.equal((await req('POST', `admin/users/${ok.body.user.id}/code`, { token: P.vlad.token })).status, 403, 'новый код только своему');
+  assert.equal((await req('POST', `admin/users/${ok.body.user.id}/code`, { token: P.andrey.token })).status, 200, 'своему можно');
+  assert.equal((await req('POST', `admin/users/${ok.body.user.id}/admin`, { body: { admin: true }, token: P.andrey.token })).status, 403);
   const list = (await req('GET', 'admin/users', { token: P.denis.token })).body;
-  assert.deepEqual(list.map((u) => u.name).sort(), ['Андрей', 'Влад', 'Денис']);
+  assert.deepEqual(list.map((u) => u.name).sort(), ['Андрей', 'Влад', 'Денис', 'Икс']);
   assert.ok(!JSON.stringify(list).includes('codeHash'));
   assert.equal((await req('POST', `admin/users/${P.andrey.user.id}/revoke`, { token: P.denis.token })).status, 200);
   assert.equal((await req('GET', 'me', { token: P.andrey.token })).status, 401, 'отзыв гасит сессию');
@@ -202,7 +220,8 @@ for (const [name, mk] of [['память', () => memoryStore()], ['Upstash', () 
     const post = (p, body) => req('POST', `tables/${c2}`, { body, token: p.token });
     await post(P.denis, { action: 'sit', seat: 1 });
     await post(P.andrey, { action: 'sit', seat: 2 });
-    const v2 = (await post(P.andrey, { action: 'start' })).body;
+    await arrive(req, c2, P.denis, P.andrey);
+    const v2 = (await post(P.vlad, { action: 'start' })).body;
     const worst = Math.max(...res.seats.map((x) => x.place));
     const losers = res.seats.filter((x) => x.place === worst).map((x) => ({ 0: 'u-admin', 1: P.andrey.user.id, 2: P.vlad.user.id, 3: 'bot' }[x.seatId]));
     const newIds = { 0: P.vlad.user.id, 1: 'u-admin', 2: P.andrey.user.id, 3: 'bot' };
@@ -235,7 +254,7 @@ test('реванш: двое нажали, стол один; он у всех �
   assert.equal(b.next, a.next);
   for (const p of [P.denis, P.andrey, P.vlad]) {
     const mine = (await req('GET', 'tables', { token: p.token })).body;
-    assert.ok(mine.some((x) => x.code === a.next && x.status === 'playing'));
+    assert.ok(mine.some((x) => x.code === a.next && x.status === 'lobby'), 'реванш собирается в лобби (04.11)');
   }
   const title = (await req('GET', `tables/${a.next}`, { token: P.denis.token })).body.title;
   assert.match(title, /^\d\d\.\d\d\.\d{4}\.2$/, 'реванш в тот же день: следующий номер');

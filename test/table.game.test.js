@@ -1,7 +1,7 @@
 // Ход партии через стол: только ходы из списка допустимых, версия, конец, реванш (A2, A6, A10).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { submit, submitSeat, botDue, rematch, historyEntry, TableError } from '../game/table.js';
+import { submit, submitSeat, botDue, rematch, historyEntry, start, TableError } from '../game/table.js';
 import { stateFromJSON, stateToJSON } from '../game/serialize.js';
 import { legalMoves, applyMove } from '../game/vendor/engine/engine.js';
 import { USERS, T0, started, playOut, makeRng } from './support.js';
@@ -104,7 +104,7 @@ test('итог и история: места с ничьими, векторы �
   assert.ok(h.id && h.finishedAt === T0);
 });
 
-test('реванш: тот же состав и герои, первым ходит последнее место, второй вызов ведёт за тот же стол', () => {
+test('реванш: тот же состав и герои в лобби, начинает позвавший, первым ходит последнее место', () => {
   const t = started(12);
   playOut(t, 12);
   const h = historyEntry(t);
@@ -113,9 +113,13 @@ test('реванш: тот же состав и герои, первым ход�
   const { created, code: next } = rematch(t, USERS.vlad.userId, { code: 'NEXT01', rng: makeRng(1), now: T0 + 5 });
   assert.equal(next, 'NEXT01');
   assert.equal(t.next, 'NEXT01');
-  assert.equal(created.status, 'playing');
+  // с 04.11 реванш собирается в лобби: начинают, когда все снова за столом
+  assert.equal(created.status, 'lobby');
+  assert.equal(created.hostUserId, USERS.vlad.userId, 'хозяин реванша тот, кто позвал');
   assert.deepEqual(created.seats.map((x) => [x.id, x.kind, x.userId, x.hero]), t.seats.map((x) => [x.id, x.kind, x.userId, x.hero]));
-  assert.deepEqual(created.options, t.options);
+  assert.deepEqual(created.options, { ...t.options, order: 'loser' });
+  assert.equal(code(() => start(created, USERS.denis.userId, { last: h, rng: makeRng(1), now: T0 + 6 })), 'not-host');
+  start(created, USERS.vlad.userId, { last: h, rng: makeRng(1), now: T0 + 6 });
   assert.ok(losers.includes(created.game.order[0]), 'первым ходит проигравший');
   // остальные по кругу за столом, начиная с проигравшего
   const ids = created.seats.map((x) => x.id);

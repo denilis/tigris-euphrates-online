@@ -115,6 +115,16 @@ export function redisStore({ exec, prefix = '' }) {
     async lock(code, token, ttlMs) {
       return (await exec(['SET', k(`lock:${code}`), token, 'NX', 'PX', ttlMs])) === 'OK';
     },
+    /** Отметка «на месте за столом» (лобби, 04.11): живет ttlMs, значение — время отметки. */
+    async touchHere(code, userId, at, ttlMs) {
+      await exec(['SET', k(`here:${code}:${userId}`), String(at), 'PX', ttlMs]);
+    },
+    /** Время последней отметки каждого из userIds или null: { [userId]: at | null }. */
+    async readHere(code, userIds) {
+      if (!userIds.length) return {};
+      const vals = await exec(['MGET', ...userIds.map((id) => k(`here:${code}:${id}`))]);
+      return Object.fromEntries(userIds.map((id, i) => [id, vals[i] === null ? null : Number(vals[i])]));
+    },
     async unlock(code, token) {
       await exec(['EVAL', UNLOCK, 1, k(`lock:${code}`), token]);
     },

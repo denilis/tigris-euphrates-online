@@ -219,32 +219,24 @@ const answer = (t, now = T0 + 3000) => {
   submit(t, who.userId, { version: t.version, index: 0 }, { rng: makeRng(8), now });
 };
 
-test('нападение можно отменить, пока никто не ответил: поле, рука и журнал как до него', () => {
+// Решение Дениса 04.11: если игрок напал, нападение уже не отменить (раньше было можно до ответа соперника)
+test('нападение не отменяется: как только начался бой, снимков нет', () => {
   let found = 0;
-  for (const { t, who, before } of attacks()) {
-    assert.ok(canUndo(t), 'нападение только что сделано');
-    undo(t, who.userId, { version: t.version }, { now: T0 + 500 });
-    assert.deepEqual(t.game.state, before.state);
-    assert.deepEqual(t.game.log.slice(0, before.log.length), before.log);
-    assert.equal(t.game.log.at(-1).ev, 'undo');
-    assert.equal(t.game.toMove, who.id);
+  for (const { t, who } of attacks()) {
+    assert.equal(t.game.undo.length, 0, 'снимки убраны');
+    assert.equal(canUndo(t), false);
+    assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 + 500 })), 'no-undo');
+    assert.equal(viewFor(t, who.userId, { now: T0 + 500 }).game.canUndo, false);
     if (++found === 4) break;
   }
   assert.equal(found, 4);
 });
 
-test('нападение можно отменить и после своей поддержки, пока соперник не ответил', () => {
+test('после своей поддержки нападение тоже не отменить', () => {
   for (const skip of [0, 1]) {
-    const { t, who, before } = waitingFight(skip);
-    const waiting = viewFor(t, who.userId, { now: T0 + 1000 });
-    assert.equal(waiting.game.legal, null, 'решает соперник');
-    assert.equal(waiting.game.canUndo, true, 'кнопка видна тому, кто ждет');
-    const def = decider(t);
-    assert.equal(viewFor(t, def.userId, { now: T0 + 1000 }).game.canUndo, false, 'соперник чужое действие не отменяет');
-    assert.equal(code(() => undo(t, def.userId, { version: t.version }, { now: T0 })), 'no-undo');
-    undo(t, who.userId, { version: t.version }, { now: T0 + 2000 });
-    assert.deepEqual(t.game.state, before.state, 'и фишка, и отправленные тайлы вернулись');
-    assert.equal(viewFor(t, who.userId, { now: T0 + 2000 }).game.canUndo, false, 'больше отменять нечего');
+    const { t, who } = waitingFight(skip);
+    assert.equal(viewFor(t, who.userId, { now: T0 + 1000 }).game.canUndo, false);
+    assert.equal(code(() => undo(t, who.userId, { version: t.version }, { now: T0 + 2000 })), 'no-undo');
   }
 });
 
@@ -264,16 +256,7 @@ test('устаревшая отмена отклоняется: соперник
   assert.equal(code(() => undo(t, who.userId, { version: seen }, { now: T0 + 3000 })), 'stale');
 });
 
-test('время ожидания при отмене идет тому, кто решал, а не тому, кто отменил', () => {
-  const { t, who } = waitingFight();
-  const def = decider(t);
-  const mine = t.game.clock.used[who.id] || 0, theirs = t.game.clock.used[def.id] || 0, at = t.game.clock.at;
-  undo(t, who.userId, { version: t.version }, { now: at + 8000 });
-  assert.equal(t.game.clock.used[who.id] || 0, mine);
-  assert.equal(t.game.clock.used[def.id], theirs + 8000);
-});
-
-test('воюют другие: панели боя у ходящего нет, отмена остается', () => {
+test('воюют другие: панели боя у ходящего нет, отмены тоже (бой начался, 04.11)', () => {
   let found = 0;
   for (let seed = 1; seed <= 60 && !found; seed++) {
     const t = started(seed);
@@ -291,10 +274,9 @@ test('воюют другие: панели боя у ходящего нет, �
           submit(t, who.userId, { version: t.version, index: i }, { rng: makeRng(6), now: T0 + k });
           const v = viewFor(t, who.userId, { now: T0 + k });
           assert.equal(v.game.legal, null, 'решает не он');
-          assert.equal(v.game.canUndo, true);
-          assert.equal(warWaiting(v), false, 'кнопка отмены у него в блоке «Сейчас»');
-          undo(t, who.userId, { version: t.version }, { now: T0 + k + 1 });
-          assert.deepEqual(t.game.state, before.state);
+          assert.equal(v.game.canUndo, false, 'бой начался: отмены нет');
+          assert.equal(warWaiting(v), false);
+          assert.notDeepEqual(t.game.state, before.state);
           found++;
           break;
         }

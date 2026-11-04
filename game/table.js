@@ -265,8 +265,8 @@ export function moveSeat(t, userId, seatId, toIndex, now) {
  */
 export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMode } = {}) {
   needLobby(t);
-  // начать может любой сидящий человек или хост (хост может посадить одних ботов и смотреть)
-  if (userId !== t.hostUserId) needSeated(t, userId);
+  // начинает только хозяин стола (просьба Дениса 04.11); он может посадить одних ботов и смотреть
+  if (userId !== t.hostUserId) fail('not-host', 'Начать партию может только хозяин стола', 403);
   const ready = t.seats.length >= 2 && t.seats.length <= 4
     && t.seats.every((s) => s.hero && (s.kind === 'bot' || s.userId));
   if (!ready) fail('seats-not-ready', 'Не все места заняты или не у всех выбран герой', 409);
@@ -384,10 +384,11 @@ function step(t, s, move, rng, now) {
   g.toMove = s.over ? null : g.order[s.toMove];
   // отменять нельзя после сброса (уже видны новые тайлы), исхода боя и решения другого места
   // (чужой выбор виден, и ходящий переиграл бы), а с концом хода снимки больше не нужны.
-  // Нападение отменить можно, пока другое место не ответило
+  // Нападение не отменяется (решение Дениса 04.11): как только начался бой, снимков нет
   const fought = entries.some((e) => e.ev === 'war' || e.ev === 'revolt');
+  const attacked = CONFLICT.includes(s.phase);
   const otherSeat = seatId !== g.order[meta.cur];
-  if (move.type === 'discard' || fought || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
+  if (move.type === 'discard' || fought || attacked || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
   if (g.clock && s.cur !== meta.cur) g.clock.turnUsed = 0;
   g.confirmBy = null;
   return entries;
@@ -411,7 +412,7 @@ export function canUndo(t) {
   if (t.status !== 'playing' || t.game?.paused || !t.game?.undo?.length) return false;
   const s = stateFromJSON(t.game.state);
   if (s.over) return false;
-  return CONFLICT.includes(s.phase) || (s.toMove === s.cur && UNDO_PHASES.includes(s.phase)); // в бою снимок живет до первого ответа
+  return s.toMove === s.cur && UNDO_PHASES.includes(s.phase); // в бою отмены нет (04.11)
 }
 
 /** Отменить последнее действие своего хода: поле, рука и журнал как до него. */
@@ -535,11 +536,12 @@ export function rematch(t, userId, { code, title = null, rng = cryptoRng(), now 
   if (t.status !== 'over') fail('not-over', 'Партия ещё не закончена', 409);
   needSeated(t, userId);
   if (t.next) return { code: t.next, created: null };
+  // реванш собирается в лобби (04.11): партия начинается, когда все снова за столом, а начинает
+  // тот, кто позвал на реванш; первым ходит последнее место
   const n = {
     code, title, version: 0, status: 'lobby', createdAt: now, updatedAt: now,
-    hostUserId: t.hostUserId, options: { ...t.options }, seats: structuredClone(t.seats), game: null, next: null,
+    hostUserId: userId, options: { ...t.options, order: 'loser' }, seats: structuredClone(t.seats), game: null, next: null,
   };
-  start(n, userId, { last: historyEntry(t), rng, now, orderMode: 'loser' });
   t.next = code;
   touch(t, now);
   return { code, created: n };

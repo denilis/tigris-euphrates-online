@@ -11,7 +11,7 @@ const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345
 
 function setup(store = memoryStore()) {
   const app = createApp({ store, env: ENV, now: () => Date.now(), botOptions: { timeCap: 20 }, tg: { on: false, say: async () => false } });
-  const req = (method, path, { body, token } = {}) => app.call({ method, path, body, token });
+  const req = (method, path, { body, token, query } = {}) => app.call({ method, path, body, token, query });
   return { req, store };
 }
 
@@ -28,7 +28,9 @@ async function table(s, host) {
   const { code } = (await s.req('POST', 'tables', { token: host.token })).body;
   await s.req('POST', `tables/${code}`, { body: { action: 'seatCount', n: 2 }, token: host.token });
   const post = (who, body) => s.req('POST', `tables/${code}`, { body, token: who.token });
-  return { code, post, del: (who) => s.req('POST', `admin/tables/${code}/delete`, { token: who?.token }) };
+  // игрок открыл стол: опрос лобби отмечает «на месте» (с 04.11 начинают, когда все за столом)
+  const arrive = (who) => s.req('GET', `tables/${code}/poll`, { token: who.token, query: { here: '1' } });
+  return { code, post, arrive, del: (who) => s.req('POST', `admin/tables/${code}/delete`, { token: who?.token }) };
 }
 
 const mine = async (s, who) => (await s.req('GET', 'tables', { token: who.token })).body.map((t) => t.code);
@@ -75,6 +77,7 @@ test('удаление: нет такого стола', async () => {
 async function started(s, P) {
   const t = await table(s, P.denis);
   await t.post(P['Андрей'], { action: 'sit', seat: 1 });
+  await t.arrive(P['Андрей']);
   assert.equal((await t.post(P.denis, { action: 'start' })).status, 200);
   return t;
 }
@@ -116,8 +119,9 @@ test('удаление: партию начали в тот же момент, �
   const store = memoryStore();
   const s = setup(store);
   const P = await company(s, 'Андрей');
-  const { code, post, del } = await table(s, P.denis);
+  const { code, post, arrive, del } = await table(s, P.denis);
   await post(P['Андрей'], { action: 'sit', seat: 1 });
+  await arrive(P['Андрей']);
   const get = store.getTable;
   store.getTable = async (c) => {
     const seen = await get(c);

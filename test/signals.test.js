@@ -57,3 +57,15 @@ test('звуки событий: бой, своя победа, монумент
   const all = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 0 }, { ev: 'gameOver' }];
   assert.deepEqual(eventSounds(all, 0), ['gameover', 'battle', 'victory'], 'не больше трех, важное первым');
 });
+
+test('звуки боя и конца партии: фанфары победителю, грустный звук проигравшему (04.11)', () => {
+  const war = { ev: 'war', att: 0, def: 1, winner: 0, loser: 1 };
+  assert.deepEqual(eventSounds([war], 0), ['battle', 'victory']);
+  assert.deepEqual(eventSounds([war], 1), ['battle', 'defeat']);
+  assert.deepEqual(eventSounds([war], 2), ['battle'], 'чужой бой: только удары');
+  const result = { seats: [{ seatId: 0, place: 1 }, { seatId: 1, place: 2 }, { seatId: 2, place: 3 }] };
+  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 0, result), ['fanfare']);
+  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 2, result), ['defeat']);
+  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 1, result), ['gameover']);
+  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], null, result), ['gameover'], 'зритель');
+});

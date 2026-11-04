@@ -145,7 +145,7 @@ function signal(view, entries) {
   ui.snap = snap;
   if (ctl.lesson) return;
   const s = soundsFor(was, snap);
-  play({ ...s, events: eventSounds(entries, view.me) });
+  play({ ...s, events: eventSounds(entries, view.me, view.game.result) });
   if (!s.chime) return;
   const app = ctl.root.querySelector('#game');
   app.classList.add('myturn-start'); // три вспышки золотой рамки в начале своего хода
@@ -668,6 +668,9 @@ function updateClocks() {
   const g = onGame ? current.game : null, k = g ? clockNow(g) : null;
   const mine = onGame && !ctl.lesson && snapOf(current).mine && g.phase !== 'confirm';
   const overdue = mine && Boolean(k?.live) && k.left <= 0;
+  // время хода вышло: один раз напомнить звуком (просьба Дениса 04.11: «не слышно, что я должен ходить»)
+  if (overdue && !ui.overdueRang && !ctl.lesson) play({ remind: true });
+  ui.overdueRang = overdue;
   const title = titleFor(document.title, mine, overdue, Date.now());
   if (title !== document.title) document.title = title;
   if (!onGame) return;

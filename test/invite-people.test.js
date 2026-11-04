@@ -23,7 +23,7 @@ const failure = (fn) => {
 function setup(store = memoryStore()) {
   const tg = { on: true, fail: false, sent: [], say: async (m) => { if (tg.fail) return false; tg.sent.push(m); return true; } };
   const app = createApp({ store, env: ENV, now: () => Date.now(), botOptions: { timeCap: 20 }, tg });
-  const req = (method, path, { body, token } = {}) => app.call({ method, path, body, token });
+  const req = (method, path, { body, token, query } = {}) => app.call({ method, path, body, token, query });
   return { tg, req, store };
 }
 
@@ -356,6 +356,8 @@ test('отказ от обычного приглашения и после на
   await post(P.denis, { action: 'seatKind', seat: 2, kind: 'human' });
   await invite(P['Влад']);
   const [letter] = await inbox(s, P['Влад']);
+  // с 04.11 начинают, когда все за столом: оба открыли стол
+  for (const p of [P['Андрей'], P['Влад']]) await s.req('GET', `tables/${code}/poll`, { token: p.token, query: { here: '1' } });
   assert.equal((await post(P.denis, { action: 'start' })).status, 200);
   await s.req('POST', 'invites/answer', { body: { id: letter.id, accept: false }, token: P['Влад'].token });
   v = (await s.req('GET', `tables/${code}`, { token: P.denis.token })).body;

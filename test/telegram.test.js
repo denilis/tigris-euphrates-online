@@ -26,7 +26,7 @@ function fakeChat() {
 function setup(store = memoryStore()) {
   const tg = fakeChat();
   const app = createApp({ store, env: ENV, now: () => Date.now(), botOptions: { timeCap: 20 }, tg });
-  const req = (method, path, { body, token } = {}) => app.call({ method, path, body, token });
+  const req = (method, path, { body, token, query } = {}) => app.call({ method, path, body, token, query });
   const login = async (code) => (await req('POST', 'activate', { body: { code } })).body;
   return { app, tg, req, login, store };
 }
@@ -271,7 +271,9 @@ async function ready(s, denis, andrey) {
     await post(denis, { action: 'seatKind', seat: 1, kind: 'bot' });
     await post(denis, { action: 'seatKind', seat: 2, kind: 'bot' });
   }
-  return { code, start: () => post(denis, { action: 'start' }) };
+  // с 04.11 начинают, когда все за столом: Андрей открыл стол
+  const arrive = () => (andrey ? s.req('GET', `tables/${code}/poll`, { token: andrey.token, query: { here: '1' } }) : null);
+  return { code, start: async () => { await arrive(); return post(denis, { action: 'start' }); } };
 }
 
 test('позвать в чат: стол заполнен людьми, сообщение называет их', async () => {

@@ -50,6 +50,12 @@ export function memoryStore() {
       if (v === null) return null;
       return { version: Number(v), meta: alive(`m:${code}`) || '', locked: alive(`lock:${code}`) !== null };
     },
+    async touchHere(code, userId, at, ttlMs) {
+      set(`here:${code}:${userId}`, String(at), ttlMs);
+    },
+    async readHere(code, userIds) {
+      return Object.fromEntries(userIds.map((id) => { const v = alive(`here:${code}:${id}`); return [id, v === null ? null : Number(v)]; }));
+    },
     async lock(code, token, ttlMs) {
       if (alive(`lock:${code}`) !== null) return false;
       set(`lock:${code}`, token, ttlMs);
