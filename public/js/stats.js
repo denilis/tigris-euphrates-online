@@ -2,7 +2,7 @@
 // сервер после входа, поэтому в открытой части сайта их нет. Фильтр дат пересчитывает всю страницу.
 import { api, session } from './api.js';
 import { esc, toast, faceBg } from './util.js';
-import { totals, cumulative, inRange, ranking } from './season.js';
+import { totals, cumulative, inRange, ranking, slotCount } from './season.js';
 
 const COLS = ['#e0b65a', '#c98a56', '#8fb0c7', '#9dbb86']; // в порядке участников турнира
 const SEG = ['#e0b65a', '#b8903e', '#7a6a4f', '#4a3b2b', '#352a1e']; // первое, ничья, второе, третье, четвертое
@@ -100,7 +100,7 @@ export async function renderStats(app, top, bindTop) {
       <label>Название <input id="tName" maxlength="40" placeholder="Например, Кубок осени" autocomplete="off"></label>
       <div class="tpeople" id="tPeople" aria-label="Участники"></div>
       <div class="tacts"><button class="btn primary" type="submit" id="tSend">Создать</button><button class="btn" type="button" id="tCancel">Отмена</button><span class="err" id="tErr" role="alert"></span></div>
-      <p class="muted small">От 2 до 4 участников. Партии считаются с момента создания турнира: партия пойдет в него сама, если за столом сядут именно эти люди, бот не считается.</p>
+      <p class="muted small">От 2 до 4 участников. Партии считаются с момента создания турнира: партия пойдет в него сама, если за столом сядут именно эти люди. Бот в состав не входит, но место занимает: очки по месту среди всех за столом.</p>
     </form>
     <div class="podium" id="sPodium"><p class="muted">Загружаю...</p></div>
     <div class="dates">
@@ -139,7 +139,7 @@ export async function renderStats(app, top, bindTop) {
 
   const update = () => {
     const list = inRange(games, from.value, to.value);
-    const t = totals(list, players.length);
+    const t = totals(list, players.length, slotCount(games, players.length));
     $('sPodium').innerHTML = podium(players, t, avatars);
     $('sCount').textContent = `Партий: ${list.length}`;
     $('sLine').innerHTML = lineChart(list, players.length);
@@ -168,7 +168,7 @@ export async function renderStats(app, top, bindTop) {
     $('sPodium').style.setProperty('--n', n);
     $('sBars').setAttribute('viewBox', `0 0 420 ${n * 82 + 42}`);
     $('sLegend').innerHTML = players.map((p, i) => `<span><i style="background:${COLS[i]}"></i>${esc(p)}</span>`).join('');
-    $('sSlots').innerHTML = SLOTS.slice(0, n === 4 ? 5 : 4).map((name, k) => `<span><i style="background:${SEG[k]}"></i>${name}</span>`).join('');
+    $('sSlots').innerHTML = SLOTS.slice(0, slotCount(games, n)).map((name, k) => `<span><i style="background:${SEG[k]}"></i>${name}</span>`).join('');
     $('sHead').textContent = `Счет (${players.map((p) => p[0]).join(' | ')})`;
     update();
   };

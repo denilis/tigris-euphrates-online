@@ -10,9 +10,18 @@ export function slot(g, i) {
 const zeros = (n) => Array(n).fill(0);
 const sizeOf = (games) => games[0]?.pts.length ?? 3;
 
-/** Сумма очков и счетчики мест каждого игрока; n — число участников турнира. */
-export function totals(games, n = sizeOf(games)) {
-  const t = { pts: zeros(n), places: zeros(n).map(() => zeros(n === 4 ? 5 : 4)) };
+/**
+ * Сколько счетчиков мест показывать: первое, ничья, второе и так до худшего места. Бот занимает
+ * место за столом, поэтому в турнире втроем бывает и четвертое (решение 04.11.2026).
+ */
+export function slotCount(games, n) {
+  const worst = Math.max(n, ...games.flatMap((g) => g.place));
+  return Math.max(n === 4 ? 5 : 4, worst + 1);
+}
+
+/** Сумма очков и счетчики мест каждого игрока; n — число участников турнира, k — число счетчиков. */
+export function totals(games, n = sizeOf(games), k = slotCount(games, n)) {
+  const t = { pts: zeros(n), places: zeros(n).map(() => zeros(k)) };
   for (const g of games) {
     for (let i = 0; i < n; i++) {
       t.pts[i] += g.pts[i];

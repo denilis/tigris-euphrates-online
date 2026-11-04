@@ -1,6 +1,6 @@
 // Турниры и их статистика. Первый турнир, сезон Дениса, Влада и Андрея, встроен: это партии с BGA
-// из переноса и партии сайта с этими тремя. Партия попадает в турнир по составу людей (бот не
-// считается) или по выбору организатора в лобби.
+// из переноса и партии сайта с этими тремя. Партия попадает в турнир по составу людей (бот для
+// состава не нужен) или по выбору организатора в лобби. Место бот занимает: см. tourGame.
 import { BGA_GAMES } from './season-bga.js';
 import { placesFromVectors } from '../game/order.js';
 import { tableDay } from '../game/table.js';
@@ -34,14 +34,20 @@ export function tourOf(e, tours) {
   return fit.find((t) => t.id === pick) || fit[0] || null;
 }
 
-/** Партия сайта в формате статистики турнира или null, если за столом другой состав. */
+/**
+ * Партия сайта в формате статистики турнира или null, если за столом другой состав.
+ * Места считаются среди всех за столом: бот в состав турнира не входит, но играет как еще один
+ * участник: человек, которого бот обогнал, опускается на место ниже (решение Дениса и Влада 04.11.2026).
+ */
 function tourGame(tour, e) {
   const seats = seatsOf(tour, e);
   if (!seats) return null;
   const vectors = seats.map((s) => s.vector);
-  const place = placesFromVectors(vectors);
+  const all = placesFromVectors(e.seats.map((s) => s.vector));
+  const allPts = seasonPoints(all); // деленное с ботом первое место тоже деленное
+  const pick = (arr) => seats.map((s) => arr[e.seats.indexOf(s)]);
   const [d, m, y] = tableDay(e.finishedAt).split('.');
-  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', code: e.code || null, score: vectors.map((v) => v[0]), place, pts: seasonPoints(place) };
+  return { date: `${y}-${m}-${d}`, source: 'site', table: e.title || '', code: e.code || null, score: vectors.map((v) => v[0]), place: pick(all), pts: pick(allPts) };
 }
 
 export const siteGame = (e) => tourGame(SEASON, e);

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BGA_GAMES } from '../server/season-bga.js';
 import { seasonGames, seasonPoints, siteGame, SEASON_PLAYERS } from '../server/stats.js';
-import { totals, cumulative, inRange, ranking, slot } from '../public/js/season.js';
+import { totals, cumulative, inRange, ranking, slot, slotCount } from '../public/js/season.js';
 import { createApp } from '../server/routes.js';
 import { memoryStore } from '../server/store-memory.js';
 import { redisStore } from '../server/store-redis.js';
@@ -39,7 +39,7 @@ test('деленное первое: по 2, третий 1; деленное в
   assert.deepEqual(seasonPoints([1, 1, 1]), [2, 2, 2]);
 });
 
-test('партия сайта: все трое за столом, бот не считается, места среди людей', () => {
+test('партия сайта: все трое за столом, бот последним, места не меняются', () => {
   const g = siteGame(entry());
   assert.equal(g.date, '2026-11-02');
   assert.equal(g.source, 'site');
@@ -49,11 +49,35 @@ test('партия сайта: все трое за столом, бот не с
   assert.deepEqual(g.pts, [2, 1, 4]);
 });
 
-test('партия сайта: бот выше людей мест не сдвигает', () => {
+// Решение Дениса и Влада 04.11: бот играет как четвертый, места среди всех за столом, шкала 4/2/1/0.
+test('партия сайта: бот занимает место, как будто играли вчетвером', () => {
   const e = entry();
   e.seats[3].vector = [30, 30, 30, 30];
   e.seats[3].place = 1;
-  assert.deepEqual(siteGame(e).place, [2, 3, 1]);
+  const g = siteGame(e);
+  assert.deepEqual(g.place, [3, 4, 2]);
+  assert.deepEqual(g.pts, [1, 0, 2]);
+});
+
+test('партия сайта 03.11.2026.3: бот третий, Андрей четвертый и получает 0', () => {
+  // векторы из итога стола 546JJR: Влад 12, Денис 10, бот 9, Андрей 8
+  const g = siteGame(entry({ seats: [
+    human('Денис', 2, [10, 11, 14, 26]), human('Андрей', 4, [8, 9, 12, 22]), human('Влад', 1, [12, 12, 15, 15]),
+    { kind: 'bot', userId: null, name: 'Бот универсальный', hero: 'bull', place: 3, vector: [9, 9, 9, 14] },
+  ] }));
+  assert.deepEqual(g.score, [10, 12, 8], 'порядок Денис, Влад, Андрей');
+  assert.deepEqual(g.place, [2, 1, 4]);
+  assert.deepEqual(g.pts, [2, 4, 0]);
+});
+
+test('партия сайта: ничья с ботом за первое делит первое место', () => {
+  const v = [20, 20, 20, 20];
+  const e = entry();
+  e.seats[2].vector = v;
+  e.seats[3].vector = v;
+  const g = siteGame(e);
+  assert.deepEqual(g.place, [3, 4, 1]);
+  assert.deepEqual(g.pts, [1, 0, 2]);
 });
 
 test('партия сайта: ничья по всем цветам делит первое место', () => {
@@ -111,6 +135,18 @@ test('слот места: первое, деленное, второе, тре�
   const g = { place: [1, 1, 3] };
   assert.deepEqual([0, 1, 2].map((i) => slot(g, i)), [1, 1, 3]);
   assert.deepEqual([0, 1, 2].map((i) => slot({ place: [2, 1, 3] }, i)), [2, 0, 3]);
+});
+
+test('турнир втроем: четвертое место за бота появляется в счетчиках, только когда было', () => {
+  const games = seasonGames([]);
+  assert.equal(slotCount(games, 3), 4, 'без ботов: первое, ничья, второе, третье');
+  assert.equal(totals(games).places[0].length, 4);
+  const withBot = [...games, { place: [2, 1, 4], pts: [2, 4, 0] }];
+  assert.equal(slotCount(withBot, 3), 5);
+  const t = totals(withBot, 3, slotCount(withBot, 3));
+  assert.deepEqual(t.places[2], [20, 0, 19, 21, 1], 'у Андрея одно четвертое место');
+  assert.ok(t.places.every((p) => p.every(Number.isFinite)));
+  assert.equal(slotCount([], 4), 5);
 });
 
 for (const [name, make] of [['память', () => memoryStore()], ['Redis', () => redisStore({ exec: fakeUpstash().exec, prefix: 'test:' })]]) {
