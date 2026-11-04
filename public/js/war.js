@@ -51,7 +51,8 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     return state;
   }
   box.className = 'modal dock';
-  // нападение не отменяется (решение Дениса 04.11): кнопки «Отменить нападение» нет
+  // нападение можно отменить, пока соперник не ответил (Денис 04.11, как в правилах сайта)
+  const undoBtn = g.canUndo ? '<button class="btn" id="wUndo">Отменить нападение</button>' : '';
 
   // --- выбор, какая война первой
   if (g.phase === 'warChoose') {
@@ -65,10 +66,11 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
       <div class="mtop"><h2>Какая война первая?</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
       <p class="msub">Тайл на ${cellName(g.ctx.pos)} объединил царства, где сошлись лидеры сразу нескольких цветов. Остальные войны пойдут следом.</p>
       <div class="orows">${rows}</div>
-      <div class="mfoot"><div class="mnote">Пока вы не решите, партия стоит.</div></div>
+      <div class="mfoot">${undoBtn}<div class="mnote">Пока вы не решите, партия стоит.</div></div>
     </div>`;
     box.querySelectorAll('[data-idx]').forEach((b) => b.addEventListener('click', () => move(+b.dataset.idx)));
     box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
+    box.querySelector('#wUndo')?.addEventListener('click', undo);
     return state;
   }
 
@@ -111,9 +113,10 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     box.innerHTML = `<div class="mcard" role="dialog" aria-label="${title}">
       ${top}
       <div class="sides">${attSide}${defSide}</div>
-      <div class="mfoot"><div class="mnote">Ждём решения: ${esc(name(g.toMove))}.</div></div>
+      <div class="mfoot">${undoBtn}<div class="mnote">Ждём решения: ${esc(name(g.toMove))}.</div></div>
     </div>`;
     box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
+    box.querySelector('#wUndo')?.addEventListener('click', undo);
     return state;
   }
 
@@ -159,6 +162,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
       <div><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
     </div>
     <div class="mfoot">
+      ${undoBtn}
       <button class="btn" id="wZero">Не добавлять</button>
       <button class="btn primary" id="wSend"${n > 0 && ok ? '' : ' disabled'}>${n > 0 ? `Отправить ${n} ${plural(n, color)}` : 'Выберите тайлы в руке'}</button>
       <div class="mnote">Пока вы не решите, партия стоит.</div>
@@ -173,5 +177,6 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   box.querySelector('#wCollapse').addEventListener('click', () => { ui.collapsed = true; redraw(); });
   box.querySelector('#wZero').addEventListener('click', () => move(legal.findIndex((m) => m.n === 0)));
   box.querySelector('#wSend').addEventListener('click', () => { if (n > 0 && ok) move(legal.findIndex((m) => m.n === n)); });
+  box.querySelector('#wUndo')?.addEventListener('click', undo);
   return state;
 }

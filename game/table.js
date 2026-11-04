@@ -384,11 +384,11 @@ function step(t, s, move, rng, now) {
   g.toMove = s.over ? null : g.order[s.toMove];
   // отменять нельзя после сброса (уже видны новые тайлы), исхода боя и решения другого места
   // (чужой выбор виден, и ходящий переиграл бы), а с концом хода снимки больше не нужны.
-  // Нападение не отменяется (решение Дениса 04.11): как только начался бой, снимков нет
+  // Нападение отменить можно, пока другое место не ответило (так в правилах сайта; Денис 04.11
+  // сначала просил запретить, потом вернул: «можно отменить, пока соперник не ответил»)
   const fought = entries.some((e) => e.ev === 'war' || e.ev === 'revolt');
-  const attacked = CONFLICT.includes(s.phase);
   const otherSeat = seatId !== g.order[meta.cur];
-  if (move.type === 'discard' || fought || attacked || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
+  if (move.type === 'discard' || fought || otherSeat || s.over || s.cur !== meta.cur || move.type === 'confirm') g.undo = [];
   if (g.clock && s.cur !== meta.cur) g.clock.turnUsed = 0;
   g.confirmBy = null;
   return entries;
@@ -412,7 +412,7 @@ export function canUndo(t) {
   if (t.status !== 'playing' || t.game?.paused || !t.game?.undo?.length) return false;
   const s = stateFromJSON(t.game.state);
   if (s.over) return false;
-  return s.toMove === s.cur && UNDO_PHASES.includes(s.phase); // в бою отмены нет (04.11)
+  return CONFLICT.includes(s.phase) || (s.toMove === s.cur && UNDO_PHASES.includes(s.phase)); // в бою снимок живет до первого ответа
 }
 
 /** Отменить последнее действие своего хода: поле, рука и журнал как до него. */

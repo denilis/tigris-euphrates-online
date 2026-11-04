@@ -112,27 +112,38 @@ test('панель: атакующий ничего не добавил, под�
   assert.match(box.innerHTML, /<em>ничего<\/em>/);
 });
 
-// Решение Дениса 04.11: нападение не отменяется, кнопки «Отменить нападение» нет нигде;
-// подсказки с исходом каждого варианта («Добавить 1: побеждаете вы...») убраны
-test('кнопки «Отменить нападение» нет ни в ожидании, ни в поддержке, ни в выборе войны', () => {
-  const wait = dock();
-  renderWarDock(wait.box, view(0, { conflict: k({ attN: 1 }), canUndo: true }), { collapsed: false, chosen: new Set() }, calls());
-  assert.ok(!wait.box.innerHTML.includes('Отменить нападение'));
+// Нападение можно отменить, пока соперник не ответил (Денис 04.11); подсказки с исходом каждого
+// варианта («Добавить 1: побеждаете вы...») убраны
+test('кнопка отмены: только когда сервер разрешил, и зовет отмену', () => {
+  const none = dock();
+  renderWarDock(none.box, view(0, { conflict: k({ attN: 1 }) }), { collapsed: false, chosen: new Set() }, calls());
+  assert.ok(!none.box.innerHTML.includes('Отменить нападение'));
 
+  const yes = dock();
+  let undone = 0;
+  renderWarDock(yes.box, view(0, { conflict: k({ attN: 1 }), canUndo: true }), { collapsed: false, chosen: new Set() }, { ...calls(), undo: () => undone++ });
+  assert.match(yes.box.innerHTML, /Отменить нападение/);
+  yes.bound['#wUndo']();
+  assert.equal(undone, 1);
+});
+
+test('кнопка отмены есть и в своем окне поддержки, подсказок с исходом нет', () => {
   const sup = dock();
   const v = view(0, { legal: [{ type: 'support', n: 0 }, { type: 'support', n: 2 }], canUndo: true, toMove: 0 });
   v.game.preview = { options: [{ n: 0, winner: 1, points: 1, pointsColor: 0, removedTiles: 0, leadersReturned: [] }, { n: 2, winner: 0, points: 1, pointsColor: 0, removedTiles: 0, leadersReturned: [] }] };
   assert.equal(renderWarDock(sup.box, v, { collapsed: false, chosen: new Set() }, calls()), 'decide');
-  assert.ok(!sup.box.innerHTML.includes('Отменить нападение'));
+  assert.match(sup.box.innerHTML, /Отменить нападение/);
   assert.ok(!sup.box.innerHTML.includes('class="orows"'), 'подсказок с исходом нет');
   assert.ok(!/побеждаете вы|Исход посчитан/.test(sup.box.innerHTML));
   assert.match(sup.box.innerHTML, /id="wSend"/, 'решения на месте');
+});
 
-  const choose = dock();
-  const c = view(0, { phase: 'warChoose', conflict: null, legal: [{ type: 'warColor', color: 1 }], canUndo: true, toMove: 0 });
-  c.game.preview = { options: [{ color: 1, att: 0, def: 1, attBoard: 2, defBoard: 1 }] };
-  assert.equal(renderWarDock(choose.box, c, { collapsed: false, chosen: new Set() }, calls()), 'decide');
-  assert.ok(!choose.box.innerHTML.includes('Отменить нападение'));
+test('кнопка отмены есть и в выборе войны', () => {
+  const { box } = dock();
+  const v = view(0, { phase: 'warChoose', conflict: null, legal: [{ type: 'warColor', color: 1 }], canUndo: true, toMove: 0 });
+  v.game.preview = { options: [{ color: 1, att: 0, def: 1, attBoard: 2, defBoard: 1 }] };
+  assert.equal(renderWarDock(box, v, { collapsed: false, chosen: new Set() }, calls()), 'decide');
+  assert.match(box.innerHTML, /Отменить нападение/);
 });
 
 test('свернутая панель ожидания называет, кого ждем', () => {
