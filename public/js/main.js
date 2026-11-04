@@ -1,10 +1,11 @@
 // Точка входа: окно активации, мои столы, стол (лобби или партия), коды игроков.
 // Адреса: #/ мои столы, #/t/КОД стол, #/rules правила (без входа), #/learn обучение (без входа),
-// #/stats статистика, #/admin коды (администраторы).
+// #/stats статистика, #/admin коды (администраторы), #/t/КОД/replay просмотр партии по ходам.
 import { api, session, watchTable } from './api.js';
 import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
+import { renderReplay } from './replay.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
@@ -171,9 +172,14 @@ async function renderHome() {
           <b>${esc(t.title || t.code)}</b>
           <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
           <small>${t.paused ? 'на паузе' : STATUS[t.status] || ''}${myTurn && !t.paused ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
+          ${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}
           ${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}
         </a>`;
       }).join('') : '<p class="muted">Пока нет столов. Создайте новый или откройте стол по коду из приглашения.</p>';
+      el.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', (e) => {
+        e.preventDefault(); // кнопка внутри ссылки на стол
+        go(`#/t/${b.dataset.replay}/replay`);
+      }));
       el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => {
         e.preventDefault(); // кнопка внутри ссылки на стол
         removeTable(list[+b.dataset.del], load);
@@ -329,6 +335,8 @@ function route() {
   setBusy(false);
   if (h === 'rules') return renderRules(app, topbar('rules'), bindTopbar);
   if (LEARN.test(h)) return showLearn(h.match(LEARN), topbar('rules'));
+  const rp = h.match(/^t\/([A-Za-z0-9]{6})\/replay(?:\/(\d+))?$/); // просмотр партии по ходам (04.11)
+  if (rp) return renderReplay(app, rp[1].toUpperCase(), topbar(''), bindTopbar, +(rp[2] || 0));
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
   if (h === 'admin') return renderAdmin();

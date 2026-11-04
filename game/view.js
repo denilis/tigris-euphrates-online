@@ -137,6 +137,7 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     canUndo: playing && myP === s.cur && canUndo(table) && !(g.confirmBy != null && now != null && now >= g.confirmBy),
     clock: clockView(table, now),
     stopped: table.status === 'closed', // организатор завершил партию досрочно: итога нет
+    replay: table.status === 'over' && Boolean(g.rec), // просмотр по ходам есть у партий с записью (04.11)
     paused: g.paused ? { by: g.paused.by, at: g.paused.at, ready: [...g.paused.ready] } : null,
     result: g.result || null,
   };

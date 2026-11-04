@@ -672,3 +672,35 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   .litem{flex-direction:column;align-items:stretch}
   .lacts .btn{flex:1}
 }
+
+/* ---------- просмотр партии по ходам (этап 3, 04.11) ---------- */
+.pcard.replay{width:min(1500px,calc(100% - 24px))}
+.replay .rhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.replay .rhead h1{margin:0}
+.replay .rgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;margin-top:12px;align-items:start}
+.replay .boardwrap{background:#14110e;border-radius:10px;padding:4px;max-width:calc((100vh - 250px) * 1.43)}
+.replay .rleft{min-width:0}
+.replay svg.board{display:block;width:100%;height:auto}
+.replay .rctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.replay .rctl .seg button{min-height:30px;padding:3px 10px}
+.replay .rtime{display:flex;align-items:center;gap:10px;margin-top:8px}
+.replay .rtime span{font-variant-numeric:tabular-nums;color:var(--muted);min-width:64px;text-align:right}
+.replay .rtrack{position:relative;flex:1;padding-bottom:10px}
+.replay .rtrack input{width:100%;margin:0;accent-color:var(--gold)}
+.replay .rmarks{position:absolute;left:8px;right:8px;bottom:0;height:8px;pointer-events:none}
+.replay .rmarks i{position:absolute;width:3px;height:8px;margin-left:-1px;border-radius:1px}
+.replay .rmarks i.war,.replay .rlegend i.war{background:#c0563c}
+.replay .rmarks i.mon,.replay .rlegend i.mon{background:#e0b65a}
+.replay .rlegend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:6px}
+.replay .rlegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.replay .rside{background:var(--card);border-radius:10px;padding:12px 14px}
+.replay .rtitle{font-size:15px;margin-bottom:8px}
+.replay .rtitle b{color:var(--gold);margin-left:6px}
+.replay .rlog{list-style:none;margin:0;padding:0;min-height:0;font-size:12.5px}
+.replay .rlog li{cursor:default}
+.replay h3{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+.replay .rsc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:6px 0;border-bottom:1px solid #3a2e22}
+.replay .rsc:last-child{border-bottom:0}
+.replay .rsc small{color:var(--muted);flex-basis:100%}
+@media (max-width:900px){.replay .rgrid{grid-template-columns:1fr}}
+.titem [data-replay]{margin-left:6px}

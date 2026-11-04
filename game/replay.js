@@ -6,17 +6,20 @@ import { BOARDS } from './vendor/engine/boards.js';
 import { seededRng } from './random.js';
 
 /**
- * Пройти запись. onStep(s, move, i) вызывается после каждого хода; s — живое состояние движка,
- * копировать самому, если нужно сохранить. Возвращает итоговое состояние.
+ * Пройти запись. onStep(s, move, i, before) вызывается после каждого хода; s — живое состояние
+ * движка (копировать самому, если нужно сохранить), before — { turn, cur, actionNo, phase, toMove }
+ * до хода. onStart(s) — один раз до первого хода. Возвращает итоговое состояние.
  */
-export function replay(rec, onStep = null) {
+export function replay(rec, onStep = null, onStart = null) {
   if (!rec || rec.v !== 1) throw new Error('no-record');
   const rng = seededRng({ rng: rec.seed });
   const s = createGame({ layout: BOARDS[rec.board], numPlayers: rec.np, cfg: rec.cfg }, rng);
+  onStart?.(s);
   rec.moves.forEach((m, i) => {
+    const before = { turn: s.turn, cur: s.cur, actionNo: s.actionNo, phase: s.phase, toMove: s.toMove };
     s.log = [];
     applyMove(s, m, rng);
-    onStep?.(s, m, i);
+    onStep?.(s, m, i, before);
   });
   return s;
 }

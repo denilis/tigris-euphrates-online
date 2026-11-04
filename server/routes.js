@@ -8,6 +8,7 @@ import {
   start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
+import { replayFrames } from '../game/frames.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
 import { SEASON, tourGames, publicTour } from './stats.js';
@@ -459,12 +460,31 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     http(500, 'no-code', 'Не удалось подобрать код стола');
   }
 
+  /**
+   * Просмотр партии по ходам (этап 3, 04.11): кадры из записи партии, только для законченной партии,
+   * только открытое (поле, очки, журнал). Партии, начатые до записи ходов, просмотра не имеют.
+   */
+  async function replayOf(code) {
+    const { doc } = await load(code);
+    if (doc.status !== 'over' || !doc.game?.result) http(409, 'not-over', 'Просмотр открывается после конца партии');
+    const data = replayFrames(doc);
+    if (!data) http(404, 'no-record', 'Партия начата до записи ходов: просмотра у нее нет');
+    const s = doc.game.state;
+    const cells = (arr) => Array.from(arr).flatMap((x, i) => (x ? [i] : []));
+    return {
+      code: doc.code, title: doc.title || null, options: { ...doc.options }, order: doc.game.order,
+      seats: doc.seats.map((x) => ({ id: x.id, kind: x.kind, name: x.name, hero: x.hero, avatar: x.avatar || null })),
+      river: cells(s.river), special: cells(s.special), monDefs: s.monuments.map(({ id, c1, c2 }) => ({ id, c1, c2 })), result: doc.game.result, ...data,
+    };
+  }
+
   async function myTables(u) {
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
     return docs.filter((t) => t && t.status !== 'deleted').map((t) => ({
       code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
       paused: Boolean(t.game?.paused),
+      replay: t.status === 'over' && Boolean(t.game?.rec), // просмотр по ходам (этап 3, 04.11)
       me: seatOfUser(t, u.id)?.id ?? null,
       toMove: t.game?.toMove ?? null,
       seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero })),
@@ -621,6 +641,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       }
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
+      if (op === 'replay' && method === 'GET') return replayOf(code);
     }
     http(404, 'no-route', 'Нет такого адреса');
   }

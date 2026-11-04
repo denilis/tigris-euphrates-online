@@ -68,6 +68,7 @@ export function renderEnd(box, view, { act, go }) {
     ${statsTable(view, list, seat)}
     <div class="mfoot">
       <button class="btn" id="eClose">Посмотреть поле</button>
+      ${g.replay ? '<button class="btn" id="eReplay">Просмотр по ходам</button>' : ''}
       <button class="btn" id="eHome">К столам</button>
       ${view.me != null ? `<button class="btn primary" id="eAgain">${view.next ? 'Перейти к реваншу' : 'Еще партию'}</button>` : ''}
     </div>
@@ -75,6 +76,7 @@ export function renderEnd(box, view, { act, go }) {
   </div>`;
   box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
   box.querySelector('#eHome').addEventListener('click', () => go('#/'));
+  box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
   box.querySelector('#eAgain')?.addEventListener('click', async () => {
     if (view.next) return go(`#/t/${view.next}`);
     const v = await act({ action: 'rematch' });
