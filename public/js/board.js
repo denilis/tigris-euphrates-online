@@ -75,6 +75,12 @@ export function sealIcon(c1, c2, size = 46, style = null) {
 // tile: плитка в стиле монументов (картинки Дениса 04.11, лист «Здания», вырезка tools/icons/cut.py);
 // seal: прежняя «Малая печать» (выбор Дениса 30.10): золотая рама, поле цвета, силуэт здания.
 export const buildingImg = (c) => `/img/buildings/${c}.webp`;
+
+// --- чудо: картинка Дениса 04.11 (вариант B «Эмалевая печать»), подогнана под крест 3 на 3
+// (scratchpad wonder_fit.py: лучи нарисованы шире трети, концы растянуты, середина сжата)
+export const WONDER_IMG = '/img/wonder/wonder.webp';
+/** Чудо крестом на 5 клеток: (x, y) левый верхний угол центральной клетки, c — размер клетки. */
+export const wonderSVG = (x, y, c) => `<image href="${WONDER_IMG}" x="${x - c + 3}" y="${y - c + 3}" width="${3 * c - 6}" height="${3 * c - 6}"/>`;
 export const BUILDING_STYLES = ['tile', 'seal'];
 const BUILDING_SIL = [
   'M15 44H45V38H41V32H37V26H33V20H27V26H23V32H19V38H15Z', // храм: зиккурат
@@ -340,8 +346,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
 
   for (let i = 0; i < W * H; i++) if (b.treasure[i]) s += treasureSVG(i, g.special.includes(i));
   if (g.wonderPos >= 0) {
-    const x = cx(g.wonderPos) + C / 2, y = cy(g.wonderPos) + C / 2;
-    s += `<g filter="url(#shadow2)"><path d="M${x - 70} ${y - 22}h48v-48h44v48h48v44h-48v48h-44v-48h-48z" fill="url(#bvg)" stroke="#94691f" stroke-width="2" opacity=".92"/>${rosette(x, y, 16)}</g>`;
+    s += `<g filter="url(#shadow2)">${wonderSVG(cx(g.wonderPos), cy(g.wonderPos), C)}</g>`;
   }
   const fx = opts.fx || [];
   const delay = (f) => ` style="animation-delay:-${f.age}ms"`;

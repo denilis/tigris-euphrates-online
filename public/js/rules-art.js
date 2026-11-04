@@ -1,6 +1,6 @@
 // Рисунки к правилам: участки из rules-scenes.js теми же тайлами и жетонами, что на поле.
 import { HEX, tileImg, catImg, uniteImg, tokenImg } from './util.js';
-import { monDefs, sealSVG, buildingSVG } from './board.js';
+import { monDefs, sealSVG, buildingSVG, wonderSVG } from './board.js';
 import { SCENES, FIGURES, parseScene, cellAt } from './rules-scenes.js';
 
 const C = 60, T = C - 6;
@@ -92,8 +92,7 @@ function sceneSVG(key, label) {
   }
   if (scene.wonder) {
     const { x, y } = cellAt(scene.wonder);
-    const cx = x * C + C / 2, cy = y * C + C / 2;
-    pieces += `<path d="M${cx - 70} ${cy - 22}h48v-48h44v48h48v44h-48v48h-44v-48h-48z" fill="url(#${id}vg)" stroke="#94691f" stroke-width="2"/><circle cx="${cx}" cy="${cy}" r="16" fill="#e0b65a" stroke="#94691f" stroke-width="2"/>`;
+    pieces += wonderSVG(x * C, y * C, C);
   }
   let grid = '';
   for (let x = 1; x < p.w; x++) grid += `M${x * C} 0V${vh}`;

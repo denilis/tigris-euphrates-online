@@ -404,7 +404,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .monopts{display:flex;gap:6px;flex-wrap:wrap}
 .monopt{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card);border:1px solid transparent;border-radius:8px;padding:4px 6px;font-size:11px;color:var(--muted)}
 .monopt.on{border-color:var(--gold);color:var(--gold)}
-.wonderico{width:44px;height:44px;background:conic-gradient(from 45deg,#e0b65a,#94691f,#e0b65a);clip-path:polygon(35% 0,65% 0,65% 35%,100% 35%,100% 65%,65% 65%,65% 100%,35% 100%,35% 65%,0 65%,0 35%,35% 35%)}
+.wonderico{width:44px;height:44px;background:url(/img/wonder/wonder.webp) center/contain no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .log{flex:1;min-height:140px;overflow:auto}
 .log ol{list-style:none;margin:0;padding:0;font-size:12.5px}
 .log li{padding:3px 0;border-bottom:1px dashed #3a2e22;display:grid;grid-template-columns:24px 1fr;gap:4px;cursor:pointer}
