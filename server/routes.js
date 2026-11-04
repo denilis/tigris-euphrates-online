@@ -11,7 +11,7 @@ import { viewFor } from '../game/view.js';
 import { replayFrames } from '../game/frames.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
-import { SEASON, tourGames, publicTour } from './stats.js';
+import { SEASON, tourGames, publicTour, playerGames } from './stats.js';
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
@@ -264,6 +264,22 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const t = { id: 't-' + randomBytes(5).toString('hex'), name, ownerId: u.id, players: users.map((x) => ({ id: x.id, name: x.name })), createdAt: now() };
     await store.putTour(t);
     return publicTour(t);
+  }
+
+  /**
+   * Личная статистика (просьба Дениса 04.11): все партии игрока query.id (по умолчанию свои) и
+   * список игроков для выбора. Считает страница; партии BGA сезона входят по имени.
+   */
+  async function playerStats(u, query) {
+    await keepFinishedOnce(store);
+    await detailsOnce(store);
+    const users = await store.listUsers();
+    const player = users.find((x) => x.id === query.id) || users.find((x) => x.id === u.id) || u;
+    return {
+      player: { id: player.id, name: player.name, avatar: player.avatar || null },
+      players: users.map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+      games: playerGames(player, await store.listHistory(), await allTours()),
+    };
   }
 
   async function stats(query) {
@@ -790,6 +806,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
     if (method === 'GET' && head === 'people') return peopleList();
+    if (method === 'GET' && head === 'stats' && rest[0] === 'player' && rest.length === 1) return playerStats(u, query);
     if (method === 'GET' && head === 'stats') return stats(query);
     if (method === 'GET' && head === 'tournaments') return toursInfo();
     if (method === 'POST' && head === 'tournaments') return newTour(u, body);

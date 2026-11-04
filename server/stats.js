@@ -53,6 +53,50 @@ function tourGame(tour, e) {
 
 export const siteGame = (e) => tourGame(SEASON, e);
 
+const isoDay = (at) => {
+  const [d, m, y] = tableDay(at).split('.');
+  return `${y}-${m}-${d}`;
+};
+/** Победа: первое место, ни с кем не деленное. */
+const cleanWin = (places, place) => place === 1 && places.filter((p) => p === 1).length === 1;
+
+/**
+ * Все партии игрока для личной статистики (просьба Дениса 04.11): партии сайта, где он сидел
+ * человеком (с ботами и с людьми, в турнирах и вне), и партии BGA сезона (по имени). От старых
+ * к новым. Партия: { date, at, source, kind: 'bga' | 'people' | 'bots', group, table, code,
+ * place, win, score, seats: [{ name, kind, place, score }], d }; d: подробности игрока или null.
+ */
+export function playerGames(player, history, tours) {
+  const out = [];
+  const bi = SEASON_PLAYERS.findIndex((n) => norm(n) === norm(player.name));
+  if (bi >= 0) {
+    for (const [date, table, score, place] of BGA_GAMES) {
+      out.push({
+        date, at: Date.parse(date), source: 'bga', kind: 'bga', group: `${SEASON.name} (BGA)`, table: String(table), code: null,
+        place: place[bi], win: cleanWin(place, place[bi]), score: score[bi],
+        seats: SEASON_PLAYERS.map((name, i) => ({ name, kind: 'human', place: place[i], score: score[i] })),
+        d: BGA_DETAILS[table]?.[bi] ?? null,
+      });
+    }
+  }
+  for (const e of history) {
+    const humans = e.seats.filter((s) => s.kind === 'human');
+    const me = humans.find((s) => (s.userId ? s.userId === player.id : norm(s.name) === norm(player.name)));
+    if (!me) continue;
+    const kind = humans.length === 1 ? 'bots' : 'people';
+    const t = kind === 'people' ? tourOf(e, tours) : null;
+    const group = t ? (t.builtin ? `${t.name} (сайт)` : t.name) : kind === 'bots' ? 'С ботами' : 'С людьми вне турниров';
+    const places = e.seats.map((s) => s.place);
+    out.push({
+      date: isoDay(e.finishedAt), at: e.finishedAt, source: 'site', kind, group, table: e.title || '', code: e.code || null,
+      place: me.place, win: cleanWin(places, me.place), score: me.vector?.[0] ?? 0,
+      seats: e.seats.map((s) => ({ name: s.name, kind: s.kind, place: s.place, score: s.vector?.[0] ?? 0 })),
+      d: me.d ?? null,
+    });
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+
 /** Все партии турнира от старых к новым. tours — все турниры, history — партии сайта в любом порядке. */
 export function tourGames(tour, tours, history) {
   const bga = tour.builtin ? BGA_GAMES.map(([date, table, score, place, pts]) => ({ date, source: 'bga', table: String(table), score, place, pts, details: BGA_DETAILS[table] ?? null })) : [];

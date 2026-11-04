@@ -5,6 +5,7 @@ import { api, session, watchTable } from './api.js';
 import { renderLobby, closePicker } from './lobby.js';
 import { renderGame } from './game.js';
 import { renderStats } from './stats.js';
+import { renderPersonal } from './personal-view.js';
 import { renderReplay } from './replay.js';
 import { welcomeHTML } from './welcome.js';
 import { renderRules } from './rules.js';
@@ -441,6 +442,7 @@ function route() {
   if (h === 'tables') return renderHome();
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
+  if (h === 'stats/me') return renderPersonal(app, topbar('stats'), bindTopbar);
   if (h === 'me') return renderProfile(app, topbar(''), bindTopbar);
   return renderStart();
 }

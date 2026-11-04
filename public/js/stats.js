@@ -3,6 +3,7 @@
 import { api, session } from './api.js';
 import { esc, toast, faceBg, HEX, COLNAME, SCORE_ORDER } from './util.js';
 import { totals, cumulative, inRange, ranking, slotCount, dashboard, winShare, SOURCES } from './season.js';
+import { statsTabs } from './personal.js';
 
 const COLS = ['#e0b65a', '#c98a56', '#8fb0c7', '#9dbb86']; // в порядке участников турнира
 const SEG = ['#e0b65a', '#b8903e', '#7a6a4f', '#4a3b2b', '#352a1e']; // первое, ничья, второе, третье, четвертое
@@ -224,6 +225,7 @@ function drawDash(app, players, avatars, list) {
 export async function renderStats(app, top, bindTop) {
   app.innerHTML = `<div class="page">${top}<main class="pcard stats">
     <h1>Статистика</h1>
+    ${statsTabs('tour')}
     <div class="tourbar">
       <label>Турнир <select id="sTour"></select></label>
       <button class="btn sm" id="sNew" type="button">Новый турнир</button>
@@ -370,3 +372,6 @@ export async function renderStats(app, top, bindTop) {
   });
   show(start);
 }
+
+// общие с вкладкой «Личная» (personal-view.js): карточки, графики, рекорды, ссылки на партии
+export { dashCards, fightsChart, colorsChart, recordsList, tableLink, shortDate, COLS, MUTED };
