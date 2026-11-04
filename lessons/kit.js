@@ -99,8 +99,11 @@ function highlight(m) {
   return { cells, pick: kind ? { kind, color: m.color ?? null } : null };
 }
 
-/** Кадры урока. Шаг: без хода, me (ход ученика) или rival (ход соперника). */
-export function buildLesson({ id, title, goal, minutes, setup, steps }) {
+/**
+ * Кадры урока. Шаг: без хода, me (ход ученика) или rival (ход соперника). onMove(s, seat, move, k)
+ * зовется перед каждым ходом урока: tools/check-lessons.mjs так оценивает ходы ботом.
+ */
+export function buildLesson({ id, title, goal, minutes, setup, steps }, { onMove = null } = {}) {
   const t = table(id, setup);
   const rng = makeRng(100 + id);
   const out = [];
@@ -131,6 +134,7 @@ export function buildLesson({ id, title, goal, minutes, setup, steps }) {
         if (fits(w.move, move)) throw new Error(`${where}: объяснение накрывает нужный ход`);
       }
     }
+    if (by) onMove?.(s, seat, row.move, k);
     row.game = { ...v.game, canUndo: false };
     if (by !== 'me') Object.assign(row.game, { legal: null, preview: null });
     out.push(row);
