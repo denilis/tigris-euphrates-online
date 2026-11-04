@@ -900,3 +900,10 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 /* лица в лобби крупнее: у ботов портреты, 34 точки Денис счел слишком мелкими (04.11) */
 .lcard .seat .who .face{width:52px;height:52px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
 .endtbl .who i{width:36px;height:36px}
+/* баннер окна боя (картинки Дениса 04.11): полоса по ширине окна, низ уходит в цвет окна */
+.mban{height:120px;margin:-14px -16px 10px;flex:none;background:linear-gradient(180deg,rgba(46,36,25,0) 50%,#2e2419 100%),var(--banimg) center var(--bany)/cover no-repeat}
+.mban.war{--banimg:url(/img/battle/war.webp);--bany:62%}
+.mban.revolt{--banimg:url(/img/battle/revolt.webp);--bany:42%}
+@media (max-width:900px){.mban{height:80px}}
+/* в уроке сверху своя панель, полоса там лишняя */
+.app.lesson .mban{display:none}

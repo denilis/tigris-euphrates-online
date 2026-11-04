@@ -176,3 +176,21 @@ test('боя нет: панель скрыта', () => {
   assert.equal(renderWarDock(box, view(0, { phase: 'action', conflict: null }), { collapsed: false, chosen: new Set() }, calls()), false);
   assert.equal(box.hidden, true);
 });
+
+test('баннер: война и выбор войны с картинкой войны, восстание со своей, в свернутом виде баннера нет', () => {
+  const war = dock();
+  renderWarDock(war.box, view(2), { collapsed: false, chosen: new Set() }, calls());
+  assert.match(war.box.innerHTML, /<div class="mban war"/);
+  const rev = dock();
+  renderWarDock(rev.box, view(0, { phase: 'revoltSupport', conflict: k({ color: 0, leaderColor: 2, attN: 1 }) }), { collapsed: false, chosen: new Set() }, calls());
+  assert.match(rev.box.innerHTML, /<div class="mban revolt"/);
+  assert.ok(!rev.box.innerHTML.includes('mban war'));
+  const ch = dock();
+  const v = view(0, { phase: 'warChoose', conflict: null, legal: [{ type: 'warColor', color: 1 }], toMove: 0 });
+  v.game.preview = { options: [{ color: 1, att: 0, def: 1, attBoard: 2, defBoard: 1 }] };
+  renderWarDock(ch.box, v, { collapsed: false, chosen: new Set() }, calls());
+  assert.match(ch.box.innerHTML, /<div class="mban war"/);
+  const pill = dock();
+  renderWarDock(pill.box, view(0, { conflict: k({ attN: 1 }) }), { collapsed: true, chosen: new Set() }, calls());
+  assert.ok(!pill.box.innerHTML.includes('mban'));
+});

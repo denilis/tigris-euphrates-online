@@ -6,6 +6,8 @@ import {
 } from './util.js';
 
 const PHASES = ['warSupport', 'revoltSupport', 'warChoose'];
+// полоса-картинка над заголовком окна (картинки Дениса 04.11, схема одобрена): война или восстание
+export const banner = (kind) => `<div class="mban ${kind}" aria-hidden="true"></div>`;
 
 export function warActive(view) {
   const g = view.game;
@@ -62,7 +64,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
       return `<button class="orow pick" data-idx="${i}"><b><i class="cdot" style="background:${HEX[o.color]}"></i>Война за ${COLNAME[o.color]}</b>
         <span>Атакует ${esc(name(o.att))} (${TILEPL[o.color]} на поле ${o.attBoard}), защищается ${esc(name(o.def))} (${o.defBoard}).</span></button>`;
     }).join('');
-    box.innerHTML = `<div class="mcard" role="dialog" aria-label="Выбор войны">
+    box.innerHTML = `<div class="mcard" role="dialog" aria-label="Выбор войны">${banner('war')}
       <div class="mtop"><h2>Какая война первая?</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
       <p class="msub">Тайл на ${cellName(g.ctx.pos)} объединил царства, где сошлись лидеры сразу нескольких цветов. Остальные войны пойдут следом.</p>
       <div class="orows">${rows}</div>
@@ -103,7 +105,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   // ходящий без лидера этого цвета в войне не участвует: атакует следующий по очереди участник
   const why = !isRevolt && k.att !== g.cur ? ` У ходящего (${esc(name(g.cur))}) нет ${COLGEN[color]} лидера в этих царствах, поэтому атакует следующий по очереди участник.` : '';
   const strength = isRevolt ? 'Сила по храмам рядом с лидером и храмам из руки.' : `Сила по ${TILEDAT[color]}, стороны подсвечены на поле.`;
-  const top = `<div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
+  const top = `${banner(isRevolt ? 'revolt' : 'war')}<div class="mtop"><h2><i style="background:${HEX[isRevolt ? k.leaderColor : color]}"></i>${title}</h2><button class="peekbtn" id="wCollapse">Свернуть</button></div>
     <p class="msub">${cause}${who}${why} ${strength}</p>`;
 
   // решает соперник или смотрим чужой бой: видно, что уже известно всем, руки и исхода здесь нет
