@@ -19,3 +19,20 @@ test('рисуется в своей клетке и не выходит за н
   const [, x, y, w, h] = s.match(/<image href="[^"]+" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/);
   assert.ok(+x >= 0 && +y >= 0 && +x + +w <= 60 && +y + +h <= 60, `${x},${y},${w},${h}`);
 });
+
+// вид зданий выбирает хозяин стола (Денис 04.11): новые плитки или прежние значки
+test('прежние значки: у каждого цвета свой силуэт в золотой раме с розетками', async () => {
+  const paths = [0, 1, 2, 3].map((c) => buildingSVG(c, 0, 0, 'b', 'seal').match(/d="(M[^"]+)"/)[1]);
+  assert.equal(new Set(paths).size, 4);
+  const s = buildingSVG(2, 0, 0, 'b', 'seal');
+  assert.match(s, /url\(#bvg\)/);
+  assert.match(s, /url\(#bv2\)/);
+  assert.doesNotMatch(s, /<image/);
+  assert.match(buildingSVG(2, 0, 0, 'b'), /<image href="\/img\/buildings\/2\.webp"/, 'по умолчанию новые плитки');
+  const { DEFAULT_OPTIONS, createTable, setOptions } = await import('../game/table.js');
+  assert.equal(DEFAULT_OPTIONS.building, 'tile');
+  const t = createTable({ code: 'BLDSTY', host: { userId: 'h', name: 'Хозяин' }, now: 0 });
+  setOptions(t, 'h', { building: 'seal' }, 1);
+  assert.equal(t.options.building, 'seal');
+  assert.throws(() => setOptions(t, 'h', { building: 'gold' }, 2));
+});

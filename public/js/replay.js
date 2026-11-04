@@ -103,7 +103,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     };
     // след действия: рамки и номер на клетках, как у хода соперника, без вспышки
     const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, hero: seat(m.actor)?.hero })) : [];
-    renderBoard(svg, g, heroOf, { trail, monument: data.options.monument }, data.options.look || 'relief');
+    renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building }, data.options.look || 'relief');
     drawHint(svg, $('rHint'), hintsAt(data.analysis, k), name);
     $('rRange').value = k;
     $('rPos').textContent = `${k} / ${N}`;

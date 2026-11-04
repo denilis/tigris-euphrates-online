@@ -6,6 +6,7 @@ import { onlineNow } from './presence.js';
 import { pickList, chatAllowed, chatNote } from './online.js';
 import { fitTours, tourChoice } from './season.js';
 import { play } from './signals.js';
+import { buildingIcon } from './board.js';
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -15,6 +16,7 @@ const ORDER = [
 const COUNTING = { none: 'не считает', approx: 'примерно', exact: 'точно' };
 // вид монумента (выбор Дениса 03.11): номер, как Денис их называл, и короткое имя
 const MONUMENTS = [['enamel', '1 Печать'], ['frame', '2 Рамка'], ['ziggurat', '3 Зиккурат']];
+const BUILDINGS = [['tile', 'Новые плитки'], ['seal', 'Старые значки']]; // вид зданий (Денис 04.11)
 
 // турниры меняются редко: лобби перерисовывается часто, а список обновляем раз в 20 секунд
 const TOURS_MS = 20000;
@@ -191,12 +193,13 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
       <div class="opts">
         <span class="seg"><button data-board="standard" class="${o.board === 'standard' ? 'on' : ''}" ${dis}>Обычное поле</button><button data-board="advanced" class="${o.board === 'advanced' ? 'on' : ''}" ${dis}>Продвинутое поле</button></span>
         <span class="seg" title="Вид поля, на правила не влияет. В партии каждый может сменить его для себя">${[['relief', 'Рельеф'], ['cells', 'Клетки']].map(([id, t]) => `<button data-look="${id}" class="${(o.look ?? 'relief') === id ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
-        <span class="seg monseg" title="Вид монумента на поле, на правила не влияет">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}</button>`).join('')}</span>
         <label><input type="checkbox" data-opt="englishSupport" ${o.englishSupport ? 'checked' : ''} ${dis}> Английская поддержка</label>
         <label><input type="checkbox" data-opt="buildings" ${o.buildings ? 'checked' : ''} ${dis}> Здания</label>
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
         <label><input type="checkbox" data-opt="openScore" ${o.openScore ? 'checked' : ''} ${dis}> Открытый счет (видны очки соперников)</label>
       </div>
+      <div class="opts"><span class="muted olbl">Вид монумента</span><span class="seg monseg" title="Вид монумента на поле, на правила не влияет">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}</button>`).join('')}</span></div>
+      <div class="opts"><span class="muted olbl">Вид зданий</span><span class="seg monseg" title="Вид зданий на поле, на правила не влияет">${BUILDINGS.map(([id, t]) => `<button data-building="${id}" class="${(o.building ?? 'tile') === id ? 'on' : ''}" ${dis}>${buildingIcon(0, 26, id)}${t}</button>`).join('')}</span></div>
       <div class="opts" id="lTour" hidden></div>
       <h2>Время</h2>
       <div class="opts">
@@ -243,6 +246,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
   on('[data-board]', 'click', (el) => act({ action: 'options', options: { board: el.dataset.board } }));
   on('[data-look]', 'click', (el) => act({ action: 'options', options: { look: el.dataset.look } }));
   on('[data-monument]', 'click', (el) => act({ action: 'options', options: { monument: el.dataset.monument } }));
+  on('[data-building]', 'click', (el) => act({ action: 'options', options: { building: el.dataset.building } }));
   on('[data-opt]', 'change', (el) => act({ action: 'options', options: { [el.dataset.opt]: el.checked } }));
   on('[data-time]', 'click', (el) => act({ action: 'options', options: { [el.dataset.time]: +el.dataset.val } }));
   root.querySelector('#lStart')?.addEventListener('click', () => act({ action: 'start' }));

@@ -39,6 +39,7 @@ const layersOf = () => (ctl.lesson ? ALL_ON : ui.layers);
 
 // вид монумента из настроек стола (выбор Дениса 03.11); у столов до 03.11 настройки нет, там «Печать»
 const monOf = (view) => view.options.monument || 'enamel';
+const bldOf = (view) => view.options.building || 'tile'; // вид зданий (04.11)
 
 // вид поля: как выбрал хозяин стола, но игрок может сменить его для себя, браузер помнит по столу
 const LOOKS = ['relief', 'cells'];
@@ -250,7 +251,7 @@ function onCell(i) {
 function boardOpts() {
   const { g, me, myP, legal, decides } = D();
   ui.fx = ageFx(ui.fx || [], [], Date.now());
-  const o = { flash: ui.flash, layers: layersOf(), unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells, monument: monOf(current), fx: ui.fx };
+  const o = { flash: ui.flash, layers: layersOf(), unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells, monument: monOf(current), building: bldOf(current), fx: ui.fx };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
@@ -291,14 +292,14 @@ function drawStock({ view, g, legal, decides }) {
   // только те, что можно поставить, остальные притушены
   const monNow = decides && g.phase === 'monument' ? new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id)) : null;
   const bldNow = decides && g.phase === 'build' ? g.ctx?.color ?? null : null;
-  const key = JSON.stringify(s) + monOf(view) + [...(monNow || [])] + ':' + bldNow + ':' + Boolean(monNow);
+  const key = JSON.stringify(s) + monOf(view) + bldOf(view) + [...(monNow || [])] + ':' + bldNow + ':' + Boolean(monNow);
   if (key === ui.stockKey && el.firstChild) return;
   ui.stockKey = key;
   // крупно (просьба Дениса 03.11): монументы по три в ряд, чтобы читались цвета
   const item = (x, icon, hot = false, dim = false) => `<span class="sit${x.built ? ' built' : ''}${hot ? ' blink' : ''}${dim ? ' dim' : ''}" title="${esc(x.title)}">${icon}</span>`;
   el.innerHTML = `<div class="slbl">Монументы</div><div class="mons">${s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 80, monOf(view)), monNow?.has(m.id), monNow && !m.built && !monNow.has(m.id))).join('')}</div>`
     + (s.buildings || s.wonder ? `<div class="slbl">Здания</div><div class="blds">${[
-      ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c, 44), bldNow === b.c)),
+      ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c, 44, bldOf(view)), bldNow === b.c)),
       s.wonder ? item(s.wonder, '<span class="wonderico"></span>') : '',
     ].join('')}</div>` : '');
 }

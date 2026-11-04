@@ -71,19 +71,33 @@ export function sealIcon(c1, c2, size = 46, style = null) {
   return `<svg viewBox="0 0 120 120" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${sealSVG(c1, c2, 0, 0, p)}</svg>`;
 }
 
-// --- здание: плитка на клетку в стиле монументов (картинки Дениса 04.11, лист «Здания», вырезка
-// tools/icons/cut.py): храм-зиккурат, амбар, рынок, крепость. До 04.11 рисовались силуэты в рамке.
+// --- здание: вид выбирает хозяин стола (Денис 04.11), на правила он не влияет.
+// tile: плитка в стиле монументов (картинки Дениса 04.11, лист «Здания», вырезка tools/icons/cut.py);
+// seal: прежняя «Малая печать» (выбор Дениса 30.10): золотая рама, поле цвета, силуэт здания.
 export const buildingImg = (c) => `/img/buildings/${c}.webp`;
+export const BUILDING_STYLES = ['tile', 'seal'];
+const BUILDING_SIL = [
+  'M15 44H45V38H41V32H37V26H33V20H27V26H23V32H19V38H15Z', // храм: зиккурат
+  'M17 44V30A13 13 0 0 1 43 30V44H34V35H26V44Z', // ферма: амбар
+  'M14 31L30 18L46 31H43V44H35V34H25V44H17V31Z', // рынок
+  'M16 44V23H20V27H24V23H28V27H32V23H36V27H40V23H44V44H34V36H26V44Z', // поселение: крепость
+];
 
-/** Здание цвета c в клетке с левым верхним углом (x, y). Прежний четвертый аргумент (префикс defs) не нужен. */
-export function buildingSVG(c, x, y) {
-  return `<g transform="translate(${x},${y})" filter="url(#shadow2)"><image href="${buildingImg(c)}" x="1" y="1" width="58" height="58"/></g>`;
+/** Здание цвета c в клетке с левым верхним углом (x, y), p — префикс id в defs, style — вид зданий. */
+export function buildingSVG(c, x, y, p, style = 'tile') {
+  if (style !== 'seal') return `<g transform="translate(${x},${y})" filter="url(#shadow2)"><image href="${buildingImg(c)}" x="1" y="1" width="58" height="58"/></g>`;
+  let g = `<rect x="1" y="1" width="58" height="58" rx="6" fill="url(#${p}vg)" stroke="#1c120a" stroke-opacity=".6"/>`;
+  g += `<rect x="5" y="5" width="50" height="50" fill="url(#${p}v${c})"/><rect x="5" y="5" width="50" height="50" fill="url(#${p}br)"/>`;
+  g += `<circle cx="30" cy="30" r="21" fill="#f0e2bf" stroke="${GD.d}" stroke-width="2.4"/>`;
+  g += `<path transform="translate(30 31) scale(.96) translate(-30 -31)" d="${BUILDING_SIL[c]}" fill="#3a2614"/>`;
+  for (const [rx, ry] of [[5, 5], [55, 5], [5, 55], [55, 55]]) g += rosette(rx, ry, 3.6);
+  return `<g transform="translate(${x},${y})" filter="url(#shadow2)">${g}</g>`;
 }
 
 /** Маленькое здание для блока «Запас» (свой svg со своими defs). */
-export function buildingIcon(c, size = 28) {
+export function buildingIcon(c, size = 28, style = 'tile') {
   const p = `bi${c}`;
-  return `<svg viewBox="0 0 60 60" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${buildingSVG(c, 0, 0, p)}</svg>`;
+  return `<svg viewBox="0 0 60 60" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${buildingSVG(c, 0, 0, p, style)}</svg>`;
 }
 
 // Стрелка переноса лидера кончается за краем клетки (замечание Дениса 03.11): раньше она
@@ -307,7 +321,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
 
   // здания под метками владельца: кому идет тайл, видно и на здании
   for (let i = 0; i < W * H; i++) {
-    if (b.building[i] >= 0) s += buildingSVG(b.building[i], cx(i), cy(i), 'b');
+    if (b.building[i] >= 0) s += buildingSVG(b.building[i], cx(i), cy(i), 'b', opts.building);
   }
 
   // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;

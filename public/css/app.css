@@ -226,6 +226,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .seg.sm button{min-height:30px;padding:3px 9px;font-size:12.5px}
 .seg.monseg button{display:inline-flex;align-items:center;gap:6px;padding:4px 10px}
 .seg.monseg img{border-radius:4px;flex:none}
+.seg.monseg svg{flex:none}
+.opts .olbl{min-width:118px}
 .stock .mons .monimg{width:100%;max-width:80px;height:auto;display:block}
 .monopt .monimg{display:block}
 .heroes{display:flex;gap:10px;flex-wrap:wrap}
