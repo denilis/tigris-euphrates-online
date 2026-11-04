@@ -52,6 +52,10 @@ test('адрес stats/player: свои партии по умолчанию, ч
   assert.equal(mine.body.games.length, BGA_GAMES.length, 'у Дениса партии BGA');
   const his = await app.call({ method: 'GET', path: 'stats/player', query: { id: vlad.user.id }, token: denis.token });
   assert.equal(his.body.player.name, 'Влад');
+  // игрок видит только себя (Денис 04.11): Влад не откроет статистику Дениса
+  const peek = await app.call({ method: 'GET', path: 'stats/player', query: { id: denis.user.id }, token: vlad.token });
+  assert.equal(peek.body.player.name, 'Влад');
+  assert.deepEqual(peek.body.players.map((p) => p.name), ['Влад']);
   assert.equal((await app.call({ method: 'GET', path: 'stats/player' })).status, 401);
   assert.equal((await app.call({ method: 'GET', path: 'stats/player/x', token: denis.token })).body.player, undefined);
 });

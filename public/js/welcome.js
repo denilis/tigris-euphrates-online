@@ -3,7 +3,7 @@
 // больше не нужно: главная и есть приветствие.
 import { esc } from './util.js';
 
-/** Разделы сайта на главной: адрес, название, что там. */
+/** Разделы сайта на главной: адрес, название, что там, иконка (лист Дениса 04.11, tools/icons/cut.py). */
 export const SECTIONS = [
   ['#/new', 'Начать игру', 'новый стол: позвать тех, кто на сайте, сыграть с ботами или открыть стол по коду'],
   ['#/tables', 'Мои столы', 'ваши партии: идут, собираются и сыгранные, с просмотром по ходам'],
@@ -13,10 +13,12 @@ export const SECTIONS = [
   ['#/admin', 'Коды игроков', 'завести нового игрока и выдать ему код'],
 ];
 
+const ICONS = ['start', 'tables', 'stats', 'rules', 'learn', 'codes']; // в порядке SECTIONS
+
 export function welcomeHTML(user) {
   return `<section class="welcome" id="welcome">
     <h1>Добро пожаловать в «Тигр и Евфрат»${user?.name ? `, ${esc(user.name)}` : ''}</h1>
     <p class="sub">Знаменитая настольная игра Райнера Книции (1997) о первых цивилизациях Месопотамии: царства между двух рек, лидеры, войны и монументы. Побеждает тот, у кого слабейший цвет сильнее, чем у соперников.</p>
-    <div class="wnav">${SECTIONS.map(([href, title, text]) => `<a class="wlink" href="${href}"><b>${title}</b><span>${text}</span></a>`).join('')}</div>
+    <div class="wnav">${SECTIONS.map(([href, title, text], i) => `<a class="wlink" href="${href}"><img src="/img/icons/${ICONS[i]}.webp" width="64" height="64" alt=""><div><b>${title}</b><span>${text}</span></div></a>`).join('')}</div>
   </section>`;
 }

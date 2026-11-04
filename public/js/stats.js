@@ -330,7 +330,13 @@ export async function renderStats(app, top, bindTop) {
     pick.innerHTML = info.tours.map((t) => `<option value="${esc(t.id)}" ${t.id === current ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
   };
 
-  const start = info.tours.some((t) => t.id === lastTour()) ? lastTour() : info.tours[0].id;
+  // игрок видит только свои турниры (04.11): если их нет, страница не пустая, а с подсказкой
+  const none = () => {
+    $('sPodium').innerHTML = '<p class="muted">Вы пока не участвуете ни в одном турнире. Заведите его кнопкой «Новый турнир» или посмотрите вкладку «Личная».</p>';
+    app.querySelector('.stats .dates').hidden = true;
+    app.querySelector('.stats .charts').hidden = true;
+  };
+  const start = info.tours.some((t) => t.id === lastTour()) ? lastTour() : info.tours[0]?.id;
   fill(start);
   pick.addEventListener('change', () => {
     rememberTour(pick.value);
@@ -360,6 +366,8 @@ export async function renderStats(app, top, bindTop) {
     try {
       const t = await api('POST', 'tournaments', { name: $('tName').value, players: ids });
       info.tours.push(t);
+      app.querySelector('.stats .dates').hidden = false;
+      app.querySelector('.stats .charts').hidden = false;
       fill(t.id);
       rememberTour(t.id);
       $('tForm').hidden = true;
@@ -370,7 +378,8 @@ export async function renderStats(app, top, bindTop) {
     }
     send.disabled = false;
   });
-  show(start);
+  if (start) show(start);
+  else none();
 }
 
 // общие с вкладкой «Личная» (personal-view.js): карточки, графики, рекорды, ссылки на партии

@@ -885,3 +885,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .personal .pfbar{display:flex;height:16px;border-radius:3px;overflow:hidden;background:#3a2e22;gap:1px}
 .personal .pfbar i{background:var(--gold)}
 .personal .pfbar em{background:#5a4c3c}
+/* иконки разделов на главной (04.11) */
+.lcard.clay .wlink{flex-direction:row;align-items:center;gap:12px}
+.lcard.clay .wlink img{flex:none;width:64px;height:64px;filter:drop-shadow(0 2px 2px rgba(45,22,6,.45))}
+.lcard.clay .wlink div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.lcard.clay .wlink:hover img{transform:translateY(-1px) scale(1.04);transition:transform .15s}

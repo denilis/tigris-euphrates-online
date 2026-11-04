@@ -245,9 +245,15 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   /** Все турниры от старых к новым: порядок решает, в какой идет партия, подходящая к двум. */
   const allTours = async () => [SEASON, ...(await store.listTours()).sort((a, b) => a.createdAt - b.createdAt)];
 
-  async function toursInfo() {
+  // кто что видит в статистике (Денис 04.11): игрок только свою личную статистику и турниры, где
+  // он участник; администратор все
+  const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const inTour = (t, u) => t.players.some((p) => (p.id ? p.id === u.id : sameName(p.name, u.name)));
+  const myTours = async (u) => (await allTours()).filter((t) => u.admin || inTour(t, u));
+
+  async function toursInfo(u) {
     const users = (await store.listUsers()).filter((x) => !x.revoked);
-    return { tours: (await allTours()).map(publicTour), people: users.map((x) => ({ id: x.id, name: x.name })) };
+    return { tours: (await myTours(u)).map(publicTour), people: users.map((x) => ({ id: x.id, name: x.name })) };
   }
 
   async function newTour(u, body) {
@@ -256,6 +262,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const list = Array.isArray(body.players) ? body.players.map(String) : [];
     const ids = [...new Set(list)];
     if (ids.length !== list.length || ids.length < 2 || ids.length > 4) http(400, 'bad-players', 'В турнире от 2 до 4 разных участников');
+    // игрок видит только свои турниры: заведенный без себя он бы и сам не увидел
+    if (!u.admin && !ids.includes(u.id)) http(400, 'not-member', 'Включите в турнир себя');
     const tours = await allTours();
     if (tours.length >= TOURS_MAX) http(409, 'too-many', 'Турниров слишком много');
     if (tours.some((t) => t.name.toLowerCase() === name.toLowerCase())) http(409, 'name-taken', 'Такой турнир уже есть');
@@ -274,19 +282,22 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     await keepFinishedOnce(store);
     await detailsOnce(store);
     const users = await store.listUsers();
-    const player = users.find((x) => x.id === query.id) || users.find((x) => x.id === u.id) || u;
+    // игрок видит только себя, администратор любого (Денис 04.11)
+    const player = (u.admin && users.find((x) => x.id === query.id)) || users.find((x) => x.id === u.id) || u;
+    const seen = u.admin ? users : [player];
     return {
       player: { id: player.id, name: player.name, avatar: player.avatar || null },
-      players: users.map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+      players: seen.map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
       games: playerGames(player, await store.listHistory(), await allTours()),
     };
   }
 
-  async function stats(query) {
+  async function stats(u, query) {
     await keepFinishedOnce(store); // один раз после выкладки: старые законченные столы без срока и с кодом в истории
     await detailsOnce(store); // один раз после выкладки: подробности старых партий для статистики турнира
     const tours = await allTours();
     const tour = tours.find((t) => t.id === query.tour) || SEASON;
+    if (!u.admin && !inTour(tour, u)) http(403, 'not-member', 'Статистику турнира видят его участники и администраторы');
     const users = await store.listUsers();
     const face = (p) => users.find((x) => (p.id ? x.id === p.id : x.name.trim().toLowerCase() === p.name.toLowerCase()))?.avatar || null;
     return { tour: publicTour(tour), players: tour.players.map((p) => p.name), avatars: tour.players.map(face), games: tourGames(tour, tours, await store.listHistory()) };
@@ -807,8 +818,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
     if (method === 'GET' && head === 'people') return peopleList();
     if (method === 'GET' && head === 'stats' && rest[0] === 'player' && rest.length === 1) return playerStats(u, query);
-    if (method === 'GET' && head === 'stats') return stats(query);
-    if (method === 'GET' && head === 'tournaments') return toursInfo();
+    if (method === 'GET' && head === 'stats') return stats(u, query);
+    if (method === 'GET' && head === 'tournaments') return toursInfo(u);
     if (method === 'POST' && head === 'tournaments') return newTour(u, body);
     if (method === 'GET' && head === 'prefs') return (await store.getPrefs(u.id)) || {};
     if (method === 'POST' && head === 'prefs') {

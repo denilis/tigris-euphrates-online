@@ -163,6 +163,7 @@ export async function renderPersonal(app, top, bindTop) {
     }
     if (mine !== asked || !$('pNums')) return; // успели выбрать другого игрока или уйти со страницы
     data = r;
+    $('pWho').closest('.tourbar').hidden = r.players.length < 2; // игрок видит только себя (04.11)
     $('pWho').innerHTML = r.players.map((p) => `<option value="${esc(p.id)}" ${p.id === r.player.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     first = r.games[0]?.date ?? '';
     last = r.games[r.games.length - 1]?.date ?? '';

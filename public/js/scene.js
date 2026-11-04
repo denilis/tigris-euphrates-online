@@ -3,7 +3,7 @@
 // неподвижная картинка, а кнопки «Остановить видео» нет.
 export const SCENES = {
   summer: { img: '/img/lobby-bg.jpg', video: '/media/zastavka.mp4' },
-  winter: { img: '/img/lobby-bg-winter.jpg', video: null },
+  winter: { img: '/img/lobby-bg-winter2.jpg', video: null }, // вторая зимняя картинка Дениса (04.11)
 };
 
 const KEY = 'tigris.scene';

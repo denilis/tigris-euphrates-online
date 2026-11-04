@@ -42,10 +42,15 @@ test('шкала: четвертое место без очков, двое ка
 test('сезон всегда первый в списке, люди для окна турнира без кодов', async () => {
   const s = setup();
   const P = await people(s, 'Петя');
-  const r = (await s.req('GET', 'tournaments', { token: P.Петя.token })).body;
+  const r = (await s.req('GET', 'tournaments', { token: P.Денис.token })).body;
   assert.equal(r.tours[0].id, 'season');
   assert.deepEqual(r.tours[0].players, ['Денис', 'Влад', 'Андрей']);
   assert.deepEqual(r.people.map((p) => p.name).sort(), ['Денис', 'Петя']);
+  // игрок видит только турниры, где он участник (Денис 04.11): Петя в сезон не входит
+  const petya = (await s.req('GET', 'tournaments', { token: P.Петя.token })).body;
+  assert.deepEqual(petya.tours, []);
+  assert.equal((await s.req('GET', 'stats', { query: { tour: 'season' }, token: P.Петя.token })).status, 403);
+  assert.equal((await s.req('GET', 'stats', { query: { tour: 'season' }, token: P.Денис.token })).status, 200, 'администратор видит все');
   assert.ok(r.people.every((p) => Object.keys(p).sort().join() === 'id,name'), 'только имя и номер');
   assert.equal((await s.req('GET', 'tournaments')).status, 401);
 });
@@ -69,7 +74,9 @@ test('турнир заводит любой вошедший, неверный 
   assert.equal((await add({ name: 'Строка', players: 'все' })).status, 400);
   await s.req('POST', `admin/users/${id('Коля')}/revoke`, { body: {}, token: P.Денис.token });
   assert.equal((await add({ name: 'Отозван', players: [id('Петя'), id('Коля')] })).status, 400, 'отозванный код');
-  assert.equal((await s.req('GET', 'tournaments', { token: P.Петя.token })).body.tours.length, 2);
+  assert.equal((await add({ name: 'Без меня', players: [id('Вася'), id('Женя')] })).status, 400, 'игрок заводит турнир только с собой');
+  assert.deepEqual((await s.req('GET', 'tournaments', { token: P.Петя.token })).body.tours.map((t) => t.name), ['Кубок двора'], 'сезон Пете не виден');
+  assert.equal((await s.req('GET', 'tournaments', { token: P.Денис.token })).body.tours.length, 2, 'администратор видит все');
 });
 
 for (const [name, make] of [['память', memoryStore], ['Redis', () => redisStore({ exec: fakeUpstash().exec, prefix: 't:' })]]) {
