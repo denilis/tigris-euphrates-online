@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет: река по клеткам</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  body { margin: 0; background: #14110e; color: #efe4cf; font-family: Georgia, serif; }
+  .mk { max-width: 1240px; margin: 0 auto; padding: 18px 20px 30px; }
+  .mk h1 { font-size: 22px; margin: 0 0 4px; color: #e0b65a; font-weight: normal; }
+  .mk p { margin: 0 0 12px; color: #a8987c; font-size: 14px; }
+  .bar { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; font-size: 14px; }
+  .bar .seg { display: inline-flex; border: 1px solid #4a3b2b; border-radius: 8px; overflow: hidden; }
+  .bar button { background: #1f1a15; color: #d8cbb2; border: 0; padding: 7px 14px; font: inherit; cursor: pointer; }
+  .bar button.on { background: #e0b65a; color: #1b1713; }
+  .bar label { color: #a8987c; }
+  svg#board { width: 100%; height: auto; display: block; }
+</style>
+</head>
+<body>
+<div class="mk">
+  <h1>Река по клеткам: вариант</h1>
+  <p>Вода только в русле, русло извивается и проходит через каждую речную клетку, на сушу не выходит. Речные клетки чуть зеленее, чтобы было видно, куда класть синие тайлы.</p>
+  <div class="bar">
+    <span>Поле <span class="seg" id="map"><button data-v="advanced" class="on">Продвинутое</button><button data-v="standard">Обычное</button></span></span>
+    <span>Река <span class="seg" id="kind"><button data-v="new" class="on">Новая</button><button data-v="old">Как сейчас</button></span></span>
+    <span>Речные клетки <span class="seg" id="wash"><button data-v="1" class="on">Подсвечены</button><button data-v="0">Без подсветки</button></span></span>
+  </div>
+  <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<script type="module">
+import { renderBoard } from '/js/board.js';
+import { riverSVG } from './river.js';
+
+const pos = await (await fetch('./position.json')).json();
+const st = { map: 'advanced', kind: 'new', wash: '1' };
+const svg = document.getElementById('board');
+
+function draw() {
+  const { seats, game: g } = pos[st.map];
+  const heroOf = (p) => seats.find((s) => s.id === g.order[p])?.hero;
+  delete svg.dataset.key; // статичный слой рисуется заново: в нем меняем реку
+  renderBoard(svg, g, heroOf, { monument: 'enamel' }, 'relief');
+  if (st.kind === 'old') return;
+  // в статичном слое поля: песок, затем берег и вода по маске клеток. Берег и воду заменяем руслом
+  const clip = svg.querySelector('g[clip-path="url(#boardClip)"]');
+  clip.querySelectorAll('rect[mask]').forEach((r) => r.remove());
+  clip.insertAdjacentHTML('beforeend', riverSVG(st.map, { relief: true, wash: st.wash === '1' }));
+}
+
+for (const id of ['map', 'kind', 'wash']) {
+  document.getElementById(id).addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    st[id] = b.dataset.v;
+    for (const x of e.currentTarget.children) x.classList.toggle('on', x === b);
+    draw();
+  });
+}
+draw();
+</script>
+</body>
+</html>

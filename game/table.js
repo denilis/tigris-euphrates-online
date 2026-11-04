@@ -5,7 +5,7 @@ import { createGame, legalMoves, applyMove, validate, finalVector } from './vend
 import { BOARDS } from './vendor/engine/boards.js';
 import { STYLE_LABELS } from './vendor/bot/styles.js';
 import { stateFromJSON, stateToJSON } from './serialize.js';
-import { cryptoRng } from './random.js';
+import { cryptoRng, seededRng, newSeed } from './random.js';
 import { playOrder, companyKey, placesFromVectors } from './order.js';
 import { journalEntries } from './journal.js';
 
@@ -272,7 +272,10 @@ export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMod
   const ord = playOrder(t.seats, orderMode || t.options.order, { last, rng });
   const { confirmMs } = timing(t);
   const cfg = { englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder, confirmTurn: confirmMs > 0 };
-  const s = createGame({ layout: BOARDS[t.options.board], numPlayers: t.seats.length, cfg }, rng);
+  // запись партии: зерно, нынешнее состояние генератора и все ходы движка (game/replay.js)
+  const seed = newSeed(rng);
+  const rec = { v: 1, seed, rng: seed, board: t.options.board, np: t.seats.length, cfg, moves: [] };
+  const s = createGame({ layout: BOARDS[t.options.board], numPlayers: t.seats.length, cfg }, seededRng(rec));
   t.game = {
     id: `${t.code}-${now}`,
     order: ord.order,
@@ -286,6 +289,7 @@ export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMod
     undo: [], // снимки перед действиями ходящего в этом ходу (только для отмены, в вид не идут)
     confirmBy: null, // когда ход завершится сам, если не нажать «Завершить ход»
     clock: { at: now, turnUsed: 0, used: {}, over: {} },
+    rec, // в вид игрока не идет: по зерну угадывается мешок
   };
   t.status = 'playing';
   touch(t, now);
@@ -366,11 +370,13 @@ function step(t, s, move, rng, now) {
   spend(t, s, seatId, now);
   // снимок перед действием ходящего человека: к нему вернет «Отменить»
   g.undo ||= [];
-  if (before === 'action' && seatById(t, seatId)?.kind === 'human') g.undo.push({ state: g.state, logLen: g.log.length });
+  const rec = g.rec; // у партий, начатых до 04.11, записи нет: случайность как раньше
+  if (before === 'action' && seatById(t, seatId)?.kind === 'human') g.undo.push({ state: g.state, logLen: g.log.length, rec: rec ? { rng: rec.rng, n: rec.moves.length } : null });
   s.log = [];
-  applyMove(s, move, rng);
+  applyMove(s, move, rec ? seededRng(rec) : rng);
   const errs = validate(s);
   if (errs.length) fail('engine', 'Нарушена целостность партии: ' + errs.join('; '), 500);
+  if (rec) rec.moves.push(structuredClone(move));
   const entries = journalEntries(s.log, g.order, meta);
   g.log.push(...entries);
   g.state = stateToJSON(s);
@@ -422,6 +428,10 @@ export function undo(t, userId, { version } = {}, { now } = {}) {
   const back = stateFromJSON(snap.state);
   g.state = snap.state;
   g.log.length = snap.logLen;
+  if (g.rec && snap.rec) {
+    g.rec.rng = snap.rec.rng;
+    g.rec.moves.length = snap.rec.n;
+  }
   g.log.push({ ev: 'undo', turn: back.turn, actor: seat.id, action: back.actionNo });
   g.logEpoch = (g.logEpoch || 0) + 1;
   g.toMove = g.order[back.toMove];

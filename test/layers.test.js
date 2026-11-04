@@ -1,8 +1,9 @@
 // Слои поля и рисунок следа: ползунки в шапке партии, стрелка переноса лидера, кубик сокровища.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { LAYERS, ALL_ON, cleanLayers } from '../public/js/layers.js';
-import { trailSVG, arrowPath, treasureSVG } from '../public/js/board.js';
+import { trailSVG, arrowPath, treasureSVG, TREASURE_IMG } from '../public/js/board.js';
 
 test('слои: по умолчанию все включены, мусор не ломает выбор', () => {
   assert.deepEqual(LAYERS.map((l) => l.id), ['owners', 'support', 'moves', 'monuments']);
@@ -40,12 +41,15 @@ test('номер действия в следе прячется слоем «Х
   assert.match(off, /trail-arrow/);
 });
 
-test('сокровище: кубик по центру клетки, у особого золотой ободок', () => {
+test('сокровище: кубик картинкой по центру клетки, размер по просьбе Дениса, у особого золотой ободок', () => {
   const plain = treasureSVG(20, false);
   const [cx, cy] = center(20);
-  const top = plain.match(/<rect class="cube-top" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/).slice(1).map(Number);
-  assert.equal(top[0] + top[2] / 2, cx);
-  assert.equal(top[1] + top[2] / 2, cy);
+  const top = plain.match(/<image class="cube-top" href="([^"]+)" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/).slice(1);
+  const [x, y, w] = top.slice(1).map(Number);
+  assert.equal(top[0], TREASURE_IMG);
+  assert.ok(existsSync(new URL('../public' + TREASURE_IMG, import.meta.url)), 'картинка кубика на месте');
+  assert.equal(w, 14.3, '04.11: было 22, вдвое меньше (11), потом на 30% больше');
+  assert.ok(Math.abs(x + w / 2 - cx) < 0.1 && Math.abs(y + w / 2 - cy) < 0.1, 'по центру клетки');
   assert.doesNotMatch(plain, /cube-ring/);
   assert.match(treasureSVG(20, true), /cube-ring/);
 });

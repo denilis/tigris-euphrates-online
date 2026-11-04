@@ -288,6 +288,20 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @keyframes trailPulse{50%{stroke-width:7;stroke-opacity:.6}}
 @keyframes land{0%{transform:scale(1.5);opacity:.3}80%{transform:scale(1);opacity:1}100%{transform:scale(1);opacity:0}}
 @media (prefers-reduced-motion:reduce){.trail.fresh{animation:none}.land{display:none}}
+/* анимации поля (04.11, fx.js): снятый тайл гаснет, катастрофа трескается, монумент растет, кубик подпрыгивает */
+.fx-gone,.fx-crack,.fx-flash,.fx-cube{pointer-events:none}
+.fx-gone{transform-box:fill-box;transform-origin:center;animation:fxGone .7s ease-in forwards}
+@keyframes fxGone{0%{opacity:1;filter:brightness(1)}35%{opacity:.9;filter:brightness(1.6)}100%{opacity:0;transform:scale(.55) rotate(-8deg)}}
+.fx-crack{animation:fxCrack .9s ease-out forwards}
+@keyframes fxCrack{0%{opacity:0;transform:translate(0,0)}10%{opacity:1;transform:translate(-2px,1px)}20%{transform:translate(2px,-1px)}30%{transform:translate(-1px,0)}40%{transform:translate(0,0)}75%{opacity:1}100%{opacity:0}}
+.fx-grow{transform-box:fill-box;transform-origin:center;animation:fxGrow .9s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes fxGrow{0%{transform:scale(.5);opacity:.2}60%{transform:scale(1.06);opacity:1}100%{transform:scale(1)}}
+.fx-flash{stroke-width:3;animation:fxFlash .9s ease-out forwards}
+@keyframes fxFlash{0%{opacity:1;stroke-width:9}100%{opacity:0;stroke-width:1}}
+.fx-cube{transform-box:fill-box;transform-origin:center;animation:fxCube .9s ease-out forwards}
+@keyframes fxCube{0%{transform:translateY(0)}30%{transform:translateY(-14px) scale(1.25)}60%{opacity:1}100%{transform:translateY(-22px) scale(.7);opacity:0}}
+.fly{position:fixed;z-index:70;pointer-events:none;object-fit:cover;box-shadow:0 8px 18px rgba(0,0,0,.45)}
+@media (prefers-reduced-motion:reduce){.fx-gone,.fx-crack,.fx-flash,.fx-cube{display:none}.fx-grow{animation:none}}
 .pulse{animation:pulse 1.1s ease-in-out infinite}
 @keyframes pulse{50%{stroke-width:7;stroke-opacity:.35}}
 .side{grid-area:side;min-height:0;min-width:0;overflow-y:auto;display:flex;flex-direction:column;background:var(--frame);border-left:1px solid var(--line)}
@@ -333,7 +347,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .ltok{width:24px;height:24px;border-radius:50%;background-size:cover;border:2px solid;box-shadow:0 1px 2px rgba(0,0,0,.6)}
 .pc .row{grid-column:2 / 4;display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted);white-space:nowrap}
 .cnt{display:inline-flex;align-items:center;gap:4px;font-weight:600;color:var(--text)}
-.cnt .cube{width:13px;height:13px;border-radius:2px;background:linear-gradient(135deg,#fff,#ddd3bd);box-shadow:2px 2px 0 #b9ab8c,0 0 0 1px #6b5a3a}
+.cnt .cube{width:15px;height:15px;background:url(/img/treasure/cube.webp) center/contain no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
 .cnt .cat{width:15px;height:15px;border-radius:2px;background-size:cover}
 .sc{display:flex;gap:3px;margin-left:auto}
 .sc.hid{font-size:13px;color:var(--muted);font-style:italic}

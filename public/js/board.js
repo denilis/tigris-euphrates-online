@@ -4,6 +4,7 @@
 import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
 import { TRAIL_FRESH_MS, TRAIL_LAND_MS } from './trail.js';
 import { ALL_ON } from './layers.js';
+import { riverLayer } from './river.js';
 
 const C = 60, G = 24, PAD = 6;
 const VW = G + W * C + PAD, VH = G + H * C + PAD;
@@ -134,23 +135,55 @@ export function trailSVG(marks, numbers = true) {
 }
 
 /**
- * Сокровище (просьба Дениса 03.11): белый деревянный кубик по центру храма, как ставят за
- * настоящим столом. Снизу и справа видна боковая грань. У особого сокровища золотой ободок:
- * его торговец берет первым.
+ * Сокровище: белый деревянный кубик по центру храма, как ставят за настоящим столом (03.11).
+ * 04.11 Денис прислал картинку кубика (tools/treasure/cube.py вырезает его из зеленого фона)
+ * и попросил вдвое меньше прежнего: 11 вместо 22, потом на 30% больше: 14,3. У особого
+ * сокровища золотой ободок: его торговец берет первым.
  */
+export const TREASURE_IMG = '/img/treasure/cube.webp';
+export const TREASURE_SIZE = 14.3;
 export function treasureSVG(i, special) {
-  const S = 22, x = cx(i) + (C - S) / 2, y = cy(i) + (C - S) / 2;
-  let s = special ? `<rect class="cube-ring" x="${x - 4}" y="${y - 4}" width="${S + 11}" height="${S + 11}" rx="6" fill="none" stroke="#e0b65a" stroke-width="2.5"/>` : '';
-  s += `<rect x="${x + 3}" y="${y + 3}" width="${S}" height="${S}" rx="3" fill="#b9ab8c" stroke="#5c4c30" stroke-width="1"/>`;
-  s += `<rect class="cube-top" x="${x}" y="${y}" width="${S}" height="${S}" rx="3" fill="url(#cubeTop)" stroke="#6b5a3a" stroke-width="1"/>`;
-  s += `<path d="M${x + 5} ${y + 8}q6 -2 12 1M${x + 4} ${y + 15}q7 2 14 -1" stroke="#a8946a" stroke-opacity=".35" stroke-width=".8" fill="none"/>`;
+  const S = TREASURE_SIZE, x = f1(cx(i) + (C - S) / 2), y = f1(cy(i) + (C - S) / 2);
+  let s = special ? `<rect class="cube-ring" x="${x - 3}" y="${y - 3}" width="${S + 6}" height="${S + 6}" rx="4" fill="none" stroke="#e0b65a" stroke-width="2"/>` : '';
+  s += `<image class="cube-top" href="${TREASURE_IMG}" x="${x}" y="${y}" width="${S}" height="${S}"/>`;
   return `<g filter="url(#shadow)">${s}</g>`;
+}
+
+/**
+ * Эффекты поля из fx.js (анимации 04.11): снятый тайл гаснет, катастрофа трескается, у нового
+ * монумента золотая вспышка, кубик сокровища подпрыгивает. age — сколько мс эффект уже идет.
+ */
+export function fxSVG(list) {
+  let s = '';
+  for (const f of list) {
+    const x = cx(f.pos), y = cy(f.pos), d = ` style="animation-delay:-${f.age}ms"`;
+    if (f.kind === 'gone' && f.c >= 0) s += `<use class="fx-gone" href="#tl${f.c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${d}/>`;
+    if (f.kind === 'crack') {
+      const crack = `M${x + 12} ${y + 8}l9 13l-6 7l11 10l-4 9l10 6M${x + 21} ${y + 21}l12 -6l9 4M${x + 26} ${y + 38}l-10 8`;
+      s += `<g class="fx-crack"${d}><rect x="${x + 3}" y="${y + 3}" width="${C - 6}" height="${C - 6}" rx="5" fill="#120c06" opacity=".55"/>
+        <path d="${crack}" fill="none" stroke="#1b1309" stroke-width="3" stroke-linejoin="round"/><path d="${crack}" fill="none" stroke="#ffd9a0" stroke-width="1" stroke-linejoin="round"/></g>`;
+    }
+    if (f.kind === 'grow') s += `<rect class="fx-flash" x="${x + 2}" y="${y + 2}" width="${2 * C - 4}" height="${2 * C - 4}" rx="10" fill="none" stroke="#ffe08a"${d}/>`;
+    if (f.kind === 'cube') {
+      const S = TREASURE_SIZE;
+      s += `<image class="fx-cube" href="${TREASURE_IMG}" x="${x + (C - S) / 2}" y="${y + (C - S) / 2}" width="${S}" height="${S}"${d}/>`;
+    }
+  }
+  return s;
+}
+
+/** Клетка i на экране: { x, y, w, h } в пикселях окна (для перелета тайла из руки). */
+export function cellScreen(svg, i) {
+  const m = svg?.getScreenCTM?.();
+  if (!m) return null;
+  const a = new DOMPoint(cx(i) + 3, cy(i) + 3).matrixTransform(m), b = new DOMPoint(cx(i) + C - 3, cy(i) + C - 3).matrixTransform(m);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
 }
 
 // --- статичный слой: рамка, подписи, песок, река, сетка (меняется только с картой и видом поля)
 // Вид поля (просьба Дениса 03.11): relief — суша и вода из текстур ChatGPT (`/img/terrain`),
-// cells — прежний рисунок фильтрами. Река в обоих видах по одной маске из клеток движка,
-// поэтому совпадает с клетками точно.
+// cells — прежний рисунок фильтрами. Река в обоих видах извилистым руслом через речные клетки
+// (river.js, просьба Дениса 04.11), речные клетки подсвечены маской из клеток движка.
 const SAND_TILE = 640, WATER_TILE = 420;
 let staticKey = null, staticSvg = '';
 function staticLayer(river, look = 'relief', monStyle = null) {
@@ -178,7 +211,6 @@ function staticLayer(river, look = 'relief', monStyle = null) {
     ${ground}
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.4" flood-color="#000" flood-opacity=".55"/></filter>
     <filter id="shadow2" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
-    <linearGradient id="cubeTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f3eee2"/><stop offset="1" stop-color="#ddd3bd"/></linearGradient>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
     <marker id="trailArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ffe08a" stroke="#1b1309" stroke-width=".8"/></marker>
@@ -195,19 +227,21 @@ function staticLayer(river, look = 'relief', monStyle = null) {
   for (let x = 0; x < W; x++) s += `<text x="${G + x * C + C / 2}" y="${G - 7}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${String.fromCharCode(65 + x)}</text>`;
   for (let y = 0; y < H; y++) s += `<text x="${G / 2}" y="${G + y * C + C / 2 + 5}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${y + 1}</text>`;
   const R = `x="${G}" y="${G}" width="${W * C}" height="${H * C}"`;
+  // река извилистым руслом (river.js); для незнакомой карты прежняя заливка клеток
+  const stream = riverLayer(river, relief, C, G);
   s += relief
     ? `<g clip-path="url(#boardClip)">
     <rect ${R} fill="url(#sandP)"/>
-    <rect ${R} fill="#5a4220" fill-opacity=".35" mask="url(#bankM)"/>
-    <rect ${R} fill="url(#waterP)" mask="url(#riverM)"/>
+    ${stream ?? `<rect ${R} fill="#5a4220" fill-opacity=".35" mask="url(#bankM)"/>
+    <rect ${R} fill="url(#waterP)" mask="url(#riverM)"/>`}
   </g>`
     : `<g clip-path="url(#boardClip)">
     <rect ${R} fill="#d6bd88"/>
     <rect ${R} filter="url(#mottle)" opacity=".55"/>
     <rect ${R} filter="url(#grain)" opacity=".5"/>
-    <rect ${R} fill="#a88a55" mask="url(#bankM)"/>
+    ${stream ?? `<rect ${R} fill="#a88a55" mask="url(#bankM)"/>
     <rect ${R} fill="url(#water)" mask="url(#riverM)"/>
-    <g mask="url(#riverM)"><rect ${R} filter="url(#ripple)" opacity=".55"/></g>
+    <g mask="url(#riverM)"><rect ${R} filter="url(#ripple)" opacity=".55"/></g>`}
   </g>`;
   let grid = '';
   for (let x = 1; x < W; x++) grid += `M${G + x * C} ${G}V${G + H * C}`;
@@ -302,11 +336,16 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     const x = cx(g.wonderPos) + C / 2, y = cy(g.wonderPos) + C / 2;
     s += `<g filter="url(#shadow2)"><path d="M${x - 70} ${y - 22}h48v-48h44v48h48v44h-48v48h-44v-48h-48z" fill="url(#bvg)" stroke="#94691f" stroke-width="2" opacity=".92"/>${rosette(x, y, 16)}</g>`;
   }
+  const fx = opts.fx || [];
+  const delay = (f) => ` style="animation-delay:-${f.age}ms"`;
   for (const m of g.monuments) {
     if (m.pos < 0) continue;
-    s += mon
+    const art = mon
       ? `<use href="#mon${m.c1}${m.c2}" x="${cx(m.pos) + 3}" y="${cy(m.pos) + 3}" filter="url(#shadow2)"/>`
       : sealSVG(m.c1, m.c2, cx(m.pos), cy(m.pos), 'b');
+    // только что построенный монумент вырастает из клеток (анимации 04.11)
+    const grow = fx.find((f) => f.kind === 'grow' && f.pos === m.pos);
+    s += grow ? `<g class="fx-grow"${delay(grow)}>${art}</g>` : art;
     // на каждой половине монумента жетон героя, чей лидер этого цвета стоит в том же царстве
     // (он получает очко за монумент в конце своего хода); нет лидера — пусто
     const a = L.monuments && kl.lead.get(kl.lab[m.pos]);
@@ -360,6 +399,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   }
   if (up >= 0) s += uniteMark(cx(up), cy(up));
   s += trailSVG(opts.trail || [], L.moves);
+  s += fxSVG(fx);
 
   for (const i of opts.targets || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;

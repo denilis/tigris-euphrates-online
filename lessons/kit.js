@@ -71,7 +71,8 @@ function table(id, setup) {
   t.seats[1].hero = 'bull';
   start(t, USERS[0].userId, { rng: makeRng(id), now: 0 });
   const s = position(setup);
-  Object.assign(t.game, { order: [ME, RIVAL], state: stateToJSON(s), toMove: ME, clock: null });
+  // позиция урока своя, а не из зерна: записи партии нет, добор идет от rng урока, как до 04.11
+  Object.assign(t.game, { order: [ME, RIVAL], state: stateToJSON(s), toMove: ME, clock: null, rec: undefined });
   return t;
 }
 

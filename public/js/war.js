@@ -2,7 +2,7 @@
 // но не нажимается, партия ждет решения. Поддержка выбирается тайлами в руке, исход каждого
 // варианта считает сервер (view.game.preview). Восстание и выбор цвета войны — здесь же.
 import {
-  HEX, COLNAME, COLGEN, COLDAT, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
+  HEX, COLNAME, SCORE_ORDER, COLGEN, COLDAT, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
 } from './util.js';
 
 const PHASES = ['warSupport', 'revoltSupport', 'warChoose'];
@@ -135,7 +135,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   const treasuresLeft = g.board.treasure.reduce((a, b) => a + b, 0);
   const myFinal = finalScore(pl.score, pl.treasures);
   const minC = Math.min(...pl.score);
-  const chips = pl.score.map((v, c) => `<span class="${v === minC ? 'weak' : ''}" style="background:${HEX[c]}" title="${COLNAME[c]}">${v}</span>`).join('');
+  const chips = SCORE_ORDER.map((c) => `<span class="${pl.score[c] === minC ? 'weak' : ''}" style="background:${HEX[c]}" title="${COLNAME[c]}">${pl.score[c]}</span>`).join('');
 
   // точный исход каждого варианта (сервер прогнал движком)
   const rows = (g.preview?.options || []).map((o) => {

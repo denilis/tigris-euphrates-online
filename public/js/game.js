@@ -1,6 +1,7 @@
 // Экран партии: поле, рука, карточки игроков, панель «Сейчас», журнал. Клиент только
 // рисует вид от сервера: допустимые ходы приходят списком legal, ход уходит номером в нём.
-import { renderBoard, sealIcon, buildingIcon } from './board.js';
+import { renderBoard, sealIcon, buildingIcon, cellScreen, TREASURE_IMG } from './board.js';
+import { boardChanges, ageFx, takerOf, fly, boxOf } from './fx.js';
 import { api } from './api.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd } from './end.js';
@@ -12,10 +13,10 @@ import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
-import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio } from './signals.js';
+import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import {
-  HEX, RING, COLNAME, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, esc, plural, copy, cells,
+  HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, esc, plural, copy, cells,
   unitePos, toast, momentKey,
 } from './util.js';
 
@@ -131,17 +132,20 @@ export function renderGame(root, view, { act, go, lesson = null }) {
   current = view;
   ctl = { act, go, root, lesson };
   resetFor(view);
-  signal(view);
+  const entries = newEntries(ui.snap, view); // до signal: он запомнит новый снимок
+  signal(view, entries);
+  updateFx(view, entries);
   draw();
+  flyCubes();
 }
 
-/** Звук и вспышка рамки при новом виде стола (в уроке тихо: там ходы по шагам). */
-function signal(view) {
+/** Звук и вспышка рамки при новом виде стола (в уроке тихо: там ходы по шагам). entries — новое в журнале. */
+function signal(view, entries) {
   const snap = snapOf(view), was = ui.snap;
   ui.snap = snap;
   if (ctl.lesson) return;
   const s = soundsFor(was, snap);
-  play(s);
+  play({ ...s, events: eventSounds(entries, view.me) });
   if (!s.chime) return;
   const app = ctl.root.querySelector('#game');
   app.classList.add('myturn-start'); // три вспышки золотой рамки в начале своего хода
@@ -149,6 +153,32 @@ function signal(view) {
   ui.flashTurn = setTimeout(() => app.classList.remove('myturn-start'), 2600);
 }
 
+/**
+ * Анимации поля (04.11): что изменилось с прошлого вида этого стола. При первом взгляде на стол,
+ * другом столе и в уроке эффектов нет. Взятые сокровища ждут перелета к карточке взявшего.
+ */
+function updateFx(view, entries) {
+  const g = view.game, same = ui.fxCode === view.code && !ctl.lesson;
+  const fresh = same ? boardChanges(ui.fxPrev, g) : [];
+  ui.fxCode = view.code;
+  ui.fxPrev = { board: { tile: [...g.board.tile], treasure: [...g.board.treasure] }, monuments: g.monuments.map((m) => ({ id: m.id, pos: m.pos })) };
+  ui.fx = ageFx(same ? ui.fx : [], fresh, Date.now());
+  ui.cubes = fresh.filter((f) => f.kind === 'cube').map((f) => ({ pos: f.pos, seat: takerOf(entries, f.pos) }));
+}
+
+/** Кубик сокровища улетает со храма к значку сокровищ в карточке того, кто его взял. */
+function flyCubes() {
+  const list = ui.cubes || [];
+  ui.cubes = [];
+  for (const c of list) {
+    const target = c.seat == null ? null : ctl.root.querySelector(`.pc[data-seat="${c.seat}"] .cube`);
+    const from = cellScreen(ctl.root.querySelector('#board'), c.pos);
+    if (!from || !target) continue;
+    const k = 0.24; // кубик меньше клетки: летит его размер, а не вся клетка
+    const box = { x: from.x + from.w * (0.5 - k / 2), y: from.y + from.h * (0.5 - k / 2), w: from.w * k, h: from.h * k };
+    setTimeout(() => fly(TREASURE_IMG, box, boxOf(target), { ms: 750, round: 2 }), 320);
+  }
+}
 let current = null, ctl = null;
 
 function D() {
@@ -208,13 +238,19 @@ function onCell(i) {
     idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && m.tl === i);
     if (idx < 0) idx = legal.findIndex((m) => m.type === 'monument' && m.id === ui.monSel && squareCells(m.tl).includes(i));
   }
-  if (idx >= 0) move(idx);
-  else ctl.lesson?.miss(g.phase === 'action' ? ui.sel : undefined, i);
+  if (idx >= 0) {
+    // свой тайл или катастрофа летит из руки в клетку (анимации 04.11)
+    if (g.phase === 'action' && (ui.sel?.kind === 'tile' || ui.sel?.kind === 'cat')) {
+      fly(ui.sel.kind === 'tile' ? tileImg(ui.sel.color) : catImg, boxOf(ctl.root.querySelector('#gHand .ht.sel')), cellScreen(ctl.root.querySelector('#board'), i));
+    }
+    move(idx);
+  } else ctl.lesson?.miss(g.phase === 'action' ? ui.sel : undefined, i);
 }
 
 function boardOpts() {
   const { g, me, myP, legal, decides } = D();
-  const o = { flash: ui.flash, layers: layersOf(), unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells, monument: monOf(current) };
+  ui.fx = ageFx(ui.fx || [], [], Date.now());
+  const o = { flash: ui.flash, layers: layersOf(), unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells, monument: monOf(current), fx: ui.fx };
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
@@ -267,8 +303,9 @@ function draw() {
     o.englishSupport && 'Английская поддержка', o.buildings && 'Здания', o.wonder && 'Чудо',
     o.openScore ? 'Открытый счет' : 'Закрытый счет',
   ].filter(Boolean).map((b) => `<span class="badge">${b}</span>`).join('');
-  root.querySelector('#gBag').textContent = g.bagLeft != null ? `${g.bagLeft} (${g.bagPct}%)` : g.bagPct + '%';
-  root.querySelector('#gBagBox').title = g.bagStart ? `Тайлов в мешке ${g.bagLeft} из ${g.bagStart}, что остались после выкладки стартовых храмов. Из них сразу набраны руки по 6` : '';
+  // мешок только процентом (просьба Дениса 04.11): число тайлов не показываем
+  root.querySelector('#gBag').textContent = g.bagPct + '%';
+  root.querySelector('#gBagBox').title = 'Сколько тайлов осталось в мешке, в процентах от мешка после выкладки стартовых храмов';
   root.querySelector('#gTurn').textContent = g.turn;
   root.querySelectorAll('#gLayers [data-layer]').forEach((b) => b.setAttribute('aria-checked', String(ui.layers[b.dataset.layer])));
   root.querySelector('#gSound').setAttribute('aria-checked', String(soundOn()));
@@ -402,10 +439,10 @@ function drawPlayers({ view, g, me, seat }) {
     };
     const tr = pl.treasures ?? '?';
     const sc = pl.score
-      ? `<span class="sc" title="очки: красный, синий, зеленый, черный">${pl.score.map((v, c) => `<span style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}">${v}</span>`).join('')}</span>`
+      ? `<span class="sc" title="очки: ${SCORE_ORDER.map((c) => COLNAME[c]).join(', ')}">${SCORE_ORDER.map((c) => `<span style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}">${pl.score[c]}</span>`).join('')}</span>`
       : '<span class="sc hid" title="закрытый счет: очки соперников не видны">счет скрыт</span>';
     const bot = s.kind === 'bot' ? `<span class="tag" title="${esc(STYLES[s.bot?.style] || '')}, сила ${s.bot?.strength ?? ''}">бот</span>` : '';
-    return `<div class="pc${deciding ? ' deciding' : active ? ' active' : ''}">
+    return `<div class="pc${deciding ? ' deciding' : active ? ' active' : ''}" data-seat="${pl.seat}">
       <div class="av" style="background-image:${faceBg(s, pl.seat === me ? 0 : 3)}"></div>
       <div class="nm">${esc(s.name || 'Бот')}${pl.seat === me ? ' <small>(вы)</small>' : ''} <small>${HERONAME[s.hero] || ''}</small> ${bot} ${tag}</div>
       <span class="tm">${pl.handCount} в руке</span>

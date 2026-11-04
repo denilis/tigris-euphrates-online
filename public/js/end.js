@@ -1,7 +1,7 @@
 // Итог партии: места, очки по цветам и сокровища, «Еще партию» (реванш: тот же состав,
 // первым ходит последнее место) и возврат к столам. Партия, завершенная организатором
 // досрочно, итога не имеет: только сообщение и те же выходы.
-import { HEX, HERONAME, COLNAME, faceBg, esc } from './util.js';
+import { HEX, HERONAME, COLNAME, SCORE_ORDER, faceBg, esc } from './util.js';
 import { matchStats, turnsOf, STAT_ROWS } from './matchstats.js';
 import { fmtTotal } from './clock.js';
 
@@ -53,7 +53,7 @@ export function renderEnd(box, view, { act, go }) {
   const list = [...g.result.seats].sort((a, b) => a.place - b.place);
   const rows = list.map((r) => {
     const s = seat(r.seatId) || {};
-    const chips = r.score.map((v, c) => `<span style="background:${HEX[c]}" title="${COLNAME[c]}">${v}</span>`).join('');
+    const chips = SCORE_ORDER.map((c) => `<span style="background:${HEX[c]}" title="${COLNAME[c]}">${r.score[c]}</span>`).join('');
     return `<tr class="${r.seatId === view.me ? 'me' : ''}">
       <td class="place">${r.place}</td>
       <td><span class="who"><i style="background-image:${faceBg(s)}"></i>${esc(s.name || 'Бот')}<small>${HERONAME[s.hero] || ''}</small></span></td>
