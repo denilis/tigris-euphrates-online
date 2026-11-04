@@ -30,7 +30,7 @@ input,select{font:inherit;color:var(--text)}
 
 /* ---------- окно активации и страницы ---------- */
 #backdrop{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;filter:brightness(1.12) saturate(1.12)}
-body.stillbg::before{content:"";position:fixed;inset:0;z-index:0;background:url(/img/lobby-bg-winter.jpg) center/cover no-repeat;filter:brightness(1.12) saturate(1.12)}
+body.stillbg::before{content:"";position:fixed;inset:0;z-index:0;background:var(--backimg,url(/img/lobby-bg.jpg)) center/cover no-repeat;filter:brightness(1.12) saturate(1.12)}
 #app{position:relative;z-index:1}
 .bgbtn{position:fixed;left:16px;bottom:16px;z-index:5;padding:8px 14px;border:1px solid var(--gold2);border-radius:999px;background:rgba(20,17,14,.82);color:var(--gold);font:inherit;font-size:13px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .bgbtn:hover{background:rgba(20,17,14,.96)}

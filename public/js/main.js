@@ -13,6 +13,7 @@ import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
+import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg } from './util.js';
 
 const app = document.getElementById('app');
@@ -21,7 +22,11 @@ let watcher = null;
 
 const bgToggle = document.getElementById('bgToggle');
 const STILL_KEY = 'tigris.backdrop.still'; // выбор на этом устройстве: неподвижная картинка вместо ролика
-const BACK_SPEED = 0.8, BACK_VIDEO = '/media/zastavka.mp4';
+const BACK_SPEED = 0.8;
+// летняя и зимняя сцены по очереди (04.11): картинка до запуска ролика и фон без ролика
+const SCENE = SCENES[pickScene()];
+backdrop.poster = SCENE.img;
+document.documentElement.style.setProperty('--backimg', `url(${SCENE.img})`);
 
 /** Сохраненный выбор; без него неподвижная картинка у тех, кто просил систему меньше анимации. */
 function loadStill() {
@@ -36,15 +41,19 @@ let still = loadStill(), backdropOn = true;
 backdrop.defaultPlaybackRate = BACK_SPEED; // при загрузке playbackRate сбрасывается к этому значению
 backdrop.playbackRate = BACK_SPEED;
 
-/** Ролик-заставка на всех экранах, кроме партии. Не запустился, остается картинка из poster. */
+/**
+ * Ролик-заставка на всех экранах, кроме партии. Не запустился, остается картинка из poster.
+ * У зимней сцены ролика нет: неподвижная картинка и без кнопки видео.
+ */
 function setBackdrop(on) {
   backdropOn = on;
-  backdrop.hidden = !on || still;
-  bgToggle.hidden = !on;
+  const moving = !still && Boolean(SCENE.video);
+  backdrop.hidden = !on || !moving;
+  bgToggle.hidden = !on || !SCENE.video;
   bgToggle.textContent = still ? 'Включить видео' : 'Остановить видео';
-  document.body.classList.toggle('stillbg', on && still);
-  if (!on || still) return backdrop.pause();
-  if (!backdrop.src) backdrop.src = BACK_VIDEO; // ролик качаем, только когда он нужен
+  document.body.classList.toggle('stillbg', on && !moving);
+  if (!on || !moving) return backdrop.pause();
+  if (!backdrop.src) backdrop.src = SCENE.video; // ролик качаем, только когда он нужен
   backdrop.play().catch(() => {});
 }
 
