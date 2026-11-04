@@ -60,10 +60,11 @@ function topbar(active) {
   return `<header class="bar">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <nav>
+      <a href="#/new" class="newgame${active === 'new' ? ' on' : ''}">Начать игру</a>
+      <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
+      <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
       <a href="#/rules" class="${active === 'rules' ? 'on' : ''}">Правила</a>
       <a href="#/learn" class="${active === 'learn' ? 'on' : ''}">Обучение</a>
-      <a href="#/stats" class="${active === 'stats' ? 'on' : ''}">Статистика</a>
-      <a href="#/" class="${active === 'home' ? 'on' : ''}">Мои столы</a>
       ${u ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
       <a class="me" href="#/me" title="Мой профиль">${u?.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i>` : ''}${esc(u?.name || '')}</a>
       <button class="linkbtn" id="logout">Выйти</button>
@@ -131,41 +132,75 @@ const seatName = (s) => s.name || (s.kind === 'bot' ? 'Бот' : 'свободн
 
 const STATUS = { lobby: 'собирается', playing: 'идет партия', over: 'партия окончена', closed: 'партия завершена досрочно' };
 
-async function renderHome() {
-  app.innerHTML = `<div class="page">${topbar('home')}<main class="pcard">
-    ${welcomeHidden() ? '' : welcomeHTML(session.get()?.user)}
-    <h1>Мои столы</h1>
-    <div class="row">
-      <button class="btn primary" id="newTable">Новый стол</button>
-      <form id="joinForm" class="join"><input id="joinCode" placeholder="Код стола" maxlength="6" autocapitalize="characters" spellcheck="false" aria-label="Код стола"><button class="btn" type="submit">Открыть</button></form>
+/**
+ * «Начать игру» (просьба Дениса 04.11: отдельной кнопкой, а «Мои столы» только список): стол с людьми,
+ * которые сейчас на сайте, стол с ботами или стол по коду из приглашения.
+ */
+function renderNew() {
+  app.innerHTML = `<div class="page">${topbar('new')}<main class="pcard newgame">
+    <h1>Начать игру</h1>
+    <section class="ngbox"><h2>С людьми</h2>
+      <p class="muted">Отметьте, кого позвать: стол создастся, они получат приглашение. Партию начнете вы, когда все будут за столом.</p>
+      <section class="online" id="onlineBox"></section>
+      <p class="ngempty"><button class="btn" id="newEmpty">Пустой стол</button> <span class="muted small">позвать позже ссылкой или из лобби</span></p>
+    </section>
+    <div class="ngrow">
+      <section class="ngbox"><h2>С ботами</h2>
+        <p class="muted">Вы и три бота. Число мест, силу ботов и правила можно поменять в лобби.</p>
+        <button class="btn primary" id="newBots">Стол с ботами</button>
+      </section>
+      <section class="ngbox"><h2>По коду</h2>
+        <p class="muted">Код стола из приглашения или ссылки.</p>
+        <form id="joinForm" class="join"><input id="joinCode" placeholder="Код стола" maxlength="6" autocapitalize="characters" spellcheck="false" aria-label="Код стола"><button class="btn" type="submit">Открыть</button></form>
+      </section>
     </div>
-    <section class="online" id="onlineBox"></section>
-    <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
-    ${welcomeHidden() ? '<p class="small"><button class="linkbtn" id="welcomeShow">О сайте</button></p>' : ''}
   </main></div>`;
   bindTopbar();
-  app.querySelector('#welcomeHide')?.addEventListener('click', () => { setWelcomeHidden(true); renderHome(); });
-  app.querySelector('#welcomeShow')?.addEventListener('click', () => { setWelcomeHidden(false); renderHome(); });
+  const open = (code) => {
+    scrollTo(0, 0); // кнопки внизу страницы: без этого лобби открылось бы прокрученным
+    go(`#/t/${code}`);
+  };
   mountOnline(app.querySelector('#onlineBox'), {
     count: true,
     button: 'Создать стол и пригласить выбранных',
     onSend: async (ids) => {
       const r = await api('POST', 'tables');
       await api('POST', 'invite', { code: r.code, to: ids });
-      go(`#/t/${r.code}`);
+      open(r.code);
     },
   });
-  app.querySelector('#newTable').addEventListener('click', async () => {
+  const make = async (b, fill) => {
+    b.disabled = true; // двойное нажатие завело бы два стола
     try {
       const r = await api('POST', 'tables');
-      go(`#/t/${r.code}`);
-    } catch (e) { toast(e.message); }
-  });
+      if (fill) await fill(r.code);
+      open(r.code);
+    } catch (e) {
+      toast(e.message);
+      b.disabled = false;
+    }
+  };
+  app.querySelector('#newEmpty').addEventListener('click', (e) => make(e.currentTarget));
+  app.querySelector('#newBots').addEventListener('click', (e) => make(e.currentTarget, async (code) => {
+    for (const seat of [1, 2]) await api('POST', `tables/${code}`, { action: 'seatKind', seat, kind: 'bot' });
+  }));
   app.querySelector('#joinForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const c = app.querySelector('#joinCode').value.trim().toUpperCase();
-    if (c) go(`#/t/${c}`);
+    if (c) open(c);
   });
+}
+
+async function renderHome() {
+  app.innerHTML = `<div class="page">${topbar('home')}<main class="pcard">
+    ${welcomeHidden() ? '' : welcomeHTML(session.get()?.user)}
+    <div class="homehead"><h1>Мои столы</h1><a class="btn primary" href="#/new">Начать игру</a></div>
+    <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
+    ${welcomeHidden() ? '<p class="small"><button class="linkbtn" id="welcomeShow">О сайте</button></p>' : ''}
+  </main></div>`;
+  bindTopbar();
+  app.querySelector('#welcomeHide')?.addEventListener('click', () => { setWelcomeHidden(true); renderHome(); });
+  app.querySelector('#welcomeShow')?.addEventListener('click', () => { setWelcomeHidden(false); renderHome(); });
   const load = async () => {
     try {
       const list = await api('GET', 'tables');
@@ -181,7 +216,7 @@ async function renderHome() {
           ${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}
           ${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}
         </a>`;
-      }).join('') : '<p class="muted">Пока нет столов. Создайте новый или откройте стол по коду из приглашения.</p>';
+      }).join('') : '<p class="muted">Пока нет столов. Новую партию собирают на странице «Начать игру».</p>';
       el.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', (e) => {
         e.preventDefault(); // кнопка внутри ссылки на стол
         go(`#/t/${b.dataset.replay}/replay`);
@@ -350,6 +385,7 @@ function route() {
   if (rp) return renderReplay(app, rp[1].toUpperCase(), topbar(''), bindTopbar, +(rp[2] || 0));
   const m = h.match(/^t\/([A-Za-z0-9]{6})$/);
   if (m) return openTable(m[1].toUpperCase());
+  if (h === 'new') return renderNew();
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
   if (h === 'me') return renderProfile(app, topbar(''), bindTopbar);

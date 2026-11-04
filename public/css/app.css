@@ -761,3 +761,14 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .monopt{padding:6px 8px;font-size:12px}
 .monopt .monimg,.monopt svg{width:84px;height:84px}
 @media (prefers-reduced-motion:reduce){.target.blink,.cube-blink,.stock .sit.blink{animation:none}.stock .sit.blink{box-shadow:0 0 0 3px #ffe08a}.cube-blink{opacity:1}}
+
+/* «Начать игру» (04.11) */
+.bar nav a.newgame{color:var(--gold);font-weight:600}
+.homehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.homehead h1{margin:0}
+.newgame .ngbox{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
+.newgame .ngbox h2{margin:0 0 6px}
+.newgame .ngbox p{margin:0 0 10px}
+.newgame .ngempty{margin:10px 0 0}
+.newgame .ngrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.newgame .ngrow{grid-template-columns:1fr}}
