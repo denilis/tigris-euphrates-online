@@ -897,5 +897,6 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .litem .ltext{flex:1;min-width:0}
 /* на узком экране карточка в столбик: обложка слева от текста, кнопки под ними */
 @media (max-width:900px){.litem:has(.lcover){display:grid;grid-template-columns:64px 1fr;align-items:center}.litem:has(.lcover) .lacts{grid-column:1 / -1}}
-/* лица в лобби крупнее: у ботов теперь портреты (04.11) */
-.lcard .seat .who .face{width:34px;height:34px}
+/* лица в лобби крупнее: у ботов портреты, 34 точки Денис счел слишком мелкими (04.11) */
+.lcard .seat .who .face{width:52px;height:52px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
+.endtbl .who i{width:36px;height:36px}
