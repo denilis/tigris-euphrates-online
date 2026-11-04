@@ -110,3 +110,27 @@ test('выбор места для здания и сокровища: цели 
   assert.equal((t.match(/class="cube-blink"/g) || []).length, 2);
   assert.doesNotMatch(draw({ targets: [5] }), /blink/, 'обычные цели не мигают');
 });
+
+test('ход соперника: сам тайл на поле проявляется, пока отметка свежая (04.11)', async () => {
+  const { renderBoard } = await import('../public/js/board.js');
+  const { readFileSync } = await import('node:fs');
+  const find = (o) => {
+    if (!o || typeof o !== 'object') return null;
+    if (Array.isArray(o.river) && o.board && o.players) return o;
+    for (const v of Object.values(o)) { const r = find(v); if (r) return r; }
+    return null;
+  };
+  const g = find(JSON.parse(readFileSync(new URL('../public/lessons/1.json', import.meta.url), 'utf8')));
+  const pos = g.board.tile.findIndex((t) => t >= 0 && t <= 3);
+  const draw = (trail) => {
+    const dyn = { innerHTML: '' };
+    renderBoard({ dataset: {}, innerHTML: '', setAttribute() {}, querySelector: () => dyn }, g, () => 'pot', { trail }, 'relief');
+    return dyn.innerHTML;
+  };
+  const mark = { ev: 'tile', pos, size: 1, action: 1, c: g.board.tile[pos] };
+  const fresh = draw([{ ...mark, age: 300 }]);
+  assert.equal((fresh.match(/class="arrive"/g) || []).length, 1);
+  assert.match(fresh, new RegExp(`href="#tl${mark.c}"[^>]*class="arrive" style="animation-delay:-300ms"`));
+  assert.doesNotMatch(draw([{ ...mark, age: 5000 }]), /arrive/, 'старый ход не анимируется');
+  assert.doesNotMatch(draw([]), /arrive/);
+});

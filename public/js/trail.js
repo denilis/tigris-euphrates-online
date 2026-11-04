@@ -2,7 +2,9 @@
 import { squareCells } from './pick.js';
 
 export const TRAIL_FRESH_MS = 3000; // столько рамка пульсирует
-export const TRAIL_LAND_MS = 450; // столько тайл или лидер садится на клетку
+// столько тайл или лидер соперника плавно появляется на клетке (04.11: раньше 450 мс садилась
+// копия поверх уже нарисованного тайла, и казалось, что тайл возникает сразу)
+export const TRAIL_LAND_MS = 900;
 
 // в каком поле записи журнала лежит клетка действия
 const CELL = { tile: 'pos', leader: 'pos', catastrophe: 'pos', building: 'pos', wonder: 'center', monument: 'tl' };
@@ -29,6 +31,11 @@ export function trailMarks(log, me) {
     byCell.set(m.pos, m);
   }
   return [...byCell.values()];
+}
+
+/** Клетки, где тайл или лидер соперника еще появляется: Map(клетка, возраст отметки в мс). */
+export function landing(marks) {
+  return new Map(marks.filter((m) => (m.ev === 'tile' || m.ev === 'leader') && m.age < TRAIL_LAND_MS).map((m) => [m.pos, m.age]));
 }
 
 /** Отметки на занятых клетках: лидер проиграл конфликт или тайл снят войной, и рамке не на что указывать. */

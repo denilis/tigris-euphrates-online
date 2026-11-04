@@ -2,7 +2,7 @@
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
 import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
-import { TRAIL_FRESH_MS, TRAIL_LAND_MS } from './trail.js';
+import { TRAIL_FRESH_MS, landing } from './trail.js';
 import { ALL_ON } from './layers.js';
 import { riverLayer } from './river.js';
 
@@ -111,7 +111,8 @@ export function arrowPath(from, to) {
 
 /**
  * След хода соперника (просьба Дениса 30.10): рамка с номером действия держится до следующего
- * хода, первые секунды пульсирует, тайл или лидер садится на клетку, у перестановки стрелка.
+ * хода, первые секунды пульсирует, у перестановки стрелка. Сам тайл или лидер плавно появляется
+ * в renderBoard (класс arrive, 04.11).
  * Перерисовка не сбивает анимацию: отрицательная задержка равна возрасту отметки.
  * numbers — слой «Ходы»: без него рамка и стрелка остаются, номера нет.
  */
@@ -120,8 +121,6 @@ export function trailSVG(marks, numbers = true) {
   for (const m of marks) {
     const x = cx(m.pos), y = cy(m.pos), side = m.size * C;
     const delay = ` style="animation-delay:-${m.age}ms"`;
-    if (m.age < TRAIL_LAND_MS && m.ev === 'tile') s += `<use class="land" href="#tl${m.c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${delay}/>`;
-    if (m.age < TRAIL_LAND_MS && m.ev === 'leader') s += `<use class="land" href="#tk_${m.hero || 'pot'}_${m.c}" x="${x + 8}" y="${y + 8}"${delay}/>`;
     if (m.from != null) {
       const d = arrowPath(m.from, m.pos);
       s += `<path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${cx(m.from) + C / 2}" cy="${cy(m.from) + C / 2}" r="6"/>`;
@@ -299,13 +298,17 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     }
   }
 
+  // тайл или лидер, которого соперник только что выложил, проявляется и опускается на клетку
+  // (просьба Дениса 04.11); перерисовка продолжает анимацию: задержка равна возрасту отметки
+  const arriving = landing(opts.trail || []);
+  const arrive = (i) => (arriving.has(i) ? ` class="arrive" style="animation-delay:-${arriving.get(i)}ms"` : '');
   let tiles = '';
   for (let i = 0; i < W * H; i++) {
     const t = b.tile[i];
     if (t < 0) continue;
     const x = cx(i) + 3, y = cy(i) + 3;
-    if (i === up) tiles += `<use href="#tlun" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
-    else if (t <= 3) tiles += `<use href="#tl${t}" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
+    if (i === up) tiles += `<use href="#tlun" x="${x}" y="${y}" clip-path="url(#rr)"${arrive(i)}/>`;
+    else if (t <= 3) tiles += `<use href="#tl${t}" x="${x}" y="${y}" clip-path="url(#rr)"${arrive(i)}/>`;
     else if (t === CATASTROPHE) tiles += `<use href="#tlcat" x="${x}" y="${y}" clip-path="url(#rr)"/>`;
     else if (t === FACEDOWN) tiles += `<rect x="${x}" y="${y}" width="${C - 6}" height="${C - 6}" rx="5" fill="#857a69" stroke="#5f564a"/>`;
     else tiles += `<rect x="${x}" y="${y}" width="${C - 6}" height="${C - 6}" rx="5" fill="#c9a24d" stroke="#94691f"/>`; // клетка чуда
@@ -380,8 +383,8 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     const v = b.leader[i];
     if (v < 0) continue;
     const p = v >> 2, c = v & 3, x = cx(i) + C / 2, y = cy(i) + C / 2;
-    s += `<g filter="url(#shadow2)"><circle cx="${x}" cy="${y}" r="24.5" fill="${HEX[c]}"/><use href="#tk_${heroOf(p) || 'pot'}_${c}" x="${x - 22}" y="${y - 22}"/></g>
-      <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${HEX[c]}" stroke-width="3"/>`;
+    s += `<g${arrive(i)}><g filter="url(#shadow2)"><circle cx="${x}" cy="${y}" r="24.5" fill="${HEX[c]}"/><use href="#tk_${heroOf(p) || 'pot'}_${c}" x="${x - 22}" y="${y - 22}"/></g>
+      <circle cx="${x}" cy="${y}" r="23.5" fill="none" stroke="${HEX[c]}" stroke-width="3"/></g>`;
     if (!L.support || (cf && (i === cf.k.attPos || i === cf.k.defPos))) continue;
     s += `<g class="sup" transform="translate(${x - 19},${y - 19})"><circle r="10.5" fill="#1b1713" stroke="${RING[c]}" stroke-width="2"/><text y="4.6" text-anchor="middle" font-size="13" font-weight="700" fill="#fff3cf">${sup[i]}</text></g>`;
   }

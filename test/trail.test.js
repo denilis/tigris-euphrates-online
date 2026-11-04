@@ -1,7 +1,7 @@
 // След хода: куда сходил соперник. Денис: тайлы появляются, и не всегда понятно, в какое место он встал.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { trailMarks, ageMarks, liveMarks, TRAIL_FRESH_MS } from '../public/js/trail.js';
+import { trailMarks, ageMarks, liveMarks, landing, TRAIL_FRESH_MS, TRAIL_LAND_MS } from '../public/js/trail.js';
 import { pointsText } from '../public/js/util.js';
 import { createTable, sit, setHero, setSeatCount, start, submit, undo } from '../game/table.js';
 import { viewFor } from '../game/view.js';
@@ -120,19 +120,27 @@ test('возраст отметки: новая свежая, при откры�
   assert.equal(seen.size, 0);
 });
 
-test('рисунок следа: свежая отметка садится и пульсирует, старая остается тихой рамкой с номером', () => {
+test('рисунок следа: свежая отметка пульсирует, старая остается тихой рамкой с номером', () => {
   const mark = { ev: 'tile', pos: 0, size: 1, action: 2, c: 0 };
   const fresh = trailSVG([{ ...mark, age: 100 }]);
-  assert.match(fresh, /class="land"/);
   assert.match(fresh, /class="trail fresh"/);
   assert.match(fresh, /animation-delay:-100ms/, 'перерисовка продолжает анимацию, а не начинает заново');
   assert.match(fresh, /<text[^>]*>2<\/text>/);
-  const mid = trailSVG([{ ...mark, age: 1000 }]);
-  assert.doesNotMatch(mid, /class="land"/);
-  assert.match(mid, /class="trail fresh"/);
+  assert.doesNotMatch(fresh, /class="land"/, 'копии тайла поверх больше нет: появляется сам тайл');
   const old = trailSVG([{ ...mark, age: TRAIL_FRESH_MS + 1 }]);
-  assert.doesNotMatch(old, /fresh|class="land"/);
+  assert.doesNotMatch(old, /fresh/);
   assert.match(old, /class="trail"/);
+});
+
+test('появление хода соперника (04.11): тайл и лидер, пока отметке меньше TRAIL_LAND_MS', () => {
+  const m = landing([
+    { ev: 'tile', pos: 3, age: 100 },
+    { ev: 'leader', pos: 9, age: TRAIL_LAND_MS - 1 },
+    { ev: 'leader', pos: 10, age: TRAIL_LAND_MS },
+    { ev: 'catastrophe', pos: 7, age: 0 },
+  ]);
+  assert.deepEqual([...m], [[3, 100], [9, TRAIL_LAND_MS - 1]]);
+  assert.ok(TRAIL_LAND_MS >= 800, 'появление плавное, а не мгновенное');
 });
 
 test('рисунок следа: стрелка только у перестановки лидера', () => {
