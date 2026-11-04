@@ -60,14 +60,15 @@ function fightsHTML(p) {
 
 function colorsCell(d) {
   if (!d?.c) return '';
-  return SCORE_ORDER.map((c) => `<span class="pc"><i style="background:${HEX[c]}" title="${COLNAME[c]}"></i>${d.c[c]}</span>`).join('');
+  // класс pcl, не pc: pc занят карточкой игрока в партии (отступы и сетка раздували колонку)
+  return SCORE_ORDER.map((c) => `<span class="pcl"><i style="background:${HEX[c]}" title="${COLNAME[c]}"></i>${d.c[c]}</span>`).join('');
 }
 
 function rowsHTML(games) {
   return [...games].reverse().map((g) => `<tr>
-    <td>${shortDate(g.date)}</td><td>${esc(g.group)}</td>
-    <td>${g.seats.map((s) => `${esc(s.name || 'Бот')} ${s.place}`).join(', ')}</td>
-    <td>${g.win ? `<b>${g.place}</b>` : g.place}</td><td>${g.score}</td><td>${colorsCell(g.d)}</td><td>${tableLink(g)}</td>
+    <td>${shortDate(g.date)}</td><td class="pgrp">${esc(g.group)}</td>
+    <td class="pseats">${g.seats.map((s) => `${esc(s.name || 'Бот')} ${s.place}`).join(', ')}</td>
+    <td>${g.win ? `<b>${g.place}</b>` : g.place}</td><td>${g.score}</td><td class="pcols">${colorsCell(g.d)}</td><td>${tableLink(g)}</td>
   </tr>`).join('');
 }
 
