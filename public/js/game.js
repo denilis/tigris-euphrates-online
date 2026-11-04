@@ -16,7 +16,7 @@ import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
 import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import {
-  HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, catImg, tokenImg, faceBg, esc, plural, copy, cells,
+  HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
   unitePos, toast, momentKey,
 } from './util.js';
 
@@ -39,7 +39,7 @@ const layersOf = () => (ctl.lesson ? ALL_ON : ui.layers);
 
 // вид монумента из настроек стола (выбор Дениса 03.11); у столов до 03.11 настройки нет, там «Печать»
 const monOf = (view) => view.options.monument || 'enamel';
-const bldOf = (view) => view.options.building || 'tile'; // вид зданий (04.11)
+const bldOf = (view) => view.options.building || 'chip'; // вид зданий (04.11)
 
 // вид поля: как выбрал хозяин стола, но игрок может сменить его для себя, браузер помнит по столу
 const LOOKS = ['relief', 'cells'];
@@ -93,6 +93,7 @@ const SKELETON = `<div class="app" id="game">
  * lesson: { panel, cells, pick, hint, miss, selected } включает режим урока (lesson.js).
  */
 export function renderGame(root, view, { act, go, lesson = null }) {
+  setTileStyle(view.options?.tiles || 'plate'); // вид тайлов стола (04.11): до опции столы получают плитки
   if (!root.querySelector('#game')) {
     root.innerHTML = SKELETON;
     initPanels(root);

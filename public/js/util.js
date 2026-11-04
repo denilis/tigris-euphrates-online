@@ -21,7 +21,14 @@ export const HERONAME = { lion: 'лев', bull: 'бык', bow: 'лук', pot: '�
 export const STYLES = { universal: 'Универсальный', base: 'Базовый', top: 'Топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
 export const FACEDOWN = 4, WONDER = 5, CATASTROPHE = 6;
 
-export const tileImg = (c) => `/img/tiles/${TILEFILE[c]}.jpg`;
+// вид тайлов стола (Денис 04.11): plate — плитки в кирпичной рамке (лист Дениса 04.11, сначала был
+// поставлен зданиями), classic — прежние картинки. Ставят экран партии и повтор по опции стола;
+// правила и уроки просят classic явно. Катастрофа и объединение одни на оба вида.
+export const TILE_STYLES = ['plate', 'classic'];
+let tileStyle = 'classic';
+export const setTileStyle = (s) => { tileStyle = s === 'plate' ? 'plate' : 'classic'; };
+export const getTileStyle = () => tileStyle;
+export const tileImg = (c, style = tileStyle) => (style === 'plate' ? `/img/tiles/plate/${TILEFILE[c]}.webp` : `/img/tiles/${TILEFILE[c]}.jpg`);
 export const catImg = '/img/tiles/catastrophe.jpg';
 export const uniteImg = '/img/tiles/unification.jpg';
 export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.png`;

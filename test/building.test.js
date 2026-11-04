@@ -1,38 +1,60 @@
-// Здания: плитка на клетку в стиле монументов. С 04.11 картинки Дениса вместо нарисованных силуэтов.
+// Здания и вид тайлов (Денис 04.11). Лист плиток в кирпичной рамке, который сначала стоял зданиями,
+// стал видом тайлов; здания круглыми фишками поверх тайла, пока фишек нет, рисуются значками.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { buildingSVG, buildingImg } from '../public/js/board.js';
+import { buildingSVG, buildingIcon, CHIPS_READY, chipImg, BUILDING_STYLES } from '../public/js/board.js';
+import { tileImg, setTileStyle, getTileStyle, TILE_STYLES } from '../public/js/util.js';
 
-test('у каждого цвета своя картинка, и файл есть', () => {
-  const hrefs = [0, 1, 2, 3].map((c) => buildingSVG(c, 0, 0, 'b').match(/href="([^"]+)"/)[1]);
-  assert.equal(new Set(hrefs).size, 4);
-  for (const [c, h] of hrefs.entries()) {
-    assert.equal(h, buildingImg(c));
-    assert.ok(existsSync(new URL(`../public${h}`, import.meta.url)), h);
-  }
-});
+const exists = (href) => existsSync(new URL(`../public${href}`, import.meta.url));
 
-test('рисуется в своей клетке и не выходит за нее', () => {
-  const s = buildingSVG(0, 120, 60, 'b');
-  assert.match(s, /<g transform="translate\(120,60\)"/);
-  const [, x, y, w, h] = s.match(/<image href="[^"]+" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/);
-  assert.ok(+x >= 0 && +y >= 0 && +x + +w <= 60 && +y + +h <= 60, `${x},${y},${w},${h}`);
-});
-
-// вид зданий выбирает хозяин стола (Денис 04.11): новые плитки или прежние значки
-test('прежние значки: у каждого цвета свой силуэт в золотой раме с розетками', async () => {
+test('прежние значки: у каждого цвета свой силуэт в золотой раме с розетками', () => {
   const paths = [0, 1, 2, 3].map((c) => buildingSVG(c, 0, 0, 'b', 'seal').match(/d="(M[^"]+)"/)[1]);
   assert.equal(new Set(paths).size, 4);
   const s = buildingSVG(2, 0, 0, 'b', 'seal');
   assert.match(s, /url\(#bvg\)/);
   assert.match(s, /url\(#bv2\)/);
   assert.doesNotMatch(s, /<image/);
-  assert.match(buildingSVG(2, 0, 0, 'b'), /<image href="\/img\/buildings\/2\.webp"/, 'по умолчанию новые плитки');
+});
+
+test('фишки: пока картинок нет, здание рисуется значком, а не пустым местом', () => {
+  assert.deepEqual(BUILDING_STYLES, ['chip', 'seal']);
+  if (!CHIPS_READY) {
+    assert.equal(buildingSVG(1, 0, 0, 'b', 'chip'), buildingSVG(1, 0, 0, 'b', 'seal'));
+    assert.equal(buildingSVG(1, 0, 0, 'b'), buildingSVG(1, 0, 0, 'b', 'seal'), 'по умолчанию фишки');
+    assert.equal(buildingSVG(1, 0, 0, 'b', 'tile'), buildingSVG(1, 0, 0, 'b', 'seal'), 'прежнее значение стола tile тоже значком');
+  } else {
+    for (const c of [0, 1, 2, 3]) assert.ok(exists(chipImg(c)), chipImg(c));
+    const [, x, y, w, h] = buildingSVG(0, 0, 0, 'b', 'chip').match(/<image href="[^"]+" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/);
+    assert.ok(+x > 0 && +y > 0 && +x + +w < 60 && +y + +h < 60, 'фишка меньше клетки: тайл виден вокруг');
+  }
+  assert.match(buildingIcon(0, 26, 'seal'), /^<svg viewBox="0 0 60 60" width="26"/);
+});
+
+test('вид тайлов: плитки и прежние картинки, файлы есть, по умолчанию прежние до выбора стола', () => {
+  assert.deepEqual(TILE_STYLES, ['plate', 'classic']);
+  for (const c of [0, 1, 2, 3]) {
+    assert.ok(exists(tileImg(c, 'plate')), tileImg(c, 'plate'));
+    assert.ok(exists(tileImg(c, 'classic')), tileImg(c, 'classic'));
+  }
+  assert.equal(new Set([0, 1, 2, 3].map((c) => tileImg(c, 'plate'))).size, 4);
+  const was = getTileStyle();
+  setTileStyle('plate');
+  assert.equal(tileImg(0), '/img/tiles/plate/temple.webp');
+  setTileStyle('что-то');
+  assert.equal(getTileStyle(), 'classic', 'незнакомый вид дает прежние картинки');
+  assert.equal(tileImg(0), '/img/tiles/temple.jpg');
+  setTileStyle(was);
+});
+
+test('опции стола: тайлы плитками и здания фишками по умолчанию, хозяин меняет', async () => {
   const { DEFAULT_OPTIONS, createTable, setOptions } = await import('../game/table.js');
-  assert.equal(DEFAULT_OPTIONS.building, 'tile');
+  assert.equal(DEFAULT_OPTIONS.tiles, 'plate');
+  assert.equal(DEFAULT_OPTIONS.building, 'chip');
   const t = createTable({ code: 'BLDSTY', host: { userId: 'h', name: 'Хозяин' }, now: 0 });
-  setOptions(t, 'h', { building: 'seal' }, 1);
+  setOptions(t, 'h', { building: 'seal', tiles: 'classic' }, 1);
   assert.equal(t.options.building, 'seal');
-  assert.throws(() => setOptions(t, 'h', { building: 'gold' }, 2));
+  assert.equal(t.options.tiles, 'classic');
+  assert.throws(() => setOptions(t, 'h', { building: 'tile' }, 2), 'плитки больше не вид зданий');
+  assert.throws(() => setOptions(t, 'h', { tiles: 'gold' }, 3));
 });

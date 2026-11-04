@@ -30,7 +30,7 @@ const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['в
 // (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
 export const DEFAULT_OPTIONS = {
   board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief', monument: 'enamel', building: 'tile',
+  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief', monument: 'enamel', building: 'chip', tiles: 'plate',
 };
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
@@ -51,8 +51,10 @@ const OPTION_CHECKS = {
   look: (v) => ['relief', 'cells'].includes(v),
   // вид монумента (просьба Дениса 03.11): 1 печать, 2 кирпичная рамка, 3 зиккурат сверху; на правила не влияет
   monument: (v) => ['enamel', 'frame', 'ziggurat'].includes(v),
-  // вид зданий (просьба Дениса 04.11): новые плитки-картинки или прежние значки; на правила не влияет
-  building: (v) => ['tile', 'seal'].includes(v),
+  // вид зданий (просьба Дениса 04.11): круглые фишки поверх тайла или прежние значки; на правила не влияет
+  building: (v) => ['chip', 'seal'].includes(v),
+  // вид тайлов (Денис 04.11): плитки в кирпичной рамке или прежние картинки; на правила не влияет
+  tiles: (v) => ['plate', 'classic'].includes(v),
 };
 const intIn = (lo, hi) => (v) => Number.isInteger(v) && v >= lo && v <= hi;
 const BOT_CHECKS = {

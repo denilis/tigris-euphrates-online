@@ -6,7 +6,7 @@ import { api } from './api.js';
 import { renderBoard } from './board.js';
 import { trailMarks, TRAIL_FRESH_MS } from './trail.js';
 import { logLines, lineHTML } from './logview.js';
-import { HEX, COLNAME, SCORE_ORDER, esc, finalScore } from './util.js';
+import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle } from './util.js';
 import { framesBoards, timelineMarks } from './replay-core.js';
 
 const SPEED = { 1: 1400, 2: 700 };
@@ -103,6 +103,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     };
     // след действия: рамки и номер на клетках, как у хода соперника, без вспышки
     const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, hero: seat(m.actor)?.hero })) : [];
+    setTileStyle(data.options.tiles || 'plate');
     renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building }, data.options.look || 'relief');
     drawHint(svg, $('rHint'), hintsAt(data.analysis, k), name);
     $('rRange').value = k;

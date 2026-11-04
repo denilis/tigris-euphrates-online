@@ -64,7 +64,8 @@ function position(setup) {
 
 function table(id, setup) {
   const t = createTable({ code: `UROK0${id}`, title: `Урок ${id}`, host: USERS[0], now: 0 });
-  Object.assign(t.options, { ...RULES, board: 'advanced', openScore: true, confirmSeconds: 0, order: 'custom' });
+  // уроки пока с прежними тайлами (Денис 04.11: плитки сначала в партиях)
+  Object.assign(t.options, { ...RULES, board: 'advanced', openScore: true, confirmSeconds: 0, order: 'custom', tiles: 'classic' });
   setSeatCount(t, USERS[0].userId, 2, 0);
   sit(t, USERS[1], 1, 0);
   t.seats[0].hero = 'lion';

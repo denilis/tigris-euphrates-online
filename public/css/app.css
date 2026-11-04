@@ -971,3 +971,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .pfield.mon img{position:absolute;left:33px;top:33px;width:114px;height:114px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
 .pfield.bld{--gx:15px;display:flex;padding:15px}
 .pfield.bld svg{display:block;flex:none}
+/* вид тайлов: тайл в окошке, как на поле, 54 точки в клетке 60 */
+.pfield .ptile{position:relative;display:grid;place-items:center;width:60px;height:60px}
+/* здание в окошке лежит поверх тайла, как на поле */
+.pfield .ptile .bover{position:absolute;inset:0}
+.pfield .ptile img{border-radius:5px;filter:drop-shadow(0 1.6px 1.4px rgba(0,0,0,.55))}

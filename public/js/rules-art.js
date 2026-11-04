@@ -76,7 +76,7 @@ function sceneSVG(key, label) {
   p.cells.forEach((row, y) => row.forEach((c, gx) => {
     const x = gx * C, py = y * C;
     if (c.river) ground += `<rect x="${x - 0.5}" y="${py - 0.5}" width="${C + 1}" height="${C + 1}" fill="#3a7aa3"/>`;
-    if (c.tile !== null) pieces += tile(tileImg(c.tile), x, py);
+    if (c.tile !== null) pieces += tile(tileImg(c.tile, 'classic'), x, py); // правила с прежними тайлами (04.11)
     else if (c.cat) pieces += tile(catImg, x, py);
     else if (c.unite) pieces += tile(uniteImg, x, py);
     else if (c.flipped) pieces += `<rect x="${x + 3}" y="${py + 3}" width="${T}" height="${T}" rx="5" fill="#857a69" stroke="#5f564a"/>`;

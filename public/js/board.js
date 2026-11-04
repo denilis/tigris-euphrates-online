@@ -1,7 +1,7 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
+import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, getTileStyle, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
 import { TRAIL_FRESH_MS, landing } from './trail.js';
 import { ALL_ON } from './layers.js';
 import { riverLayer } from './river.js';
@@ -72,16 +72,18 @@ export function sealIcon(c1, c2, size = 46, style = null) {
 }
 
 // --- здание: вид выбирает хозяин стола (Денис 04.11), на правила он не влияет.
-// tile: плитка в стиле монументов (картинки Дениса 04.11, лист «Здания», вырезка tools/icons/cut.py);
+// chip: круглая фишка поверх тайла (лист Дениса 04.11; без картинок вместо нее значок);
 // seal: прежняя «Малая печать» (выбор Дениса 30.10): золотая рама, поле цвета, силуэт здания.
-export const buildingImg = (c) => `/img/buildings/${c}.webp`;
+// Лист плиток, который до 04.11 стоял зданиями, теперь вид тайлов (util.js tileImg).
+export const CHIPS_READY = true; // фишки Дениса 04.11 (лист Gemini 23:22, вырезка tools/icons/cut.py --far 75 --seed 0)
+export const chipImg = (c) => `/img/buildings/chip${c}.webp`;
 
 // --- чудо: картинка Дениса 04.11 (вариант B «Эмалевая печать»), подогнана под крест 3 на 3
 // (scratchpad wonder_fit.py: лучи нарисованы шире трети, концы растянуты, середина сжата)
 export const WONDER_IMG = '/img/wonder/wonder.webp';
 /** Чудо крестом на 5 клеток: (x, y) левый верхний угол центральной клетки, c — размер клетки. */
 export const wonderSVG = (x, y, c) => `<image href="${WONDER_IMG}" x="${x - c + 3}" y="${y - c + 3}" width="${3 * c - 6}" height="${3 * c - 6}"/>`;
-export const BUILDING_STYLES = ['tile', 'seal'];
+export const BUILDING_STYLES = ['chip', 'seal'];
 const BUILDING_SIL = [
   'M15 44H45V38H41V32H37V26H33V20H27V26H23V32H19V38H15Z', // храм: зиккурат
   'M17 44V30A13 13 0 0 1 43 30V44H34V35H26V44Z', // ферма: амбар
@@ -90,8 +92,9 @@ const BUILDING_SIL = [
 ];
 
 /** Здание цвета c в клетке с левым верхним углом (x, y), p — префикс id в defs, style — вид зданий. */
-export function buildingSVG(c, x, y, p, style = 'tile') {
-  if (style !== 'seal') return `<g transform="translate(${x},${y})" filter="url(#shadow2)"><image href="${buildingImg(c)}" x="1" y="1" width="58" height="58"/></g>`;
+export function buildingSVG(c, x, y, p, style = 'chip') {
+  // фишка лежит поверх тайла и меньше клетки: тайл виден вокруг
+  if (style === 'chip' && CHIPS_READY) return `<g transform="translate(${x},${y})" filter="url(#shadow2)"><image href="${chipImg(c)}" x="8" y="8" width="44" height="44"/></g>`;
   let g = `<rect x="1" y="1" width="58" height="58" rx="6" fill="url(#${p}vg)" stroke="#1c120a" stroke-opacity=".6"/>`;
   g += `<rect x="5" y="5" width="50" height="50" fill="url(#${p}v${c})"/><rect x="5" y="5" width="50" height="50" fill="url(#${p}br)"/>`;
   g += `<circle cx="30" cy="30" r="21" fill="#f0e2bf" stroke="${GD.d}" stroke-width="2.4"/>`;
@@ -101,7 +104,7 @@ export function buildingSVG(c, x, y, p, style = 'tile') {
 }
 
 /** Маленькое здание для блока «Запас» (свой svg со своими defs). */
-export function buildingIcon(c, size = 28, style = 'tile') {
+export function buildingIcon(c, size = 28, style = 'chip') {
   const p = `bi${c}`;
   return `<svg viewBox="0 0 60 60" width="${size}" height="${size}" aria-hidden="true"><defs>${monDefs(p)}</defs>${buildingSVG(c, 0, 0, p, style)}</svg>`;
 }
@@ -196,7 +199,7 @@ export function cellScreen(svg, i) {
 const SAND_TILE = 640, WATER_TILE = 420;
 let staticKey = null, staticSvg = '';
 function staticLayer(river, look = 'relief', monStyle = null) {
-  const key = `${look}:${monStyle}:${river.join(',')}`;
+  const key = `${look}:${monStyle}:${getTileStyle()}:${river.join(',')}`;
   if (key === staticKey) return staticSvg;
   let rects = '';
   for (const i of river) {
@@ -288,7 +291,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   const mon = isMonImg(opts.monument) ? opts.monument : null;
   // статичный слой (песок, река, картинки в defs) ставится один раз на карту: картинки не
   // создаются заново при каждой перерисовке и не мигают
-  const key = `${look}:${mon}:${g.river.join(',')}`;
+  const key = `${look}:${mon}:${getTileStyle()}:${g.river.join(',')}`; // вид тайлов в картинках defs
   if (svg.dataset.key !== key) {
     svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
     svg.innerHTML = `<g>${staticLayer(g.river, look, mon)}</g><g class="dyn"></g>`;
