@@ -790,7 +790,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .newgame .ngart .scene.people,.newgame .ngart .scene.bots{--sy:18%}
 .newgame .ngart .scene.code{--sy:60%}
 .newgame .ngfaces{display:flex;gap:8px}
-.newgame .ngfaces .face{width:40px;height:40px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
+.newgame .ngfaces{gap:10px}
+.newgame .ngfaces .face{width:52px;height:52px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
 .newgame .ngact{margin-top:auto;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding-top:6px}
 .newgame .ngact.mid{justify-content:center}
 .lcard.clay .online{margin:0;background:rgba(110,70,32,.14);box-shadow:inset 0 2px 5px rgba(60,30,10,.35),inset 0 -1px 0 var(--lip)}
