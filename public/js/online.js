@@ -36,9 +36,6 @@ export function chatNote(chat) {
   return chat ? 'Игроки за столом, сообщение ушло в чат' : 'Игроки за столом, в чат сообщение не ушло';
 }
 
-/** Кнопка удаления стола: только администратору, пока партия не началась или если ее завершили досрочно. */
-export const canDelete = (t, user) => Boolean(user?.admin) && (t.status === 'lobby' || t.status === 'closed');
-
 /** Вопрос перед удалением стола: кроме себя называем всех людей за ним. */
 export function deleteQuestion(t, myName) {
   const others = t.seats.filter((s) => s.kind === 'human' && s.name && s.name !== myName).map((s) => s.name);

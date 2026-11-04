@@ -428,13 +428,28 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   /**
-   * Удалить стол, где партия не начиналась. Сначала запись по версии: если партию начали
-   * в этот же момент, удаление не пройдет. Сбой после нее оставит стол скрытым до срока хранения.
+   * Кто может удалить стол (просьба Дениса 04.11). Стол, где из людей только он сам (остальные
+   * места боты или свободны), игрок удаляет в любой момент, даже после сыгранной партии: в
+   * статистику турниров такие партии не входят, там от двух участников. Стол с другими людьми
+   * удаляет только администратор и только если партия не начиналась или завершена досрочно:
+   * законченная хранится для статистики. Возвращает null или [статус, код, сообщение] отказа.
    */
-  async function deleteTable(code) {
+  function deleteRight(t, u) {
+    const mine = t.hostUserId === u.id || Boolean(seatOfUser(t, u.id));
+    if (mine && t.seats.every((s) => s.kind !== 'human' || !s.userId || s.userId === u.id)) return null;
+    if (!u.admin) return [403, 'not-admin', 'Стол с другими игроками может удалить только администратор'];
+    if (t.status !== 'lobby' && t.status !== 'closed') return [409, 'not-lobby', 'Стол с другими игроками можно удалить, пока партия не началась или если ее завершили досрочно'];
+    return null;
+  }
+
+  /**
+   * Удалить стол. Сначала запись по версии: если партию начали в этот же момент, а за столом
+   * люди, удаление не пройдет. Сбой после нее оставит стол скрытым до срока хранения.
+   */
+  async function deleteTable(code, u) {
     const { doc: t, version } = await load(code);
-    // законченная партия хранится для статистики; досрочно завершенную итога нет, ее можно удалить
-    if (t.status !== 'lobby' && t.status !== 'closed') http(409, 'not-lobby', 'Удалить можно стол, где партия не начиналась или завершена досрочно');
+    const no = deleteRight(t, u);
+    if (no) http(...no);
     t.status = 'deleted';
     t.version = version + 1;
     if (!(await store.putTable(t, version, ''))) http(409, 'stale', 'Стол уже изменился, обновите');
@@ -446,7 +461,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function adminTables(method, rest, u) {
     needAdmin(u);
     if (method === 'GET' && !rest.length) return openTables();
-    if (method === 'POST' && rest.length === 2 && rest[1] === 'delete') return deleteTable(rest[0]);
+    if (method === 'POST' && rest.length === 2 && rest[1] === 'delete') return deleteTable(rest[0], u);
     http(404, 'no-route', 'Нет такого адреса');
   }
 
@@ -574,6 +589,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       me: seatOfUser(t, u.id)?.id ?? null,
       toMove: t.game?.toMove ?? null,
       seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero })),
+      del: !deleteRight(t, u), // кнопка «Удалить» в «Моих столах»
     }));
   }
 
@@ -739,6 +755,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
       if (op === 'replay' && method === 'GET') return replayOf(code);
+      if (op === 'delete' && method === 'POST' && rest.length === 2) return deleteTable(code, u);
       if (op === 'photo' && method === 'POST') return sendPhoto(code, u, body);
       if (op === 'record' && method === 'GET') return recordOf(code);
       if (op === 'analysis' && method === 'GET') return analysisOf(code);

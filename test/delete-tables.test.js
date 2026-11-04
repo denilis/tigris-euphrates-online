@@ -1,11 +1,13 @@
-// Удаление столов администратором: только столы, где партия не начиналась. Сыгранное не трогаем.
+// Удаление столов. Свой стол с ботами игрок удаляет сам в любой момент, даже сыгранный (04.11).
+// Стол с другими людьми удаляет только администратор, пока партия не началась или если ее
+// завершили досрочно: законченная партия людей хранится для статистики.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/routes.js';
 import { memoryStore } from '../server/store-memory.js';
 import { redisStore } from '../server/store-redis.js';
 import { fakeUpstash } from './fake-upstash.js';
-import { deleteQuestion, canDelete } from '../public/js/online.js';
+import { deleteQuestion } from '../public/js/online.js';
 
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
 
@@ -61,11 +63,68 @@ test('удаление: только администратор, назначе�
   assert.equal((await del(P['Влад'])).status, 200, 'чужой стол удаляет назначенный администратор');
 });
 
-test('удаление: хозяин стола без прав администратора удалить не может', async () => {
+test('удаление: игрок без прав администратора удаляет свой стол, пока за ним нет других людей', async () => {
   const s = setup();
+  const P = await company(s, 'Андрей', 'Влад');
+  const solo = await table(s, P['Андрей']);
+  assert.equal((await mydel(s, P['Влад'], solo.code)).status, 403, 'чужой стол');
+  assert.equal((await mydel(s, P['Андрей'], solo.code)).status, 200, 'за столом только он сам');
+  const shared = await table(s, P['Андрей']);
+  await shared.post(P['Влад'], { action: 'sit', seat: 1 });
+  const r = await mydel(s, P['Андрей'], shared.code);
+  assert.equal(r.status, 403);
+  assert.match(r.body.message, /только администратор/);
+  assert.equal((await mydel(s, P.denis, shared.code)).status, 200, 'администратор удаляет стол с людьми');
+});
+
+/** Стол игрока с тремя ботами, как его заводит страница «Начать игру». */
+async function botTable(s, who) {
+  const { code } = (await s.req('POST', 'tables', { token: who.token })).body;
+  for (const seat of [1, 2]) await s.req('POST', `tables/${code}`, { body: { action: 'seatKind', seat, kind: 'bot' }, token: who.token });
+  assert.equal((await s.req('POST', `tables/${code}`, { body: { action: 'start' }, token: who.token })).status, 200);
+  return code;
+}
+
+/** Закончить партию напрямую в хранилище: доигрывать в тесте долго. */
+async function finish(store, code) {
+  const cur = await store.getTable(code);
+  cur.doc.status = 'over';
+  cur.doc.game.result = { finishedAt: Date.now(), endReason: 'treasures', seats: cur.doc.seats.map((x, i) => ({ seatId: x.id, place: i + 1, vector: [1, 1, 1, 1], score: [1, 1, 1, 1], treasures: 0 })) };
+  cur.doc.version += 1;
+  assert.equal(await store.putTable(cur.doc, cur.version, ''), true);
+}
+
+const mydel = (s, who, code) => s.req('POST', `tables/${code}/delete`, { token: who.token });
+
+test('удаление: партию с ботами игрок удаляет и во время игры, и сыгранную (04.11)', async () => {
+  const store = memoryStore();
+  const s = setup(store);
+  const P = await company(s, 'Андрей', 'Влад');
+  const playing = await botTable(s, P['Андрей']);
+  const over = await botTable(s, P['Андрей']);
+  await finish(store, over);
+  assert.equal((await s.req('GET', `tables/${over}`, { token: P['Андрей'].token })).body.status, 'over', 'итог записан в историю');
+  assert.equal((await mydel(s, P['Влад'], over)).status, 403, 'чужую партию нельзя');
+  for (const code of [playing, over]) assert.equal((await mydel(s, P['Андрей'], code)).status, 200, code);
+  assert.deepEqual(await mine(s, P['Андрей']), []);
+  assert.equal((await s.req('GET', `tables/${over}`, { token: P['Андрей'].token })).status, 404);
+  assert.equal((await store.listHistory()).length, 1, 'история и статистика не трогаются');
+});
+
+test('кнопка «Удалить» в «Моих столах»: сервер говорит, где она есть', async () => {
+  const store = memoryStore();
+  const s = setup(store);
   const P = await company(s, 'Андрей');
-  const { del } = await table(s, P['Андрей']);
-  assert.equal((await del(P['Андрей'])).status, 403);
+  const bots = await botTable(s, P['Андрей']);
+  await finish(store, bots);
+  const lobby = await table(s, P.denis);
+  await lobby.post(P['Андрей'], { action: 'sit', seat: 1 });
+  const played = await started(s, P);
+  const flags = async (who) => Object.fromEntries((await s.req('GET', 'tables', { token: who.token })).body.map((t) => [t.code, t.del]));
+  assert.deepEqual(await flags(P['Андрей']), { [bots]: true, [lobby.code]: false, [played.code]: false });
+  assert.deepEqual(await flags(P.denis), { [lobby.code]: true, [played.code]: false }, 'администратор: стол с людьми, пока партия не началась');
+  await played.post(P.denis, { action: 'close' });
+  assert.equal((await flags(P.denis))[played.code], true, 'завершенную досрочно можно');
 });
 
 test('удаление: нет такого стола', async () => {
@@ -148,6 +207,8 @@ test('удаление: только по своему адресу и толь�
     ['POST', `admin/tables/${code}`],
     ['POST', 'admin/tables'],
     ['GET', `admin/tables/${code}`],
+    ['GET', `tables/${code}/delete`],
+    ['POST', `tables/${code}/delete/x`],
   ]) {
     assert.equal((await s.req(method, path, { token })).status, 404, `${method} ${path}`);
   }
@@ -188,13 +249,6 @@ test('открытые столы: все игроки, только где па
   assert.ok(!r.body.some((t) => t.code === played.code));
   assert.deepEqual(r.body.find((t) => t.code === b.code).seats.map((x) => x.name), ['Андрей', 'Влад']);
   assert.deepEqual(Object.keys(r.body[0]).sort(), ['code', 'seats', 'title', 'updatedAt']);
-});
-
-test('кнопка удаления: у администратора, пока партия не началась или если ее завершили досрочно', () => {
-  for (const status of ['lobby', 'closed']) assert.equal(canDelete({ status }, { admin: true }), true, status);
-  for (const status of ['playing', 'over']) assert.equal(canDelete({ status }, { admin: true }), false, status);
-  assert.equal(canDelete({ status: 'lobby' }, { admin: false }), false);
-  assert.equal(canDelete({ status: 'lobby' }, undefined), false);
 });
 
 test('вопрос перед удалением: себя не называем', () => {

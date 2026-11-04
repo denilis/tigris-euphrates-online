@@ -11,7 +11,7 @@ import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
-import { freeSeat, deleteQuestion, canDelete } from './online.js';
+import { freeSeat, deleteQuestion } from './online.js';
 import { esc, toast, copy, faceBg } from './util.js';
 
 const app = document.getElementById('app');
@@ -115,13 +115,13 @@ function renderActivate() {
 
 // --- мои столы
 
-/** Удалить стол, где партия не начиналась, и обновить список на экране. */
+/** Удалить стол и обновить список на экране. Что можно удалять, решает сервер (флаг del в «Моих столах»). */
 let removing = false;
 async function removeTable(t, done) {
   if (removing || !confirm(deleteQuestion(t, session.get()?.user?.name))) return;
   removing = true; // повторное нажатие не должно спрашивать и удалять второй раз
   try {
-    await api('POST', `admin/tables/${t.code}/delete`);
+    await api('POST', `tables/${t.code}/delete`);
     toast('Стол удален');
   } catch (e) { toast(e.message); }
   removing = false;
@@ -208,7 +208,7 @@ async function renderHome() {
       if (!el) return;
       el.innerHTML = list.length ? list.map((t, i) => {
         const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
-        const del = canDelete(t, session.get()?.user);
+        const del = Boolean(t.del); // свой стол с ботами всегда, стол с людьми только администратору (04.11)
         return `<a class="titem${myTurn ? ' turn' : ''}${del ? ' del' : ''}" href="#/t/${esc(t.code)}">
           <b>${esc(t.title || t.code)}</b>
           <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
