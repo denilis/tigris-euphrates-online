@@ -6,7 +6,7 @@ import { onlineNow } from './presence.js';
 import { pickList, chatAllowed, chatNote } from './online.js';
 import { fitTours, tourChoice } from './season.js';
 import { play } from './signals.js';
-import { buildingIcon } from './board.js';
+import { buildingIcon, monImg } from './board.js';
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -17,6 +17,14 @@ const COUNTING = { none: 'не считает', approx: 'примерно', exac
 // вид монумента (выбор Дениса 03.11): номер, как Денис их называл, и короткое имя
 const MONUMENTS = [['enamel', '1 Печать'], ['frame', '2 Рамка'], ['ziggurat', '3 Зиккурат']];
 const BUILDINGS = [['tile', 'Новые плитки'], ['seal', 'Старые значки']]; // вид зданий (Денис 04.11)
+
+// при наведении на вид монумента или зданий всплывает картинка в размер поля (схема Дениса 04.11):
+// монумент на 2x2 клетки, как на поле (картинка 114 точек с отступом 3), здания по клетке 60 точек
+const peekMon = (id, t) => `<span class="peek" aria-hidden="true"><span class="pfield mon"><img src="${monImg(id, 0, 1)}" width="114" height="114" alt=""></span><b>${t}</b></span>`;
+const peekBld = (id, t) => `<span class="peek" aria-hidden="true"><span class="pfield bld">${[0, 1, 2, 3].map((c) => buildingIcon(c, 60, id)).join('')}</span><b>${t}</b></span>`;
+// на телефоне наведения нет: после нажатия окошко держится немного, переживая перерисовку лобби
+const PEEK_MS = 2500;
+let peekAt = null;
 
 // турниры меняются редко: лобби перерисовывается часто, а список обновляем раз в 20 секунд
 const TOURS_MS = 20000;
@@ -198,8 +206,8 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
         <label><input type="checkbox" data-opt="wonder" ${o.wonder ? 'checked' : ''} ${dis}> Чудо</label>
         <label><input type="checkbox" data-opt="openScore" ${o.openScore ? 'checked' : ''} ${dis}> Открытый счет (видны очки соперников)</label>
       </div>
-      <div class="opts"><span class="muted olbl">Вид монумента</span><span class="seg monseg" title="Вид монумента на поле, на правила не влияет">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}</button>`).join('')}</span></div>
-      <div class="opts"><span class="muted olbl">Вид зданий</span><span class="seg monseg" title="Вид зданий на поле, на правила не влияет">${BUILDINGS.map(([id, t]) => `<button data-building="${id}" class="${(o.building ?? 'tile') === id ? 'on' : ''}" ${dis}>${buildingIcon(0, 26, id)}${t}</button>`).join('')}</span></div>
+      <div class="opts"><span class="muted olbl">Вид монумента</span><span class="seg monseg">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}${peekMon(id, t)}</button>`).join('')}</span></div>
+      <div class="opts"><span class="muted olbl">Вид зданий</span><span class="seg monseg">${BUILDINGS.map(([id, t]) => `<button data-building="${id}" class="${(o.building ?? 'tile') === id ? 'on' : ''}" ${dis}>${buildingIcon(0, 26, id)}${t}${peekBld(id, t)}</button>`).join('')}</span></div>
       <div class="opts" id="lTour" hidden></div>
       <h2>Время</h2>
       <div class="opts">
@@ -231,6 +239,18 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
     if (b) b.disabled = false;
   });
   mountTour(root.querySelector('#lTour'), view, act);
+  // телефон: окошко вида, нажатого только что, видно еще PEEK_MS и после перерисовки
+  if (peekAt && Date.now() < peekAt.until) {
+    root.querySelector(peekAt.sel)?.classList.add('peeking');
+    setTimeout(() => root.querySelectorAll('.peeking').forEach((b) => b.classList.remove('peeking')), peekAt.until - Date.now());
+  }
+  const touch = () => matchMedia('(hover: none)').matches;
+  root.querySelectorAll('[data-monument],[data-building]').forEach((b) => b.addEventListener('click', () => {
+    if (!touch()) return;
+    peekAt = { sel: b.dataset.monument ? `[data-monument="${b.dataset.monument}"]` : `[data-building="${b.dataset.building}"]`, until: Date.now() + PEEK_MS };
+    b.classList.add('peeking');
+    setTimeout(() => b.classList.remove('peeking'), PEEK_MS);
+  }));
   on('[data-people]', 'click', (el) => openPicker(view, act, +el.dataset.people));
   on('[data-unseat]', 'click', (el) => act({ action: 'unseat', seat: +el.dataset.unseat }));
   on('[data-sit]', 'click', (el) => act({ action: 'sit', seat: +el.dataset.sit }));

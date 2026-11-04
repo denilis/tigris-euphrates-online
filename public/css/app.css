@@ -951,3 +951,23 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @media (max-width:560px){.personal .pvs{font-size:13px}.personal .pvs th,.personal .pvs td{padding:6px 5px}.personal .pvs td small{display:block}}
 /* фон итога партии: праздник победы, приглушен, окно итога по центру (картинка Дениса 04.11) */
 .endwrap.feast{background:linear-gradient(rgba(12,8,4,.42),rgba(12,8,4,.58)),url(/img/end/feast.webp) center/cover no-repeat}
+/* вид монумента и зданий: при наведении картинка в размер поля (схема Дениса 04.11) */
+.seg.monseg{overflow:visible}
+.seg.monseg button{position:relative}
+.seg.monseg button:first-child{border-radius:7px 0 0 7px}
+.seg.monseg button:last-child{border-radius:0 7px 7px 0}
+/* неактивная кнопка приглушает только значок и подпись, а не окошко внутри */
+.seg.monseg button[disabled]:not(.on){opacity:1}
+.seg.monseg button[disabled]:not(.on)>img,.seg.monseg button[disabled]:not(.on)>svg{opacity:.5}
+.peek{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:40;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 10px 8px;border-radius:12px;background:#2a2119;border:1px solid var(--gold2);box-shadow:0 14px 34px rgba(0,0,0,.55);pointer-events:none;white-space:nowrap}
+.peek b{font-size:13px;font-weight:600;color:var(--gold)}
+.seg.monseg button:hover .peek,.seg.monseg button.peeking .peek{display:flex}
+@media (hover:none){.seg.monseg button:hover:not(.peeking) .peek{display:none}}
+/* кусочек поля: песок и клетки по 60 точек, как на поле */
+.pfield{display:block;position:relative;border-radius:4px;background:linear-gradient(rgba(80,55,20,.4) 1px,transparent 1px) var(--gx) var(--gx)/60px 60px,
+  linear-gradient(90deg,rgba(80,55,20,.4) 1px,transparent 1px) var(--gx) var(--gx)/60px 60px,url(/img/terrain/sand.webp) 0 0/240px 240px}
+.pfield.mon{--gx:30px;width:180px;height:180px}
+.pfield.mon img{position:absolute;left:33px;top:33px;width:114px;height:114px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
+.pfield.bld{--gx:15px;display:flex;padding:15px}
+.pfield.bld svg{display:block;flex:none}
