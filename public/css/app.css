@@ -773,12 +773,38 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .bar nav a.newgame{color:var(--gold);font-weight:600}
 .homehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .homehead h1{margin:0}
-.newgame .ngbox{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px}
-.newgame .ngbox h2{margin:0 0 6px}
-.newgame .ngbox p{margin:0 0 10px}
-.newgame .ngempty{margin:10px 0 0}
-.newgame .ngrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media (max-width:760px){.newgame .ngrow{grid-template-columns:1fr}}
+/* вид «Три ворот» (схема Дениса 04.11): табличка, как главная, три карточки-арки */
+.lcard.clay.newgame{max-width:1000px}
+.lcard.clay.newgame h1{margin:0 0 14px}
+.newgame .ngates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.newgame .ngate{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 14px 14px;border-radius:14px;
+  background:rgba(255,238,205,.16);border:1px solid rgba(80,45,15,.32);box-shadow:inset 0 1px 0 var(--lip),0 2px 4px rgba(60,30,10,.25)}
+.newgame .ngate h2{margin:4px 0 0;font-size:19px}
+.newgame .ngate p{margin:0;line-height:1.45}
+/* арка: пологий верх, рамка из синего глазурованного кирпича с золотой каймой; временная, пока нет картин Дениса */
+.newgame .ngart{position:relative;aspect-ratio:4/3;display:grid;place-items:center;overflow:hidden}
+.newgame .ngart.tmp{border:9px solid transparent;border-radius:50% 50% 8px 8px / 24% 24% 8px 8px;
+  background:radial-gradient(circle at 50% 42%,#6b4a29,#2a1c10 78%) padding-box,repeating-linear-gradient(90deg,#24589a 0 13px,#173c6c 13px 15px) border-box;
+  box-shadow:0 0 0 2px #c9a24d,inset 0 0 0 2px #e0b65a,0 3px 6px rgba(45,22,6,.45)}
+.newgame .ngart img{width:62%;height:auto;filter:drop-shadow(0 4px 6px rgba(0,0,0,.55))}
+.newgame .ngart .ngface{width:52%;aspect-ratio:1;border-radius:50%;background:center/cover;box-shadow:0 0 0 3px #e0b65a,0 4px 10px rgba(0,0,0,.6)}
+.newgame .ngfaces{display:flex;gap:8px}
+.newgame .ngfaces .face{width:40px;height:40px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
+.newgame .ngact{margin-top:auto;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding-top:6px}
+.newgame .ngact.mid{justify-content:center}
+.lcard.clay .online{margin:0;background:rgba(110,70,32,.14);box-shadow:inset 0 2px 5px rgba(60,30,10,.35),inset 0 -1px 0 var(--lip)}
+.lcard.clay .ohead,.lcard.clay .oitem small{color:var(--ink2)}
+.lcard.clay .oname{color:var(--ink);font-weight:600}
+/* поле кода вдавлено в глину */
+.lcard.clay .join input{flex:1 1 120px;background:rgba(110,70,32,.2);border:1px solid rgba(80,45,15,.45);color:var(--ink);
+  font:700 17px/1 Consolas,monospace;letter-spacing:.18em;text-transform:uppercase;box-shadow:inset 0 2px 5px rgba(60,30,10,.45),inset 0 -1px 0 var(--lip)}
+.lcard.clay .join input::placeholder{color:rgba(74,46,20,.6);letter-spacing:.04em;text-transform:none;font-weight:500;font-size:15px}
+@media (max-width:900px){
+  .newgame .ngates{grid-template-columns:1fr}
+  .newgame .ngart{aspect-ratio:auto;height:130px}
+  .newgame .ngart img{width:auto;height:84%}
+  .newgame .ngart .ngface{width:auto;height:78%}
+}
 
 /* журнал удалений (04.11) */
 .dlog{display:grid;grid-template-columns:92px 1fr auto auto;gap:4px 12px;align-items:center;background:var(--card);border-radius:10px;padding:8px 14px}

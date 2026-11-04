@@ -15,7 +15,7 @@ import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from 
 import { freeSeat, deleteQuestion } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
 import { SCENES, pickScene } from './scene.js';
-import { esc, toast, copy, faceBg } from './util.js';
+import { esc, toast, copy, faceBg, botFace } from './util.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -145,27 +145,43 @@ const STATUS = { lobby: 'собирается', playing: 'идет партия'
 
 /**
  * «Начать игру» (просьба Дениса 04.11: отдельной кнопкой, а «Мои столы» только список): стол с людьми,
- * которые сейчас на сайте, стол с ботами или стол по коду из приглашения.
+ * которые сейчас на сайте, стол с ботами или стол по коду из приглашения. Вид «Три ворот» (схема
+ * одобрена Денисом 04.11): глиняная табличка, как главная, три арки. Пока картины арок не нарисованы,
+ * в арке временная картинка: иконка главной или портрет бота.
  */
+const GATE_ART = {
+  people: '<img src="/img/icons/tables.webp" alt="">',
+  bots: `<i class="ngface" style="background-image:url(${botFace({ kind: 'bot', bot: { style: 'universal' } })})"></i>`,
+  code: '<img src="/img/icons/codes.webp" alt="">',
+};
+const GATE_BOTS = [['universal', 'Универсальный'], ['base', 'Базовый'], ['top', 'Топ-мастера']];
+
 function renderNew() {
-  app.innerHTML = `<div class="page">${topbar('new')}<main class="pcard newgame">
+  const art = (k) => `<div class="ngart tmp" aria-hidden="true">${GATE_ART[k]}</div>`;
+  app.innerHTML = `<div class="page">${topbar('new')}<div class="lobby"><div class="lcard clay newgame">
+    <div class="band top" aria-hidden="true"></div>
     <h1>Начать игру</h1>
-    <section class="ngbox"><h2>С людьми</h2>
-      <p class="muted">Отметьте, кого позвать: стол создастся, они получат приглашение. Партию начнете вы, когда все будут за столом.</p>
-      <section class="online" id="onlineBox"></section>
-      <p class="ngempty"><button class="btn" id="newEmpty">Пустой стол</button> <span class="muted small">позвать позже ссылкой или из лобби</span></p>
-    </section>
-    <div class="ngrow">
-      <section class="ngbox"><h2>С ботами</h2>
-        <p class="muted">Вы и три бота. Число мест, силу ботов и правила можно поменять в лобби.</p>
-        <button class="btn primary" id="newBots">Стол с ботами</button>
+    <div class="ngates">
+      <section class="ngate">${art('people')}
+        <h2>С людьми</h2>
+        <p class="muted">Отметьте, кого позвать: стол создастся, они получат приглашение. Партию начнете вы, когда все будут за столом.</p>
+        <section class="online" id="onlineBox"></section>
+        <div class="ngact"><button class="btn" id="newEmpty">Пустой стол</button><span class="muted small">позвать позже ссылкой или из лобби</span></div>
       </section>
-      <section class="ngbox"><h2>По коду</h2>
+      <section class="ngate">${art('bots')}
+        <h2>С ботами</h2>
+        <p class="muted">Вы и три бота. Число мест, силу ботов и правила можно поменять в лобби.</p>
+        <div class="ngfaces">${GATE_BOTS.map(([s, t]) => `<i class="face" title="${t}" style="background-image:url(${botFace({ kind: 'bot', bot: { style: s } })})"></i>`).join('')}</div>
+        <div class="ngact mid"><button class="seal" id="newBots">Стол с ботами</button></div>
+      </section>
+      <section class="ngate">${art('code')}
+        <h2>По коду</h2>
         <p class="muted">Код стола из приглашения или ссылки.</p>
-        <form id="joinForm" class="join"><input id="joinCode" placeholder="Код стола" maxlength="6" autocapitalize="characters" spellcheck="false" aria-label="Код стола"><button class="btn" type="submit">Открыть</button></form>
+        <form id="joinForm" class="join ngact"><input id="joinCode" placeholder="Код стола" maxlength="6" autocapitalize="characters" spellcheck="false" aria-label="Код стола"><button class="btn" type="submit">Открыть</button></form>
       </section>
     </div>
-  </main></div>`;
+    <div class="band bot" aria-hidden="true"></div>
+  </div></div></div>`;
   bindTopbar();
   const open = (code) => {
     scrollTo(0, 0); // кнопки внизу страницы: без этого лобби открылось бы прокрученным
