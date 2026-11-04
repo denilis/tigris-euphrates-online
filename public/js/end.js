@@ -27,6 +27,8 @@ export function renderEnd(box, view, { act, go }) {
   const show = stopped || (view.status === 'over' && g?.result);
   box.hidden = !show;
   if (!show) return;
+  // за итогом картина праздника (Денис 04.11), у досрочно завершенной партии обычное затемнение
+  box.classList.toggle('feast', !stopped);
   if (box.dataset.closed === view.code) {
     box.hidden = true;
     box.parentElement.querySelector('#gReopen')?.remove();

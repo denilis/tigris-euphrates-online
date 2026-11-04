@@ -923,3 +923,5 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .personal .prv td small{color:var(--muted)}
 .personal #pRivalsBox .tw{margin-top:6px}
 @media (max-width:560px){.personal .pvs{font-size:13px}.personal .pvs th,.personal .pvs td{padding:6px 5px}.personal .pvs td small{display:block}}
+/* фон итога партии: праздник победы, приглушен, окно итога по центру (картинка Дениса 04.11) */
+.endwrap.feast{background:linear-gradient(rgba(12,8,4,.42),rgba(12,8,4,.58)),url(/img/end/feast.webp) center/cover no-repeat}
