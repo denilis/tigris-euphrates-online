@@ -259,8 +259,15 @@ function boardOpts() {
   if (g.phase === 'action' && ui.sel) {
     const type = { tile: 'tile', leader: 'leader', cat: 'catastrophe' }[ui.sel.kind];
     o.targets = legal.filter((m) => m.type === type && (type === 'catastrophe' || m.color === ui.sel.color)).map((m) => m.pos);
-  } else if (g.phase === 'build') o.targets = legal.filter((m) => m.type === 'build').map((m) => m.pos);
-  else if (g.phase === 'treasure') o.targets = legal.filter((m) => m.type === 'treasure').map((m) => m.pos);
+  } else if (g.phase === 'build') {
+    // куда можно поставить здание, ярко мигает (просьба Дениса 04.11)
+    o.targets = legal.filter((m) => m.type === 'build').map((m) => m.pos);
+    o.blink = 'build';
+  } else if (g.phase === 'treasure') {
+    // какие сокровища можно взять, ярко мигают (просьба Дениса 04.11)
+    o.targets = legal.filter((m) => m.type === 'treasure').map((m) => m.pos);
+    o.blink = 'treasure';
+  }
   else if (g.phase === 'monument' && ui.monSel === 'wonder') o.crosses = legal.filter((m) => m.type === 'wonder').map((m) => m.center);
   else if (g.phase === 'monument' && ui.monSel != null) o.squares = legal.filter((m) => m.type === 'monument' && m.id === ui.monSel).map((m) => m.tl);
   o.hit = hitCells(o, g.players[myP].leaders.filter((i) => leaderAt(i) != null));
@@ -277,17 +284,21 @@ function updateTrail({ view, g, seat }) {
 }
 
 /** Запас: что еще можно построить. Перерисовывается, только когда что-то построили. */
-function drawStock({ view, g }) {
+function drawStock({ view, g, legal, decides }) {
   const el = ctl.root.querySelector('#gStock');
   const s = stockItems(g, view.options);
-  const key = JSON.stringify(s) + monOf(view);
+  // что сейчас строится (просьба Дениса 04.11): здание своего цвета мигает, из монументов подсвечены
+  // только те, что можно поставить, остальные притушены
+  const monNow = decides && g.phase === 'monument' ? new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id)) : null;
+  const bldNow = decides && g.phase === 'build' ? g.ctx?.color ?? null : null;
+  const key = JSON.stringify(s) + monOf(view) + [...(monNow || [])] + ':' + bldNow + ':' + Boolean(monNow);
   if (key === ui.stockKey && el.firstChild) return;
   ui.stockKey = key;
   // крупно (просьба Дениса 03.11): монументы по три в ряд, чтобы читались цвета
-  const item = (x, icon) => `<span class="sit${x.built ? ' built' : ''}" title="${esc(x.title)}">${icon}</span>`;
-  el.innerHTML = `<div class="slbl">Монументы</div><div class="mons">${s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 80, monOf(view)))).join('')}</div>`
+  const item = (x, icon, hot = false, dim = false) => `<span class="sit${x.built ? ' built' : ''}${hot ? ' blink' : ''}${dim ? ' dim' : ''}" title="${esc(x.title)}">${icon}</span>`;
+  el.innerHTML = `<div class="slbl">Монументы</div><div class="mons">${s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 80, monOf(view)), monNow?.has(m.id), monNow && !m.built && !monNow.has(m.id))).join('')}</div>`
     + (s.buildings || s.wonder ? `<div class="slbl">Здания</div><div class="blds">${[
-      ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c, 44))),
+      ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c, 44), bldNow === b.c)),
       s.wonder ? item(s.wonder, '<span class="wonderico"></span>') : '',
     ].join('')}</div>` : '');
 }
@@ -520,7 +531,8 @@ function drawNow(d) {
     const ids = [...new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id))];
     const opts = ids.map((id) => {
       const mon = g.monuments.find((x) => x.id === id);
-      return `<button class="monopt${ui.monSel === id ? ' on' : ''}" data-mon="${id}">${sealIcon(mon.c1, mon.c2, 44, monOf(view))}<span>${COLNAME[mon.c1]} и ${COLNAME[mon.c2]}</span></button>`;
+      // крупнее (просьба Дениса 04.11): по мелкой плитке цвета не различить
+      return `<button class="monopt${ui.monSel === id ? ' on' : ''}" data-mon="${id}">${sealIcon(mon.c1, mon.c2, 84, monOf(view))}<span>${COLNAME[mon.c1]} и ${COLNAME[mon.c2]}</span></button>`;
     }).join('');
     const wonder = legal.some((m) => m.type === 'wonder') ? `<button class="monopt${ui.monSel === 'wonder' ? ' on' : ''}" data-mon="wonder"><span class="wonderico"></span><span>чудо</span></button>` : '';
     body = `<p>${ui.monSel == null ? 'Выберите монумент, потом место на поле.' : 'Нажмите подсвеченное место на поле.'}</p><div class="monopts">${opts}${wonder}</div>`;

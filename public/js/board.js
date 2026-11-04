@@ -401,7 +401,16 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   s += trailSVG(opts.trail || [], L.moves);
   s += fxSVG(fx);
 
-  for (const i of opts.targets || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
+  // в выборе места для здания и сокровища цели мигают ярче (просьба Дениса 04.11), у сокровища
+  // еще и светлая рамка вокруг самого кубика
+  const blink = opts.blink ? ' blink' : '';
+  for (const i of opts.targets || []) {
+    s += `<rect class="target${blink}" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="6"/>`;
+    if (opts.blink === 'treasure') {
+      const S = TREASURE_SIZE + 12;
+      s += `<rect class="cube-blink" x="${f1(cx(i) + (C - S) / 2)}" y="${f1(cy(i) + (C - S) / 2)}" width="${S}" height="${S}" rx="5"/>`;
+    }
+  }
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;
   for (const i of opts.crosses || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="22"/>`;
   for (const i of opts.lesson || []) s += `<rect class="lessoncell" x="${cx(i) + 2}" y="${cy(i) + 2}" width="${C - 4}" height="${C - 4}" rx="6"/>`;

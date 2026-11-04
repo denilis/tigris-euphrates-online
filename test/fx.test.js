@@ -89,3 +89,24 @@ test('анимации: рисунок эффектов с отрицатель�
   assert.match(s, /class="fx-flash"/);
   assert.equal((s.match(/fx-gone/g) || []).length, 1);
 });
+
+test('выбор места для здания и сокровища: цели мигают, у сокровища рамка вокруг кубика (04.11)', async () => {
+  const { renderBoard } = await import('../public/js/board.js');
+  const { readFileSync } = await import('node:fs');
+  const find = (o) => {
+    if (!o || typeof o !== 'object') return null;
+    if (Array.isArray(o.river) && o.board && o.players) return o;
+    for (const v of Object.values(o)) { const r = find(v); if (r) return r; }
+    return null;
+  };
+  const g = find(JSON.parse(readFileSync(new URL('../public/lessons/1.json', import.meta.url), 'utf8')));
+  const draw = (opts) => {
+    const dyn = { innerHTML: '' };
+    renderBoard({ dataset: {}, innerHTML: '', setAttribute() {}, querySelector: () => dyn }, g, () => 'pot', opts, 'relief');
+    return dyn.innerHTML;
+  };
+  assert.equal((draw({ targets: [5, 6], blink: 'build' }).match(/class="target blink"/g) || []).length, 2);
+  const t = draw({ targets: [5, 6], blink: 'treasure' });
+  assert.equal((t.match(/class="cube-blink"/g) || []).length, 2);
+  assert.doesNotMatch(draw({ targets: [5] }), /blink/, 'обычные цели не мигают');
+});

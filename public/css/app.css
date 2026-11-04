@@ -733,3 +733,15 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .wlink span{font-size:12.5px;color:var(--muted);line-height:1.35}
 .wfoot{text-align:right;margin-top:8px}
 
+/* подсказка, что выбрать сейчас (04.11): цели здания и сокровища мигают, здание и доступные монументы в запасе тоже */
+.target.blink{animation:targetBlink .9s ease-in-out infinite;stroke-dasharray:none;stroke-width:2.4}
+@keyframes targetBlink{0%,100%{fill:rgba(255,228,150,.12);stroke:rgba(240,200,110,.55)}50%{fill:rgba(255,236,160,.5);stroke:#fff3b0}}
+.cube-blink{fill:none;stroke:#fff6c2;stroke-width:3;pointer-events:none;animation:cubeBlink .8s ease-in-out infinite}
+@keyframes cubeBlink{0%,100%{opacity:.2}50%{opacity:1}}
+.stock .sit.blink{border-radius:10px;animation:sitBlink .9s ease-in-out infinite}
+@keyframes sitBlink{0%,100%{box-shadow:0 0 0 2px rgba(255,224,138,.3)}50%{box-shadow:0 0 0 4px #ffe08a,0 0 18px 5px rgba(255,224,138,.75)}}
+.stock .sit.dim{opacity:.35;filter:grayscale(.6)}
+.monopts{gap:8px}
+.monopt{padding:6px 8px;font-size:12px}
+.monopt .monimg,.monopt svg{width:84px;height:84px}
+@media (prefers-reduced-motion:reduce){.target.blink,.cube-blink,.stock .sit.blink{animation:none}.stock .sit.blink{box-shadow:0 0 0 3px #ffe08a}.cube-blink{opacity:1}}
