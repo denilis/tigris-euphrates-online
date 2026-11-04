@@ -66,6 +66,7 @@ export function renderEnd(box, view, { act, go }) {
     <p class="msub">${g.endReason === 'bag' ? 'В мешке кончились тайлы.' : 'На поле осталось два сокровища.'} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
     ${statsTable(view, list, seat)}
+    ${g.replay ? '<div class="ana" id="eAna"></div>' : ''}
     <div class="mfoot">
       <button class="btn" id="eClose">Посмотреть поле</button>
       ${g.replay ? '<button class="btn" id="eReplay">Просмотр по ходам</button>' : ''}
@@ -80,6 +81,9 @@ export function renderEnd(box, view, { act, go }) {
   box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
   // картинка итога (этап 4, 04.11): модуль грузится по нажатию, поле берется с экрана партии
   box.querySelector('#ePicture').addEventListener('click', async () => (await import('./endshot.js')).openPicture(view, document.querySelector('#board')));
+  // разбор ботом (этап 5, 04.11): готовый с сервера или кнопкой, модуль грузится только здесь
+  const ana = box.querySelector('#eAna');
+  if (ana) import('./analysis.js').then((m) => m.mountAnalysis(ana, view, { go }));
   box.querySelector('#eAgain')?.addEventListener('click', async () => {
     if (view.next) return go(`#/t/${view.next}`);
     const v = await act({ action: 'rematch' });

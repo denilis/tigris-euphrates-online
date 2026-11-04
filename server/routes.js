@@ -17,6 +17,7 @@ import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
 import { telegram, inChat, invited, called, photoButton } from './telegram.js';
 import { parsePhoto, photoCaption } from './photo.js';
+import { cleanAnalysis, humanSeats } from './analysis.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -500,6 +501,35 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   /**
+   * Разбор партии ботом (этап 5, 04.11): запись законченной партии для разбора в браузере
+   * (руки и мешок уже не тайна) и готовый разбор, который сохраняется один раз.
+   */
+  async function recordOf(code) {
+    const { doc } = await load(code);
+    if (doc.status !== 'over' || !doc.game?.result) http(409, 'not-over', 'Разбор открывается после конца партии');
+    if (!doc.game.rec) http(404, 'no-record', 'Партия начата до записи ходов: разобрать ее нельзя');
+    return { rec: doc.game.rec, order: doc.game.order, humans: humanSeats(doc) };
+  }
+
+  async function analysisOf(code) {
+    const { doc } = await load(code);
+    return { analysis: doc.game?.analysis || null, can: doc.status === 'over' && Boolean(doc.game?.rec) };
+  }
+
+  async function saveAnalysis(code, u, body) {
+    const { doc, version } = await load(code);
+    if (doc.status !== 'over' || !doc.game?.rec) http(409, 'not-over', 'Разбор есть только у законченной записанной партии');
+    if (!seatOfUser(doc, u.id) && doc.hostUserId !== u.id) http(403, 'not-seated', 'Сохранить разбор может только игрок этой партии');
+    if (doc.game.analysis) return { analysis: doc.game.analysis, saved: false }; // уже посчитан: первый остается
+    const a = cleanAnalysis(body.analysis, humanSeats(doc));
+    if (!a) http(400, 'bad-analysis', 'Разбор не подошел');
+    doc.game.analysis = a;
+    doc.version = version + 1;
+    if (!(await store.putTable(doc, version, meta(doc)))) http(409, 'stale', 'Стол изменился, попробуйте еще раз');
+    return { analysis: a, saved: true };
+  }
+
+  /**
    * Просмотр партии по ходам (этап 3, 04.11): кадры из записи партии, только для законченной партии,
    * только открытое (поле, очки, журнал). Партии, начатые до записи ходов, просмотра не имеют.
    */
@@ -513,7 +543,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return {
       code: doc.code, title: doc.title || null, options: { ...doc.options }, order: doc.game.order,
       seats: doc.seats.map((x) => ({ id: x.id, kind: x.kind, name: x.name, hero: x.hero, avatar: x.avatar || null })),
-      river: cells(s.river), special: cells(s.special), monDefs: s.monuments.map(({ id, c1, c2 }) => ({ id, c1, c2 })), result: doc.game.result, ...data,
+      river: cells(s.river), special: cells(s.special), monDefs: s.monuments.map(({ id, c1, c2 }) => ({ id, c1, c2 })), result: doc.game.result,
+      analysis: doc.game.analysis || null, ...data,
     };
   }
 
@@ -709,6 +740,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
       if (op === 'replay' && method === 'GET') return replayOf(code);
       if (op === 'photo' && method === 'POST') return sendPhoto(code, u, body);
+      if (op === 'record' && method === 'GET') return recordOf(code);
+      if (op === 'analysis' && method === 'GET') return analysisOf(code);
+      if (op === 'analysis' && method === 'POST') return saveAnalysis(code, u, body);
     }
     http(404, 'no-route', 'Нет такого адреса');
   }

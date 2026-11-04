@@ -14,6 +14,34 @@ const SPEED = { 1: 1400, 2: 700 };
 /** 1 сокровище, 2 сокровища, 5 сокровищ */
 const treasureWord = (n) => (n % 10 === 1 && n % 100 !== 11 ? 'сокровище' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'сокровища' : 'сокровищ');
 
+// подсказка разбора ботом (этап 5, 04.11): на кадре ошибки рамка и стрелка лучшего хода
+const C = 60, G = 24, W = 16; // клетка и поле подписей, как в board.js
+const at = (i) => [G + (i % W) * C, G + Math.floor(i / W) * C];
+
+/** Ошибки разбора на кадре k: [{ seat, loss, best, bestMove }]. */
+export function hintsAt(analysis, k) {
+  if (!analysis || !k) return [];
+  return Object.entries(analysis.players).flatMap(([seat, p]) => p.mistakes.filter((m) => m.k === k).map((m) => ({ seat: +seat, ...m })));
+}
+
+function drawHint(svg, box, hints, name) {
+  box.hidden = !hints.length;
+  box.innerHTML = hints.map((h) => `<b>Разбор: ${esc(name(h.seat))}, потеря ${String(h.loss).replace('.', ',')}</b><div>Бот советовал: ${esc(h.best)}</div>`).join('');
+  const dyn = svg.querySelector('.dyn');
+  let s = '<defs><marker id="hintArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7ee08a"/></marker></defs>';
+  for (const h of hints) {
+    const m = h.bestMove;
+    if (!m || !(m.pos >= 0)) continue;
+    const [x, y] = at(m.pos);
+    s += `<rect class="hint" x="${x + 2}" y="${y + 2}" width="${C - 4}" height="${C - 4}" rx="7" fill="none" stroke="#7ee08a" stroke-width="3.5"/>`;
+    if (m.from >= 0) {
+      const [fx, fy] = at(m.from);
+      s += `<path d="M${fx + C / 2} ${fy + C / 2}L${x + C / 2} ${y + C / 2}" stroke="#1b1309" stroke-width="6" stroke-linecap="round"/><path d="M${fx + C / 2} ${fy + C / 2}L${x + C / 2} ${y + C / 2}" stroke="#7ee08a" stroke-width="3" stroke-linecap="round" marker-end="url(#hintArrow)"/>`;
+    }
+  }
+  dyn.insertAdjacentHTML('beforeend', s);
+}
+
 /** Нарисовать просмотр. start — номер кадра из адреса. */
 export async function renderReplay(app, code, top, bindTop, start = 0) {
   app.innerHTML = `<div class="page">${top}<main class="pcard replay"><p class="muted">Загружаю запись партии...</p></main></div>`;
@@ -56,6 +84,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
       </div>
       <aside class="rside">
         <div class="rtitle" id="rTitle"></div>
+        <div class="rhint" id="rHint" hidden></div>
         <ul class="log rlog" id="rLog"></ul>
         <h3>Очки на этот момент</h3>
         <div id="rScore"></div>
@@ -75,6 +104,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     // след действия: рамки и номер на клетках, как у хода соперника, без вспышки
     const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, hero: seat(m.actor)?.hero })) : [];
     renderBoard(svg, g, heroOf, { trail, monument: data.options.monument }, data.options.look || 'relief');
+    drawHint(svg, $('rHint'), hintsAt(data.analysis, k), name);
     $('rRange').value = k;
     $('rPos').textContent = `${k} / ${N}`;
     $('rTitle').innerHTML = f
