@@ -29,8 +29,14 @@ export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.
  * Лицо игрока для background-image: фото, а под ним жетон героя. Жетон виден, если фото нет
  * или его уже сменили, а за старым столом остался прежний адрес.
  */
+// портреты ботов (картинки Дениса 04.11): свой у каждого общего стиля; у стилей игроков
+// (Денис, Андрей, Влад) пока портрет универсального бота
+const BOT_FACES = ['universal', 'base', 'top', 'mix'];
+export const botFace = (who) => `/img/bots/${BOT_FACES.includes(who?.bot?.style) ? who.bot.style : 'universal'}.webp`;
+
 export function faceBg(who, c = 0) {
   const token = `url(${tokenImg(who?.hero, c)})`;
+  if (who?.kind === 'bot') return `url(${botFace(who)}),${token}`;
   return who?.avatar ? `url(/api/avatar/${who.avatar}),${token}` : token;
 }
 export const cellName = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);

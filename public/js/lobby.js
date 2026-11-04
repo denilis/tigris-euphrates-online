@@ -137,7 +137,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
       return `<button class="hero${on ? ' on' : ''}${taken ? ' taken' : ''}" data-hero="${h}" data-seat="${s.id}" ${editHero && !taken ? '' : 'disabled'} title="${taken ? `занят: ${esc(owner.name || 'бот')}` : HERONAME[h]}"><i style="background-image:url(${tokenImg(h, on ? 0 : 3)})"></i>${HERONAME[h]}</button>`;
     }).join('');
     let who;
-    if (s.kind === 'bot') who = `<b>${esc(s.name || 'Бот')}</b>`;
+    if (s.kind === 'bot') who = `<i class="face" style="background-image:${faceBg(s)}"></i><b>${esc(s.name || 'Бот')}</b>`;
     else if (s.taken) who = `${s.avatar ? `<i class="face" style="background-image:${faceBg(s)}"></i>` : ''}<b>${esc(s.name)}</b>${mine ? ' <small>(вы)</small>' : ''}${here.has(s.id) ? '<span class="here on" title="открыл стол">на месте</span>' : '<span class="here" title="еще не открыл стол">еще не зашел</span>'}${host && !mine ? `<button class="linkbtn" data-unseat="${s.id}">Убрать</button>` : ''}`;
     else {
       const free = `${me == null ? `<button class="btn primary sm" data-sit="${s.id}">Сесть сюда</button>` : ''}${host ? `<button class="btn sm" data-people="${s.id}">Выбрать игрока</button>` : ''}`;

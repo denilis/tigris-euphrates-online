@@ -36,7 +36,8 @@ export async function renderLearn(app, top, bindTop) {
   }
   const done = loadDone(box);
   el.innerHTML = list.map((l) => `<li class="litem">
-    <div><b>${l.id}. ${esc(l.title)}</b>${done.has(l.id) ? ' <span class="ldone">пройден</span>' : ''}<span>${esc(l.goal)}</span><small>${minutes(l.minutes)}, ${l.steps} шагов</small></div>
+    <img class="lcover" src="/img/lessons/${l.id}.webp" width="64" height="64" alt="">
+    <div class="ltext"><b>${l.id}. ${esc(l.title)}</b>${done.has(l.id) ? ' <span class="ldone">пройден</span>' : ''}<span>${esc(l.goal)}</span><small>${minutes(l.minutes)}, ${l.steps} шагов</small></div>
     <div class="lacts"><a class="btn sm" href="#/learn/${l.id}/watch">Смотреть</a><a class="btn sm primary" href="#/learn/${l.id}/play">Играть самому</a></div>
   </li>`).join('');
 }
