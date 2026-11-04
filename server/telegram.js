@@ -1,5 +1,6 @@
 // Приглашения в чат компании через бота Telegram. Другого в чат не пишем (решение Дениса 01.11):
-// ни кто зашел на сайт, ни о начале партии. Отправка не должна мешать игре: say не бросает
+// ни кто зашел на сайт, ни о начале партии. С 04.11 еще картинка итога, только по нажатию игрока
+// (photo, server/photo.js). Отправка не должна мешать игре: say не бросает
 // ошибок и ждет недолго. Пишет только основной сайт, превью и локальный сервер молчат.
 const WAIT_MS = 5000; // первый запрос после простоя у Telegram занимал больше 2,5 с
 const TOKEN = /\d{5,}:[\w-]{30,}/; // номер бота, двоеточие и длинный ключ
@@ -38,8 +39,33 @@ export function telegram(env, { fetchFn = fetch, waitMs = WAIT_MS } = {}) {
     return false;
   }
 
-  return { on, say };
+  /**
+   * Картинка с подписью и кнопкой-ссылкой (итог партии, этап 4 04.11). type — image/jpeg или
+   * image/png, bytes — содержимое. Ждет дольше сообщения: картинка весит сотни килобайт.
+   */
+  async function photo({ bytes, type, caption, button, url }) {
+    if (!on) return false;
+    try {
+      const form = new FormData();
+      form.append('chat_id', chat);
+      form.append('caption', caption);
+      form.append('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: button, url }]] }));
+      form.append('photo', new Blob([bytes], { type }), type === 'image/png' ? 'itog.png' : 'itog.jpg');
+      const r = await fetchFn(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form, signal: AbortSignal.timeout(waitMs * 3) });
+      if (r.ok) return true;
+      const why = await r.json().catch(() => null);
+      console.error('telegram photo', r.status, why?.description || '');
+    } catch (e) {
+      console.error('telegram photo', e.name); // текст ошибки может содержать адрес с токеном
+    }
+    return false;
+  }
+
+  return { on, say, photo };
 }
+
+/** Кнопка к картинке итога: ссылка на стол. */
+export const photoButton = (t) => ({ button: 'Открыть стол', url: tableUrl(t) });
 
 export const invited = (name, t, free) => ({
   text: `${name} зовёт на партию\nСтол ${tableName(t)}, свободно мест: ${free}`,

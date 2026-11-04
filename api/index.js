@@ -13,16 +13,21 @@ function send(res, status, body) {
 
 // Игре хватает сотен байт; больше только мусор или попытка раздуть стол
 const MAX_BODY = 32 * 1024;
+// картинка итога в чат (этап 4, 04.11) весит сотни килобайт: больше можно только этому адресу;
+// сам сервер пропускает до 2,5 МБ картинки (server/photo.js), Vercel принимает до 4,5 МБ
+const MAX_PHOTO_BODY = 3600 * 1024;
+const PHOTO_ROUTE = /^tables\/[A-Za-z0-9]{6}\/photo$/;
+export const bodyLimit = (route) => (PHOTO_ROUTE.test(route) ? MAX_PHOTO_BODY : MAX_BODY);
 class TooBig extends Error {}
 
-async function readBody(req) {
+async function readBody(req, limit) {
   // Vercel сам разбирает JSON в req.body; локальный сервер отдаёт поток
   if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
   const chunks = [];
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > MAX_BODY) throw new TooBig();
+    if (size > limit) throw new TooBig();
     chunks.push(c);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
@@ -61,11 +66,12 @@ export function makeHandler(env, store) {
     let body = {};
     if (req.method === 'POST') {
       const tooBig = () => send(res, 413, { error: 'too-big', message: 'Слишком большой запрос' });
-      if (Number(req.headers['content-length']) > MAX_BODY) return tooBig();
+      const limit = bodyLimit(route);
+      if (Number(req.headers['content-length']) > limit) return tooBig();
       try {
-        body = await readBody(req);
+        body = await readBody(req, limit);
         // платформа может разобрать тело сама и без Content-Length: размер сверяем и после разбора
-        if (JSON.stringify(body).length > MAX_BODY) return tooBig();
+        if (JSON.stringify(body).length > limit) return tooBig();
       } catch (e) {
         return e instanceof TooBig ? tooBig() : send(res, 400, { error: 'bad-json', message: 'Неверный запрос' });
       }

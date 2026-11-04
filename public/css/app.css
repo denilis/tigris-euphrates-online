@@ -704,3 +704,12 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .replay .rsc small{color:var(--muted);flex-basis:100%}
 @media (max-width:900px){.replay .rgrid{grid-template-columns:1fr}}
 .titem [data-replay]{margin-left:6px}
+
+/* ---------- картинка итога (этап 4, 04.11) ---------- */
+.shot{position:fixed;inset:0;z-index:80;background:rgba(10,8,6,.78);display:grid;place-items:center;padding:16px}
+.shotcard{background:var(--card,#231b13);border:1px solid var(--line);border-radius:12px;padding:16px 18px;width:min(1000px,100%);max-height:calc(100vh - 32px);overflow:auto}
+.shotcard h2{margin:0 0 12px}
+.shotimg{background:#14110e;border-radius:8px;min-height:200px;display:grid;place-items:center}
+.shotimg img{display:block;width:100%;height:auto;border-radius:8px}
+.shotcard .mfoot{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.shotcard a.btn[aria-disabled]{opacity:.5;pointer-events:none}

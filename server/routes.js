@@ -15,7 +15,8 @@ import { SEASON, tourGames, publicTour } from './stats.js';
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, inChat, invited, called } from './telegram.js';
+import { telegram, inChat, invited, called, photoButton } from './telegram.js';
+import { parsePhoto, photoCaption } from './photo.js';
 import { ENGINE } from '../game/vendor/version.js';
 
 export class HttpError extends Error {
@@ -45,6 +46,7 @@ const PEOPLE_CACHE_MS = 60 * 1000; // список людей для пульс�
 const INVITE_MS = 10 * 60 * 1000; // приглашение устаревает
 const CHAT_CALL_MS = 3 * 60 * 1000; // повторно позвать в чат с того же стола
 const CHAT_CALLS = 3; // и всего от одного игрока за это время: новые столы не обходят замок стола
+const PHOTO_MS = 60 * 1000; // картинку итога одной партии в чат не чаще раза в минуту
 const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
@@ -461,6 +463,27 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   /**
+   * Картинка итога в чат ДВАК (этап 4, 04.11): только законченная партия, только свои люди
+   * за столом, не чаще раза в минуту на стол. Картинку рисует браузер, здесь проверка и отправка.
+   */
+  async function sendPhoto(code, u, body) {
+    if (!tg.on) http(503, 'no-chat', 'Чат Telegram подключен только на основном сайте');
+    const { doc: t } = await load(code);
+    if (t.status !== 'over' || !t.game?.result) http(409, 'not-over', 'Картинка итога есть только у законченной партии');
+    if (!chatTable(t, u)) http(403, 'not-chat', 'Чат только для Дениса, Андрея и Влада');
+    const pic = parsePhoto(body.image);
+    if (!pic) http(400, 'bad-image', 'Картинка не подошла: нужен jpeg или png до 2,5 МБ');
+    if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) http(429, 'too-many', 'Слишком часто, подождите пару минут');
+    const key = `tg:photo:${t.code}`, token = letterId();
+    if (!(await store.lock(key, token, PHOTO_MS))) http(429, 'too-many', 'Картинку этой партии только что отправили, подождите минуту');
+    if (!(await tg.photo({ ...pic, caption: photoCaption(t, u.name), ...photoButton(t) }))) {
+      await store.unlock(key, token);
+      http(502, 'chat-failed', 'Не удалось отправить в чат, попробуйте позже');
+    }
+    return { ok: true };
+  }
+
+  /**
    * Просмотр партии по ходам (этап 3, 04.11): кадры из записи партии, только для законченной партии,
    * только открытое (поле, очки, журнал). Партии, начатые до записи ходов, просмотра не имеют.
    */
@@ -642,6 +665,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
       if (op === 'replay' && method === 'GET') return replayOf(code);
+      if (op === 'photo' && method === 'POST') return sendPhoto(code, u, body);
     }
     http(404, 'no-route', 'Нет такого адреса');
   }

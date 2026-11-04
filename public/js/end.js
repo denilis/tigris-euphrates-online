@@ -69,6 +69,7 @@ export function renderEnd(box, view, { act, go }) {
     <div class="mfoot">
       <button class="btn" id="eClose">Посмотреть поле</button>
       ${g.replay ? '<button class="btn" id="eReplay">Просмотр по ходам</button>' : ''}
+      <button class="btn" id="ePicture">Картинка итога</button>
       <button class="btn" id="eHome">К столам</button>
       ${view.me != null ? `<button class="btn primary" id="eAgain">${view.next ? 'Перейти к реваншу' : 'Еще партию'}</button>` : ''}
     </div>
@@ -77,6 +78,8 @@ export function renderEnd(box, view, { act, go }) {
   box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
   box.querySelector('#eHome').addEventListener('click', () => go('#/'));
   box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
+  // картинка итога (этап 4, 04.11): модуль грузится по нажатию, поле берется с экрана партии
+  box.querySelector('#ePicture').addEventListener('click', async () => (await import('./endshot.js')).openPicture(view, document.querySelector('#board')));
   box.querySelector('#eAgain')?.addEventListener('click', async () => {
     if (view.next) return go(`#/t/${view.next}`);
     const v = await act({ action: 'rematch' });
