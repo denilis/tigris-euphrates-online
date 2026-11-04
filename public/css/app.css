@@ -781,13 +781,14 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   background:rgba(255,238,205,.16);border:1px solid rgba(80,45,15,.32);box-shadow:inset 0 1px 0 var(--lip),0 2px 4px rgba(60,30,10,.25)}
 .newgame .ngate h2{margin:4px 0 0;font-size:19px}
 .newgame .ngate p{margin:0;line-height:1.45}
-/* арка: пологий верх, рамка из синего глазурованного кирпича с золотой каймой; временная, пока нет картин Дениса */
-.newgame .ngart{position:relative;aspect-ratio:4/3;display:grid;place-items:center;overflow:hidden}
-.newgame .ngart.tmp{border:9px solid transparent;border-radius:50% 50% 8px 8px / 24% 24% 8px 8px;
+/* арка: пологий верх, рамка из синего глазурованного кирпича с золотой каймой, внутри сцена Дениса */
+.newgame .ngart{position:relative;aspect-ratio:4/3;overflow:hidden;border:9px solid transparent;border-radius:50% 50% 8px 8px / 24% 24% 8px 8px;
   background:radial-gradient(circle at 50% 42%,#6b4a29,#2a1c10 78%) padding-box,repeating-linear-gradient(90deg,#24589a 0 13px,#173c6c 13px 15px) border-box;
   box-shadow:0 0 0 2px #c9a24d,inset 0 0 0 2px #e0b65a,0 3px 6px rgba(45,22,6,.45)}
-.newgame .ngart img{width:62%;height:auto;filter:drop-shadow(0 4px 6px rgba(0,0,0,.55))}
-.newgame .ngart .ngface{width:52%;aspect-ratio:1;border-radius:50%;background:center/cover;box-shadow:0 0 0 3px #e0b65a,0 4px 10px rgba(0,0,0,.6)}
+.newgame .ngart .scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% var(--sy,45%)}
+/* на узком экране арка полосой: у людей и ботов кадр выше, чтобы головы не срезало */
+.newgame .ngart .scene.people,.newgame .ngart .scene.bots{--sy:18%}
+.newgame .ngart .scene.code{--sy:60%}
 .newgame .ngfaces{display:flex;gap:8px}
 .newgame .ngfaces .face{width:40px;height:40px;box-shadow:0 0 0 2px rgba(122,74,30,.55),0 2px 4px rgba(45,22,6,.35)}
 .newgame .ngact{margin-top:auto;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding-top:6px}
@@ -802,8 +803,6 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @media (max-width:900px){
   .newgame .ngates{grid-template-columns:1fr}
   .newgame .ngart{aspect-ratio:auto;height:130px}
-  .newgame .ngart img{width:auto;height:84%}
-  .newgame .ngart .ngface{width:auto;height:78%}
 }
 
 /* журнал удалений (04.11) */

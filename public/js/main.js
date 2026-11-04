@@ -146,18 +146,15 @@ const STATUS = { lobby: 'собирается', playing: 'идет партия'
 /**
  * «Начать игру» (просьба Дениса 04.11: отдельной кнопкой, а «Мои столы» только список): стол с людьми,
  * которые сейчас на сайте, стол с ботами или стол по коду из приглашения. Вид «Три ворот» (схема
- * одобрена Денисом 04.11): глиняная табличка, как главная, три арки. Пока картины арок не нарисованы,
- * в арке временная картинка: иконка главной или портрет бота.
+ * одобрена Денисом 04.11): глиняная табличка, как главная, три арки со сценами (картины Дениса 04.11:
+ * нарисованы вытянутыми арками, на сайт взята середина сцены кадром 4:3, рамку рисует CSS).
  */
-const GATE_ART = {
-  people: '<img src="/img/icons/tables.webp" alt="">',
-  bots: `<i class="ngface" style="background-image:url(${botFace({ kind: 'bot', bot: { style: 'universal' } })})"></i>`,
-  code: '<img src="/img/icons/codes.webp" alt="">',
-};
-const GATE_BOTS = [['universal', 'Универсальный'], ['base', 'Базовый'], ['top', 'Топ-мастера']];
+const GATE_ART = ['people', 'bots', 'code'];
+// под текстом «С ботами» лица ботов в стиле игроков (просьба Дениса 04.11)
+const GATE_BOTS = [['andrey', 'Бот в стиле Андрея'], ['vlad', 'Бот в стиле Влада'], ['denis', 'Бот в стиле Дениса']];
 
 function renderNew() {
-  const art = (k) => `<div class="ngart tmp" aria-hidden="true">${GATE_ART[k]}</div>`;
+  const art = (k) => `<div class="ngart" aria-hidden="true"><img class="scene ${k}" src="/img/newgame/${GATE_ART.includes(k) ? k : 'people'}.webp" alt=""></div>`;
   app.innerHTML = `<div class="page">${topbar('new')}<div class="lobby"><div class="lcard clay newgame">
     <div class="band top" aria-hidden="true"></div>
     <h1>Начать игру</h1>
