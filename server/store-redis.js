@@ -129,6 +129,15 @@ export function redisStore({ exec, prefix = '' }) {
       await exec(['EVAL', UNLOCK, 1, k(`lock:${code}`), token]);
     },
 
+    /** Журнал удалений столов: новые сверху, не больше max записей, хранится бессрочно. */
+    async logTable(entry, max) {
+      await exec(['LPUSH', k('tlog'), JSON.stringify(entry)]);
+      await exec(['LTRIM', k('tlog'), 0, max - 1]);
+    },
+    async tableLog(max) {
+      return (await exec(['LRANGE', k('tlog'), 0, max - 1])).map((x) => JSON.parse(x));
+    },
+
     async delTable(code) {
       await exec(['DEL', k(`t:${code}`), k(`v:${code}`), k(`m:${code}`), k(`lock:${code}`)]);
     },

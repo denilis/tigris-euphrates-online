@@ -65,6 +65,14 @@ export function memoryStore() {
       if (alive(`lock:${code}`) === token) kv.delete(`lock:${code}`);
     },
 
+    /** Журнал удалений столов: новые сверху, не больше max записей. */
+    async logTable(entry, max) {
+      lists.set('tlog', [JSON.stringify(entry), ...(lists.get('tlog') || [])].slice(0, max));
+    },
+    async tableLog(max) {
+      return (lists.get('tlog') || []).slice(0, max).map((x) => JSON.parse(x));
+    },
+
     async delTable(code) {
       for (const p of ['t', 'v', 'm', 'lock']) kv.delete(`${p}:${code}`);
     },

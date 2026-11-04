@@ -1,6 +1,6 @@
 // Удаление столов. Свой стол с ботами игрок удаляет сам в любой момент, даже сыгранный (04.11).
-// Стол с другими людьми удаляет только администратор, пока партия не началась или если ее
-// завершили досрочно: законченная партия людей хранится для статистики.
+// Стол с другими людьми удаляет только администратор, кроме идущей партии; итог сыгранной
+// остается в статистике. С 04.11 удаление мягкое: каждое пишется в журнал, стол можно вернуть.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server/routes.js';
@@ -125,6 +125,10 @@ test('кнопка «Удалить» в «Моих столах»: сервер
   assert.deepEqual(await flags(P.denis), { [lobby.code]: true, [played.code]: false }, 'администратор: стол с людьми, пока партия не началась');
   await played.post(P.denis, { action: 'close' });
   assert.equal((await flags(P.denis))[played.code], true, 'завершенную досрочно можно');
+  const done = await started(s, P);
+  await finish(store, done.code);
+  assert.equal((await flags(P.denis))[done.code], true, 'сыгранную с людьми администратор тоже может (04.11)');
+  assert.equal((await flags(P['Андрей']))[done.code], false);
 });
 
 test('удаление: нет такого стола', async () => {
@@ -160,18 +164,20 @@ test('удаление: завершенную досрочно можно (ре
   assert.equal((await s.req('GET', `tables/${code}`, { token: P.denis.token })).status, 404);
 });
 
-test('удаление: законченную партию нельзя', async () => {
+test('удаление: сыгранную партию с людьми удаляет только администратор, итог остается в статистике (04.11)', async () => {
   const store = memoryStore();
   const s = setup(store);
   const P = await company(s, 'Андрей');
-  const { code, del } = await started(s, P);
-  const cur = await store.getTable(code);
-  cur.doc.status = 'over';
-  cur.doc.game.result = { finishedAt: Date.now(), seats: [] };
-  cur.doc.version += 1;
-  assert.equal(await store.putTable(cur.doc, cur.version, ''), true);
-  assert.equal((await del(P.denis)).status, 409);
-  assert.equal((await store.getTable(code)).doc.status, 'over');
+  const { code } = await started(s, P);
+  await finish(store, code); // итог еще не записан в историю: удаление запишет его само
+  assert.equal((await mydel(s, P['Андрей'], code)).status, 403);
+  assert.equal((await mydel(s, P.denis, code)).status, 200);
+  const [e] = await store.listHistory();
+  assert.equal(e.code, null, 'строка статистики больше не ведет на стол');
+  assert.equal(e.seats.length, 2);
+  assert.equal((await s.req('POST', `tables/${code}/restore`, { token: P.denis.token })).status, 200);
+  assert.equal((await store.listHistory())[0].code, code, 'стол вернули: ссылка тоже');
+  assert.equal((await s.req('GET', `tables/${code}`, { token: P['Андрей'].token })).body.status, 'over');
 });
 
 test('удаление: партию начали в тот же момент, удаление не проходит', async () => {
@@ -222,16 +228,71 @@ test('удаление: сбой после отметки не показыва
   const { code, post, del } = await table(s, P.denis);
   t.mock.method(console, 'error', () => {});
   const late = await store.getTable(code); // запрос, который прочитал стол до удаления
-  const remove = store.delTable;
-  store.delTable = async () => { throw new Error('нет связи'); };
+  const drop = store.dropMyTable;
+  store.dropMyTable = async () => { throw new Error('нет связи'); };
   assert.equal((await del(P.denis)).status, 500);
-  store.delTable = remove;
+  store.dropMyTable = drop;
   late.doc.version += 1;
   assert.equal(await store.putTable(late.doc, late.version, ''), false, 'запоздавшая запись не вернет стол');
   assert.equal((await s.req('GET', `tables/${code}`, { token: P.denis.token })).status, 404);
   assert.equal((await post(P.denis, { action: 'hero', seat: 0, hero: 'lion' })).status, 404);
   assert.deepEqual(await mine(s, P.denis), []);
   assert.equal((await del(P.denis)).status, 404);
+  assert.equal((await s.req('POST', `tables/${code}/restore`, { token: P.denis.token })).status, 200, 'вернуть можно и после сбоя');
+});
+
+for (const [kind, make] of [['память', () => memoryStore()], ['Upstash', () => redisStore({ exec: fakeUpstash().exec, prefix: 'production:' })]]) {
+  test(`журнал удалений, ${kind}: кто, когда, какой стол; вернуть можно последнее удаление`, async () => {
+    const store = make();
+    const s = setup(store);
+    const P = await company(s, 'Андрей', 'Влад');
+    const bots = await botTable(s, P['Андрей']);
+    const lobby = await table(s, P.denis);
+    await lobby.post(P['Влад'], { action: 'sit', seat: 1 });
+    assert.equal((await mydel(s, P['Андрей'], bots)).status, 200);
+    assert.equal((await mydel(s, P.denis, lobby.code)).status, 200);
+    const log = (who) => s.req('GET', 'deletions', { token: who.token }).then((r) => r.body);
+    const all = await log(P.denis);
+    assert.deepEqual(all.map((e) => [e.kind, e.code, e.byName, e.from, e.canRestore]), [
+      ['delete', lobby.code, 'Денис', 'lobby', true],
+      ['delete', bots, 'Андрей', 'playing', true],
+    ]);
+    assert.deepEqual(all[1].seats, ['Андрей', 'Бот универсальный', 'Бот универсальный 2', 'Бот универсальный 3']);
+    assert.ok(all[0].at > 0);
+    assert.deepEqual((await log(P['Андрей'])).map((e) => e.code), [bots], 'игрок видит только свои удаления');
+    assert.deepEqual(await log(P['Влад']), []);
+    // вернуть: Влад не может ни свой, ни чужой стол; Андрей свой может
+    assert.equal((await s.req('POST', `tables/${bots}/restore`, { token: P['Влад'].token })).status, 403);
+    assert.equal((await s.req('POST', `tables/${lobby.code}/restore`, { token: P['Андрей'].token })).status, 403);
+    const back = await s.req('POST', `tables/${bots}/restore`, { token: P['Андрей'].token });
+    assert.equal(back.status, 200);
+    assert.equal(back.body.status, 'playing');
+    assert.deepEqual(await mine(s, P['Андрей']), [bots], 'стол снова в «Моих столах»');
+    assert.equal((await s.req('GET', `tables/${bots}/poll`, { token: P['Андрей'].token })).status, 200);
+    assert.equal((await s.req('POST', `tables/${bots}/restore`, { token: P['Андрей'].token })).status, 409, 'повторно нельзя');
+    const after = await log(P.denis);
+    assert.deepEqual(after.map((e) => [e.kind, e.code, e.byName, e.canRestore]), [
+      ['restore', bots, 'Андрей', false],
+      ['delete', lobby.code, 'Денис', true],
+      ['delete', bots, 'Андрей', false],
+    ]);
+    // администратор возвращает чужое; Влад снова видит стол у себя
+    assert.equal((await s.req('POST', `tables/${lobby.code}/restore`, { token: P.denis.token })).status, 200);
+    assert.ok((await mine(s, P['Влад'])).includes(lobby.code));
+    assert.equal((await lobby.post(P['Влад'], { action: 'hero', seat: 1, hero: 'bull' })).status, 200, 'стол живой');
+  });
+}
+
+test('журнал удалений: без входа нельзя, лишнего адреса нет', async () => {
+  const s = setup();
+  const P = await company(s);
+  const code = await botTable(s, P.denis);
+  assert.equal((await s.req('GET', 'deletions')).status, 401);
+  assert.equal((await s.req('POST', `tables/${code}/restore`)).status, 401);
+  assert.equal((await s.req('POST', `tables/${code}/restore`, { token: P.denis.token })).status, 409, 'стол не удален');
+  assert.equal((await s.req('POST', 'tables/NOSUCH/restore', { token: P.denis.token })).status, 404);
+  assert.equal((await s.req('GET', `tables/${code}/restore`, { token: P.denis.token })).status, 404);
+  assert.equal((await s.req('GET', 'deletions/x', { token: P.denis.token })).status, 404);
 });
 
 test('открытые столы: все игроки, только где партия не начиналась', async () => {

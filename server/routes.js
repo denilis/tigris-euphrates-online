@@ -58,6 +58,8 @@ const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
 const due = (m, at) => m === 'bot' || (m[0] === 'c' && at >= Number(m.slice(1)));
+const DELETED = 'deleted'; // отметка удаленного стола для опроса: он отвечает «нет такого стола»
+const TABLE_LOG_MAX = 300; // журнал удалений хранит последние записи
 const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const letterId = () => randomBytes(6).toString('hex');
@@ -438,24 +440,79 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const mine = t.hostUserId === u.id || Boolean(seatOfUser(t, u.id));
     if (mine && t.seats.every((s) => s.kind !== 'human' || !s.userId || s.userId === u.id)) return null;
     if (!u.admin) return [403, 'not-admin', 'Стол с другими игроками может удалить только администратор'];
-    if (t.status !== 'lobby' && t.status !== 'closed') return [409, 'not-lobby', 'Стол с другими игроками можно удалить, пока партия не началась или если ее завершили досрочно'];
+    // сыгранную партию с людьми администратор тоже удаляет (Денис 04.11): в статистике она остается
+    if (t.status === 'playing') return [409, 'not-lobby', 'Идущую партию с другими игроками удалить нельзя: сначала завершите ее досрочно'];
     return null;
   }
 
+  /** Запись журнала удалений: кто, когда, какой стол и в каком состоянии он был. */
+  const logEntry = (kind, t, u, from) => ({
+    kind, code: t.code, title: t.title || null, from, at: now(), by: u.id, byName: u.name,
+    seats: t.seats.map((s) => s.name || (s.kind === 'bot' ? 'Бот' : null)).filter(Boolean),
+  });
+
   /**
-   * Удалить стол. Сначала запись по версии: если партию начали в этот же момент, а за столом
-   * люди, удаление не пройдет. Сбой после нее оставит стол скрытым до срока хранения.
+   * Удалить стол (с 04.11 мягко: стол прячется, но остается в базе, и его можно вернуть).
+   * Сначала запись по версии: если партию начали в этот же момент, а за столом люди, удаление
+   * не пройдет. Сбой после нее оставит стол скрытым, вернуть его можно и тогда. Удаленный стол
+   * хранится 90 дней после удаления, как любой незаконченный. У сыгранной партии итог остается
+   * в истории и статистике, только строка статистики больше не ведет на стол.
    */
   async function deleteTable(code, u) {
     const { doc: t, version } = await load(code);
     const no = deleteRight(t, u);
     if (no) http(...no);
+    const from = t.status;
+    if (from === 'over' && !t.game.historySaved) {
+      const e = historyEntry(t); // итог не должен пропасть вместе со столом
+      await store.addHistory(e);
+      await store.setCompanyLast(e);
+      t.game.historySaved = true;
+    }
+    t.deleted = { from, at: now(), by: u.id, byName: u.name };
     t.status = 'deleted';
     t.version = version + 1;
-    if (!(await store.putTable(t, version, ''))) http(409, 'stale', 'Стол уже изменился, обновите');
-    await store.delTable(code);
+    if (!(await store.putTable(t, version, DELETED))) http(409, 'stale', 'Стол уже изменился, обновите');
+    if (from === 'over' && t.game?.id) await store.patchHistory(t.game.id, { code: null });
     await Promise.all((await store.listUsers()).map((x) => store.dropMyTable(x.id, code)));
+    await store.logTable(logEntry('delete', t, u, from), TABLE_LOG_MAX);
     return { ok: true };
+  }
+
+  /** Вернуть удаленный стол: администратор любой, игрок тот, что удалил сам. */
+  async function restoreTable(code, u) {
+    const cur = await store.getTable(code);
+    if (!cur) http(404, 'no-table', 'Стола больше нет: удаленное хранится 90 дней');
+    const { doc: t, version } = cur;
+    if (t.status !== 'deleted' || !t.deleted) http(409, 'not-deleted', 'Стол не удален');
+    if (!u.admin && t.deleted.by !== u.id) http(403, 'not-admin', 'Вернуть стол может администратор или тот, кто его удалил');
+    const from = t.deleted.from;
+    t.status = from;
+    delete t.deleted;
+    t.version = version + 1;
+    if (!(await store.putTable(t, version, meta(t)))) http(409, 'stale', 'Стол уже изменился, обновите');
+    if (from === 'over' && t.game?.id) await store.patchHistory(t.game.id, { code });
+    const back = new Set([t.hostUserId, ...t.seats.filter((s) => s.kind === 'human' && s.userId).map((s) => s.userId)]);
+    for (const id of back) if (id) await store.addMyTable(id, code);
+    await store.logTable(logEntry('restore', t, u, from), TABLE_LOG_MAX);
+    return { ok: true, status: from };
+  }
+
+  /**
+   * Журнал удалений, новые сверху: администратору все записи, игроку его собственные. У записи
+   * удаления canRestore, если стол еще лежит удаленным и его можно вернуть.
+   */
+  async function deletions(u) {
+    const all = (await store.tableLog(TABLE_LOG_MAX)).filter((e) => u.admin || e.by === u.id);
+    const codes = [...new Set(all.filter((e) => e.kind === 'delete').map((e) => e.code))];
+    const docs = await store.getTables(codes);
+    const hidden = new Set(docs.filter((d) => d?.status === 'deleted').map((d) => d.code));
+    const seen = new Set();
+    return all.map((e) => {
+      const last = !seen.has(e.code); // только последнее удаление стола можно отменить
+      seen.add(e.code);
+      return { ...e, canRestore: e.kind === 'delete' && last && hidden.has(e.code) && (u.admin || e.by === u.id) };
+    });
   }
 
   async function adminTables(method, rest, u) {
@@ -716,7 +773,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (head === 'tables' && rest.length === 2 && rest[1] === 'poll' && method === 'GET') {
       const who = await auth(token, { light: true });
       const p = await store.poll(rest[0]);
-      if (!p) http(404, 'no-table', 'Нет такого стола');
+      if (!p || p.meta === DELETED) http(404, 'no-table', 'Нет такого стола');
       const out = { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
       // в лобби: кто на месте за столом, и отметка смотрящего
       if (query.here) {
@@ -743,6 +800,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     }
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
     if (head === 'admin' && rest[0] === 'tables') return adminTables(method, rest.slice(1), u);
+    if (method === 'GET' && head === 'deletions' && !rest.length) return deletions(u);
     if (head === 'tables') {
       if (!rest.length && method === 'POST') return newTable(u);
       if (!rest.length && method === 'GET') return myTables(u);
@@ -756,6 +814,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
       if (op === 'replay' && method === 'GET') return replayOf(code);
       if (op === 'delete' && method === 'POST' && rest.length === 2) return deleteTable(code, u);
+      if (op === 'restore' && method === 'POST' && rest.length === 2) return restoreTable(code, u);
       if (op === 'photo' && method === 'POST') return sendPhoto(code, u, body);
       if (op === 'record' && method === 'GET') return recordOf(code);
       if (op === 'analysis' && method === 'GET') return analysisOf(code);

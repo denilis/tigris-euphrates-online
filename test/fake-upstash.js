@@ -35,6 +35,8 @@ export function fakeUpstash() {
       case 'SADD': { const s = sets.get(a[0]) || new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
       case 'SMEMBERS': return [...(sets.get(a[0]) || [])];
       case 'LRANGE': return (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1);
+      case 'LPUSH': { lists.set(a[0], [a[1], ...(lists.get(a[0]) || [])]); return lists.get(a[0]).length; }
+      case 'LTRIM': { lists.set(a[0], (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1)); return 'OK'; }
       case 'LREM': {
         const l = lists.get(a[0]) || [];
         lists.set(a[0], l.filter((x) => x !== a[2]));
