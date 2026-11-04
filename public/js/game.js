@@ -627,7 +627,7 @@ function drawHand(d) {
   if (g.paused) hint = 'Партия на паузе. Рука видна, но не нажимается.';
   else if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
   else if (warActive(view)) hint = 'Идет конфликт: решите в его окне.';
-  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: выберите тайлы и подтвердите на панели.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
+  else if (g.phase === 'action') hint = ui.discard ? 'Сброс: нажмите тайлы в руке, которые сбрасываете, и подтвердите кнопкой рядом.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
   else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие на панели.';
   else hint = 'Решите на панели.';
   if (ctl.lesson) hint = ctl.lesson.hint;
@@ -640,6 +640,7 @@ function drawHand(d) {
       <div class="acts">
         ${stop}
         ${acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : ''}
+        ${acting && ui.discard ? `<button class="btn primary" data-now="discardYes" ${ui.discard.size ? '' : 'disabled'}>${ui.discard.size ? `Сбросить ${ui.discard.size}` : 'Выберите тайлы'}</button><button class="btn" data-now="cancel">Отмена</button>` : ''}
         ${acting && has('pass') ? '<button class="btn" data-hand="pass">Пас</button>' : ''}
       </div>
     </div>`;
@@ -664,6 +665,8 @@ function drawHand(d) {
     ui.sel = ui.sel?.kind === 'cat' ? null : { kind: 'cat' };
     draw();
   }));
+  // сброс подтверждается там же, внизу, где его начали (просьба Дениса 04.11); на панели справа те же кнопки
+  el.querySelectorAll('[data-now]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.now)));
   el.querySelectorAll('[data-hand]').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.hand === 'discard') Object.assign(ui, { discard: new Set(), sel: null });
     else Object.assign(ui, { confirmPass: true, sel: null });
