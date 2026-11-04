@@ -64,7 +64,9 @@ const cleanWin = (places, place) => place === 1 && places.filter((p) => p === 1)
  * Все партии игрока для личной статистики (просьба Дениса 04.11): партии сайта, где он сидел
  * человеком (с ботами и с людьми, в турнирах и вне), и партии BGA сезона (по имени). От старых
  * к новым. Партия: { date, at, source, kind: 'bga' | 'people' | 'bots', group, table, code,
- * place, win, score, seats: [{ name, kind, place, score }], d }; d: подробности игрока или null.
+ * place, win, score, seats: [{ name, kind, place, score, self, d }], d }; d: подробности игрока или null.
+ * У мест подробности каждого: по ним вкладка сравнивает игрока с соперниками (Денис 04.11), self
+ * отмечает его собственное место.
  */
 export function playerGames(player, history, tours) {
   const out = [];
@@ -74,7 +76,7 @@ export function playerGames(player, history, tours) {
       out.push({
         date, at: Date.parse(date), source: 'bga', kind: 'bga', group: `${SEASON.name} (BGA)`, table: String(table), code: null,
         place: place[bi], win: cleanWin(place, place[bi]), score: score[bi],
-        seats: SEASON_PLAYERS.map((name, i) => ({ name, kind: 'human', place: place[i], score: score[i] })),
+        seats: SEASON_PLAYERS.map((name, i) => ({ name, kind: 'human', place: place[i], score: score[i], self: i === bi, d: BGA_DETAILS[table]?.[i] ?? null })),
         d: BGA_DETAILS[table]?.[bi] ?? null,
       });
     }
@@ -90,7 +92,7 @@ export function playerGames(player, history, tours) {
     out.push({
       date: isoDay(e.finishedAt), at: e.finishedAt, source: 'site', kind, group, table: e.title || '', code: e.code || null,
       place: me.place, win: cleanWin(places, me.place), score: me.vector?.[0] ?? 0,
-      seats: e.seats.map((s) => ({ name: s.name, kind: s.kind, place: s.place, score: s.vector?.[0] ?? 0 })),
+      seats: e.seats.map((s) => ({ name: s.name, kind: s.kind, place: s.place, score: s.vector?.[0] ?? 0, self: s === me, d: s.d ?? null })),
       d: me.d ?? null,
     });
   }

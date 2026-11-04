@@ -34,6 +34,17 @@ test('партии игрока: BGA по имени, с ботами, сезо�
   assert.ok(g.every((x, i) => i === 0 || g[i - 1].at <= x.at), 'от старых к новым');
 });
 
+test('партии игрока: у каждого места подробности и отметка своего места', () => {
+  const g = playerGames({ id: 'u-Денис', name: 'Денис' }, HISTORY, [SEASON]);
+  const site = g.filter((x) => x.source === 'site');
+  assert.deepEqual(site[1].seats.map((s) => [s.name, s.self]), [['Денис', true], ['Влад', false], ['Андрей', false]]);
+  assert.deepEqual(site[0].seats[0].d.src, { tile: 20 }, 'свои подробности и на месте');
+  assert.equal(site[0].seats[1].d, null, 'у бота без подробностей null');
+  const bga = g.filter((x) => x.source === 'bga');
+  assert.ok(bga.every((x) => x.seats.filter((s) => s.self).length === 1 && x.seats.find((s) => s.self).name === 'Денис'));
+  assert.ok(bga.some((x) => x.seats.every((s) => s.d)), 'у партий BGA с логами подробности всех трех');
+});
+
 test('партии игрока: без BGA, если имени нет в сезоне; чужие партии не попадают', () => {
   const g = playerGames({ id: 'u-Соня', name: 'Соня' }, HISTORY, [SEASON]);
   assert.deepEqual(g.map((x) => x.table), ['02.11.2026.3']);
@@ -106,4 +117,49 @@ test('личная: откуда очки вместе с сокровищами
   const r = extraRecords(G);
   assert.equal(r.war.v, 9);
   assert.equal(r.mon.v, 3);
+});
+
+// --- сравнение с соперниками (схема одобрена Денисом 04.11)
+import { vsRivals, perRival } from '../public/js/personal.js';
+
+const me = (place, score, d) => ({ name: 'Денис', kind: 'human', place, score, self: true, d });
+const rv = (name, place, score, d, kind = 'human') => ({ name, kind, place, score, self: false, d });
+const Dm1 = D([15, 16, 17, 18], { tile: 8 }, { mon: 2 }), Dm2 = D([10, 11, 12, 13], { tile: 4 }, { mon: 1 });
+const Dv1 = D([12, 12, 12, 12], { tile: 6 }), Da1 = D([9, 9, 9, 9], { tile: 3 }), Dv2 = D([14, 14, 14, 14], { tile: 9 }, { mon: 0, war: [0, 2, 0, 0] });
+const RG = [
+  { kind: 'bga', place: 1, score: 15, d: Dm1, seats: [me(1, 15, Dm1), rv('Влад', 2, 12, Dv1), rv('Андрей', 3, 9, Da1)] },
+  { kind: 'people', place: 2, score: 10, d: Dm2, seats: [me(2, 10, Dm2), rv('влад ', 1, 14, Dv2), rv('Андрей', 3, 8, null)] },
+  { kind: 'bots', place: 1, score: 12, d: null, seats: [me(1, 12, null), rv('Бот универсальный 2', 2, 7, null, 'bot'), rv('Бот универсальный 3', 3, 6, null, 'bot')] },
+];
+
+test('вы и соперники: за партию против среднего соперника в тех же партиях', () => {
+  const r = vsRivals(RG);
+  assert.equal(r.games, 2, 'партия без своих подробностей не считается');
+  assert.equal(r.seats, 3, 'соперник без подробностей не считается');
+  const by = Object.fromEntries(r.rows.map((x) => [x.key, x]));
+  assert.equal(by.score.me, 12.5);
+  assert.equal(Math.round(by.score.opp * 1000), 11667);
+  assert.equal(by.mon.me, 1.5);
+  assert.equal(Math.round(by.mon.opp * 1000), 667);
+  assert.deepEqual([by.war.me, by.war.won, by.war.fought], [50, 2, 4]);
+  assert.equal(Math.round(by.war.opp * 10), 333, 'у соперников 2 победы из 6 боев');
+  assert.equal(by.tile.me, 6);
+  assert.equal(by.tile.opp, 6);
+  assert.equal(by.cat.good, 0, 'катастрофы без оценки');
+  assert.equal(by.mon.good, 1);
+  assert.deepEqual(vsRivals([]), { games: 0, seats: 0, rows: [] });
+});
+
+test('против каждого соперника: места, счет, монументы и войны; боты одной строкой в конце', () => {
+  const rows = perRival(RG);
+  assert.deepEqual(rows.map((r) => [r.name, r.games, r.meets, r.above, r.below]), [
+    ['Влад', 2, 2, 1, 1], ['Андрей', 2, 2, 2, 0], ['Боты (все)', 1, 2, 2, 0],
+  ]);
+  const [v, a, b] = rows;
+  assert.deepEqual([v.myScore, v.hisScore], [12.5, 13]);
+  assert.deepEqual([v.myMon, v.hisMon], [1.5, 0.5]);
+  assert.deepEqual([v.myWar, v.hisWar], [50, 25], 'Влад: 1 победа из 4 боев');
+  assert.deepEqual([a.myMon, a.hisMon, a.dGames], [2, 1, 1], 'только партия, где подробности у обоих');
+  assert.deepEqual([b.myScore, b.hisScore, b.myMon, b.bot], [12, 6.5, null, true]);
+  assert.deepEqual(perRival([]), []);
 });

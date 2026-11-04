@@ -911,3 +911,15 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 @media (max-width:900px){.mban{height:80px}}
 /* в уроке сверху своя панель, полоса там лишняя */
 .app.lesson .mban{display:none}
+/* личная статистика: вы и соперники, против каждого соперника (схема Дениса 04.11) */
+.personal .pvs{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px;margin-top:6px}
+.personal .pvs th{text-align:right;font-size:11px;letter-spacing:.06em;font-weight:600;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line)}
+.personal .pvs td{text-align:right;padding:6px 10px;border-bottom:1px solid #3a2e22;white-space:nowrap}
+.personal .pvs th:first-child,.personal .pvs td:first-child{text-align:left;white-space:normal}
+.personal .pvs td small{color:var(--muted);font-size:12px}
+.personal .pvs td.up{color:#8fc77a;font-weight:600}
+.personal .pvs td.down{color:#e08a6a;font-weight:600}
+.personal .prv td b{color:var(--gold);font-weight:600}
+.personal .prv td small{color:var(--muted)}
+.personal #pRivalsBox .tw{margin-top:6px}
+@media (max-width:560px){.personal .pvs{font-size:13px}.personal .pvs th,.personal .pvs td{padding:6px 5px}.personal .pvs td small{display:block}}

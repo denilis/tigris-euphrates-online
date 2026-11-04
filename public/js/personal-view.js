@@ -3,7 +3,7 @@
 // вкладкой «Турниры».
 import { api, session } from './api.js';
 import { esc, toast, HEX, COLNAME, SCORE_ORDER } from './util.js';
-import { statsTabs, KINDS, pick, summary, byGroup, details, pointSources, weakest, monthly, extraRecords, one } from './personal.js';
+import { statsTabs, KINDS, pick, summary, byGroup, details, pointSources, weakest, monthly, extraRecords, one, vsRivals, perRival } from './personal.js';
 import { dashCards, colorsChart, recordsList, tableLink, shortDate, COLS, MUTED } from './stats.js';
 
 const SRC_COLOR = { tile: '#d6bd88', building: '#a88a55', monument: '#e0b65a', war: '#c0563c', revolt: '#8a7ac0', tr: '#7fb3b8' };
@@ -58,6 +58,57 @@ function fightsHTML(p) {
   }).join('');
 }
 
+/** Разница «вы минус соперник» строкой и оценкой: up лучше, down хуже, '' без оценки. */
+function diffOf(r) {
+  if (r.me == null || r.opp == null) return { text: '', cls: '' };
+  let d, text;
+  if (r.kind === 'pct') {
+    d = Math.round(r.me) - Math.round(r.opp);
+    text = `${d > 0 ? '+' : ''}${d} п.п.`;
+  } else if (r.kind === 'per' && r.opp > 0) {
+    d = Math.round((r.me / r.opp - 1) * 100);
+    text = `${d > 0 ? '+' : ''}${d}%`;
+  } else {
+    d = (Math.round(r.me * 10) - Math.round(r.opp * 10)) / 10; // по тем же округленным числам, что видны в таблице
+    text = `${d > 0 ? '+' : ''}${one(d)}`;
+  }
+  return { text, cls: !r.good || !d ? '' : d > 0 ? 'up' : 'down' };
+}
+
+/** «Вы и соперники»: за партию против среднего соперника в тех же партиях. */
+function vsHTML(vs) {
+  const val = (r, v) => (v == null ? '-' : r.kind === 'pct' ? `${Math.round(v)}%` : one(v));
+  const rows = vs.rows.filter((r) => r.kind === 'pct' || r.me || r.opp).map((r) => {
+    const d = diffOf(r);
+    const extra = r.kind === 'pct' && r.fought ? ` <small>(${r.won} из ${r.fought})</small>` : '';
+    return `<tr><td>${r.label}</td><td>${val(r, r.me)}${extra}</td><td>${val(r, r.opp)}</td><td class="${d.cls}">${d.text}</td></tr>`;
+  }).join('');
+  return `<p class="muted small">По ${vs.games} партиям, где есть подробности у вас и у соперников. Средний соперник: все соперники этих партий вместе, за партию на одного. Войны и восстания: доля выигранных боев.</p>
+    <table class="pvs"><thead><tr><th></th><th>Вы, за партию</th><th>Средний соперник</th><th>Разница</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/** «Против каждого соперника»: больше из пары выделено. */
+function rivalsHTML(list) {
+  if (!list.length) return '<p class="muted">Соперников за этот период нет.</p>';
+  // больше из пары выделяется по видимым, уже округленным числам: при 15,1 / 15,1 выделения нет
+  const pair = (a, b, f, r) => {
+    if (a == null || b == null) return '-';
+    const x = r(a), y = r(b);
+    return `${x > y ? `<b>${f(a)}</b>` : f(a)} / ${y > x ? `<b>${f(b)}</b>` : f(b)}`;
+  };
+  const pct = (v) => `${Math.round(v)}%`, r1 = (v) => Math.round(v * 10);
+  const rows = list.map((r) => `<tr>
+    <td>${esc(r.name)}</td><td>${r.games}${r.meets > r.games ? ` <small>(${r.meets} встреч)</small>` : ''}</td>
+    <td>${r.above > r.below ? `<b>${r.above}</b>` : r.above}</td><td>${r.below > r.above ? `<b>${r.below}</b>` : r.below}</td>
+    <td>${pair(r.myScore, r.hisScore, one, r1)}</td><td>${pair(r.myMon, r.hisMon, one, r1)}</td><td>${pair(r.myWar, r.hisWar, pct, Math.round)}</td>
+  </tr>`).join('');
+  const bots = list.some((r) => r.bot) ? ' У ботов «выше» и «ниже» считаются против каждого бота за столом, их счет средний по всем ботам.' : '';
+  return `<div class="tw"><table class="games prv">
+    <thead><tr><th>Соперник</th><th>Партий</th><th>Вы выше</th><th>Он выше</th><th>Счет: вы / он</th><th>Монументы за партию: вы / он</th><th>Войны выиграно: вы / он</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <p class="muted small">Счет по всем общим партиям, монументы и войны по партиям, где подробности есть у обоих.${bots}</p>`;
+}
+
 function colorsCell(d) {
   if (!d?.c) return '';
   // класс pcl, не pc: pc занят карточкой игрока в партии (отступы и сетка раздували колонку)
@@ -93,6 +144,7 @@ export async function renderPersonal(app, top, bindTop) {
     <section class="dash" id="pDash" hidden>
       <h2>Подробности партий</h2>
       <p class="muted small" id="pNote"></p>
+      <section class="panel dwide" id="pVsBox"><h2>Вы и соперники</h2><div id="pVs"></div></section>
       <div class="dcards" id="pCards" style="--n:1"></div>
       <section class="panel dwide"><h2>Откуда очки</h2><div id="pSrc"></div></section>
       <div class="charts">
@@ -105,6 +157,7 @@ export async function renderPersonal(app, top, bindTop) {
           <div class="legend"><span><i style="background:${COLS[0]}"></i>выиграно</span><span><i style="background:#5a4c3c"></i>проиграно</span></div></section>
       </div>
     </section>
+    <section class="panel dwide" id="pRivalsBox"><h2>Против каждого соперника</h2><div id="pRivals"></div></section>
     <section class="panel dwide" id="pDyn"><h2>Динамика по месяцам</h2>
       <svg id="pMonths" viewBox="0 0 660 230" role="img" aria-label="Средний счет и доля побед по месяцам"></svg>
       <div class="legend"><span>столбик: средний счет; под ним: партий | доля побед</span></div></section>
@@ -133,13 +186,19 @@ export async function renderPersonal(app, top, bindTop) {
     if (d.count) {
       const miss = d.total - d.count;
       $('pNote').textContent = `По ${d.count} из ${d.total} партий${miss ? `: у ${miss} нет подробностей (старые партии сайта или BGA без логов)` : ''}.`;
-      $('pCards').innerHTML = dashCards([name], [data.player.avatar], d);
+      // есть с кем сравнить: таблица «Вы и соперники» вместо голых сумм (схема Дениса 04.11)
+      const vs = vsRivals(list);
+      $('pVsBox').hidden = !vs.games;
+      $('pVs').innerHTML = vs.games ? vsHTML(vs) : '';
+      $('pCards').hidden = Boolean(vs.games);
+      $('pCards').innerHTML = vs.games ? '' : dashCards([name], [data.player.avatar], d);
       $('pSrc').innerHTML = sourcesHTML(pointSources(list));
       $('pColors').innerHTML = colorsChart([name], d);
       $('pFights').innerHTML = fightsHTML(d.players[0]);
       const wk = weakest(list), most = wk.n.indexOf(Math.max(...wk.n));
       $('pWeak').innerHTML = wk.games ? `Слабейшим цветом (он решает итог) чаще всего был <b style="color:${most === 3 ? '#cfc6b4' : HEX[most]}">${COLNAME[most]}</b>: в ${wk.n[most]} из ${wk.games} партий. ${SCORE_ORDER.map((c) => `${COLNAME[c]} ${wk.n[c]}`).join(', ')}.` : '';
     }
+    $('pRivals').innerHTML = rivalsHTML(perRival(list));
     const months = monthly(list);
     $('pDyn').hidden = !months.length;
     $('pMonths').innerHTML = monthsChart(months);
