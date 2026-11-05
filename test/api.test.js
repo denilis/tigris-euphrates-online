@@ -94,9 +94,10 @@ test('админ выдаёт и отзывает коды; игрок заво�
   const ok = await req('POST', 'admin/users', { body: { name: 'Икс' }, token: P.andrey.token });
   assert.equal(ok.status, 200);
   assert.equal(ok.body.user.admin, false);
+  // 05.11: игрок видит и себя, отмеченным self
   const own = (await req('GET', 'admin/users', { token: P.andrey.token })).body;
-  assert.deepEqual(own.map((u) => [u.name, u.invitedBy]), [['Икс', 'Андрей']]);
-  assert.equal((await req('GET', 'admin/users', { token: P.vlad.token })).body.length, 0, 'чужих не видно');
+  assert.deepEqual(own.map((u) => [u.name, u.invitedBy, u.self]).sort(), [['Андрей', 'Денис', true], ['Икс', 'Андрей', false]]);
+  assert.deepEqual((await req('GET', 'admin/users', { token: P.vlad.token })).body.map((u) => u.name), ['Влад'], 'чужих не видно, себя видно');
   assert.equal((await req('POST', `admin/users/${ok.body.user.id}/revoke`, { token: P.andrey.token })).status, 403, 'отзыв только у администратора');
   assert.equal((await req('POST', `admin/users/${ok.body.user.id}/code`, { token: P.vlad.token })).status, 403, 'новый код только своему');
   assert.equal((await req('POST', `admin/users/${ok.body.user.id}/code`, { token: P.andrey.token })).status, 200, 'своему можно');
@@ -111,6 +112,21 @@ test('админ выдаёт и отзывает коды; игрок заво�
   const again = await req('POST', 'activate', { body: { code: nc } });
   assert.equal(again.status, 200);
   assert.equal(again.body.user.id, P.andrey.user.id, 'тот же игрок с новым кодом');
+});
+
+test('коды игроков: число партий сайта и последняя партия у каждого, старые записи по имени (05.11)', async () => {
+  const { req, store } = setup();
+  const P = await people(req);
+  const seat = (userId, name, kind = 'human') => ({ userId, name, kind, place: 1, vector: [5] });
+  await store.addHistory({ id: 'h1', code: 'AAAAAA', finishedAt: 1000, seats: [seat(P.denis.user.id, 'Денис'), seat(P.andrey.user.id, 'Андрей'), seat(null, 'Бот', 'bot')] });
+  await store.addHistory({ id: 'h2', code: 'BBBBBB', finishedAt: 3000, seats: [seat(P.denis.user.id, 'Денис'), seat(null, 'Бот', 'bot')] });
+  await store.addHistory({ id: 'h3', code: 'CCCCCC', finishedAt: 2000, seats: [seat(undefined, ' андрей '), seat(null, 'Бот', 'bot')] }); // старая запись без userId
+  const list = (await req('GET', 'admin/users', { token: P.denis.token })).body;
+  const by = Object.fromEntries(list.map((u) => [u.name, [u.games, u.lastGameAt]]));
+  assert.deepEqual(by['Денис'], [2, 3000]);
+  assert.deepEqual(by['Андрей'], [2, 2000]);
+  assert.deepEqual(by['Влад'], [0, null]);
+  assert.ok(list.every((u) => typeof u.createdAt === 'number' || u.createdAt === null));
 });
 
 test('действие с именем из прототипа не выполняется: 400 вместо 500 и холостых записей', async () => {

@@ -16,6 +16,8 @@ import { freeSeat, deleteQuestion } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
 import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
+import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText } from './admin-list.js';
+import { openBotGuide } from './bots-info.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -169,7 +171,7 @@ function renderNew() {
         <h2>С ботами</h2>
         <p class="muted">Вы и три бота. Число мест, силу ботов и правила можно поменять в лобби.</p>
         <div class="ngfaces">${GATE_BOTS.map(([s, t]) => `<i class="face" title="${t}" style="background-image:url(${botFace({ kind: 'bot', bot: { style: s } })})"></i>`).join('')}</div>
-        <div class="ngact mid"><button class="seal" id="newBots">Стол с ботами</button></div>
+        <div class="ngact mid"><button class="seal" id="newBots">Стол с ботами</button><button class="linkbtn" id="botGuide" type="button">Какого бота выбрать?</button></div>
       </section>
       <section class="ngate">${art('code')}
         <h2>По коду</h2>
@@ -205,6 +207,7 @@ function renderNew() {
     }
   };
   app.querySelector('#newEmpty').addEventListener('click', (e) => make(e.currentTarget));
+  app.querySelector('#botGuide').addEventListener('click', () => openBotGuide('universal'));
   app.querySelector('#newBots').addEventListener('click', (e) => make(e.currentTarget, async (code) => {
     for (const seat of [1, 2]) await api('POST', `tables/${code}`, { action: 'seatKind', seat, kind: 'bot' });
   }));
@@ -338,10 +341,23 @@ async function renderAdmin() {
     <h1>Коды игроков</h1>
     <p class="muted">${admin
       ? 'Каждому игроку свой код. Код показывается один раз: сразу отправьте его игроку. Отозванный код перестает работать на всех устройствах.'
-      : 'Пригласите нового игрока: впишите его имя, и он получит свой код для входа. Код показывается один раз: сразу отправьте его игроку. Ниже те, кого вы пригласили.'} Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
+      : 'Пригласите нового игрока: впишите его имя, и он получит свой код для входа. Код показывается один раз: сразу отправьте его игроку. Ниже вы и те, кого вы пригласили.'} Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
     <form id="newUser" class="join"><input id="newName" placeholder="Имя нового игрока" maxlength="30" aria-label="Имя нового игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
     <div id="newCode"></div>
-    <div id="users" class="tables"></div>
+    <h2 id="uHead">Игроки</h2>
+    <div class="uctl">
+      <input id="uq" type="search" placeholder="Поиск по имени" aria-label="Поиск по имени" autocomplete="off">
+      <label>Сортировка <select id="usort">${USER_SORTS.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
+      <label id="ubyBox" hidden>Пригласил <select id="uby"></select></label>
+      <label class="chk" id="urevBox" hidden><input type="checkbox" id="urev"> Показывать отозванных (<span id="urevN">0</span>)</label>
+    </div>
+    <div class="ulistw"><table class="ulist"><thead><tr>
+      <th><button class="linkbtn" data-usort="name" type="button">Имя</button></th>${admin ? '<th>Пригласил</th>' : ''}
+      <th><button class="linkbtn" data-usort="created" type="button">Добавлен</button></th>
+      <th><button class="linkbtn" data-usort="games" type="button">Партий</button></th>
+      <th><button class="linkbtn" data-usort="last" type="button">Последняя</button></th>
+      <th>Код</th><th></th>
+    </tr></thead><tbody id="users"></tbody></table></div>
     ${admin ? `<h2>Открытые столы всех игроков</h2>
     <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока.</p>
     <div id="openTables" class="tables"></div>
@@ -354,38 +370,80 @@ async function renderAdmin() {
     app.querySelector('#newCode').innerHTML = `<div class="codebox"><span>Код для ${esc(name)}:</span><code>${esc(code)}</code><button class="btn sm" id="cpCode">Скопировать</button></div>`;
     app.querySelector('#cpCode').addEventListener('click', () => copy(code));
   };
-  const load = async () => {
-    const users = await api('GET', 'admin/users');
-    const iAmMain = users.find((u) => u.id === session.get()?.user?.id)?.main;
-    app.querySelector('#newAdminBox').hidden = !iAmMain;
-    app.querySelector('#users').innerHTML = users.length ? users.map((u) => {
-      const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
-      const may = !u.main && (iAmMain || !u.admin);
-      const by = admin && u.invitedBy ? `<span class="muted">пригласил: ${esc(u.invitedBy)}</span>` : '';
-      return `<div class="titem static">
-        <b>${esc(u.name)}</b><span>${u.main ? 'главный' : u.revoked ? 'код отозван' : 'код действует'}</span>${flag}${by}
-        ${may ? `<span class="acts"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}</span>` : ''}
-      </div>`;
-    }).join('') : `<p class="muted">${admin ? 'Игроков пока нет.' : 'Вы пока никого не пригласили.'}</p>`;
-    app.querySelectorAll('[data-admin]').forEach((b) => b.addEventListener('change', async () => {
-      await api('POST', `admin/users/${b.dataset.admin}/admin`, { admin: b.checked }).catch((e) => toast(e.message));
-      load();
-    }));
-    app.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', async () => {
-      if (!confirm('Отозвать код? Игрок выйдет на всех устройствах.')) return;
-      await api('POST', `admin/users/${b.dataset.revoke}/revoke`).catch((e) => toast(e.message));
-      load();
-    }));
-    app.querySelectorAll('[data-new]').forEach((b) => b.addEventListener('click', async () => {
-      const code = prompt(`Новый код для ${b.dataset.name}. Оставьте пустым, и код будет случайным. Старый перестанет работать.`, '');
-      if (code === null) return;
-      try {
-        const r = await api('POST', `admin/users/${b.dataset.new}/code`, { code });
-        showCode(b.dataset.name, r.code);
-        load();
-      } catch (e) { toast(e.message); }
-    }));
+  // список (Денис 05.11): поиск, сортировка, отозванные по желанию, у администратора отбор по пригласившему
+  const $ = (id) => app.querySelector(id);
+  const st = { q: '', sort: 'created', dir: defaultDir('created'), revoked: false, by: '' };
+  let users = [], iAmMain = false;
+  const row = (u) => {
+    const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
+    const may = !u.self && !u.main && (iAmMain || !u.admin);
+    return `<tr class="${u.self ? 'me' : ''}${u.revoked ? ' off' : ''}">
+      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
+      <td data-l="Добавлен">${dateText(u.createdAt)}</td>
+      <td data-l="Партий">${u.games}</td>
+      <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
+      <td data-l="Код"><span>${u.main ? 'главный' : u.revoked ? 'отозван' : 'действует'}</span>${flag}</td>
+      <td class="uacts">${may ? `<button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}` : ''}</td>
+    </tr>`;
   };
+  const draw = () => {
+    const list = pickUsers(users, st);
+    const off = users.filter((u) => u.revoked && !u.self).length;
+    $('#uHead').textContent = `${admin ? 'Все игроки' : 'Игроки'} (${users.length})`;
+    $('#urevBox').hidden = !off;
+    $('#urevN').textContent = off;
+    $('#usort').value = st.sort;
+    app.querySelectorAll('[data-usort]').forEach((b) => b.classList.toggle('on', b.dataset.usort === st.sort));
+    $('#users').innerHTML = list.length ? list.map(row).join('')
+      : `<tr><td colspan="${admin ? 7 : 6}" class="muted">${users.length > 1 || st.q ? 'Никого не нашлось.' : admin ? 'Игроков пока нет.' : 'Вы пока никого не пригласили.'}</td></tr>`;
+  };
+  const load = async () => {
+    users = await api('GET', 'admin/users');
+    iAmMain = Boolean(users.find((u) => u.self)?.main);
+    $('#newAdminBox').hidden = !iAmMain;
+    if (admin) {
+      const by = inviters(users);
+      if (st.by && !by.includes(st.by)) st.by = '';
+      $('#ubyBox').hidden = by.length < 2;
+      $('#uby').innerHTML = `<option value="">Все</option>${by.map((n) => `<option ${n === st.by ? 'selected' : ''}>${esc(n)}</option>`).join('')}`;
+    }
+    draw();
+  };
+  $('#uq').addEventListener('input', (e) => { st.q = e.target.value; draw(); });
+  $('#usort').addEventListener('change', (e) => { st.sort = e.target.value; st.dir = defaultDir(st.sort); draw(); });
+  $('#uby').addEventListener('change', (e) => { st.by = e.target.value; draw(); });
+  $('#urev').addEventListener('change', (e) => { st.revoked = e.target.checked; draw(); });
+  app.querySelectorAll('[data-usort]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.usort;
+    st.dir = st.sort === k ? -st.dir : defaultDir(k);
+    st.sort = k;
+    draw();
+  }));
+  const box = $('#users');
+  box.addEventListener('change', async (e) => {
+    const b = e.target.closest('[data-admin]');
+    if (!b) return;
+    await api('POST', `admin/users/${b.dataset.admin}/admin`, { admin: b.checked }).catch((ex) => toast(ex.message));
+    load();
+  });
+  box.addEventListener('click', async (e) => {
+    const r = e.target.closest('[data-revoke]');
+    if (r) {
+      if (!confirm('Отозвать код? Игрок выйдет на всех устройствах.')) return;
+      await api('POST', `admin/users/${r.dataset.revoke}/revoke`).catch((ex) => toast(ex.message));
+      load();
+      return;
+    }
+    const b = e.target.closest('[data-new]');
+    if (!b) return;
+    const code = prompt(`Новый код для ${b.dataset.name}. Оставьте пустым, и код будет случайным. Старый перестанет работать.`, '');
+    if (code === null) return;
+    try {
+      const res = await api('POST', `admin/users/${b.dataset.new}/code`, { code });
+      showCode(b.dataset.name, res.code);
+      load();
+    } catch (ex) { toast(ex.message); }
+  });
   const loadTables = async () => {
     const list = await api('GET', 'admin/tables');
     const box = app.querySelector('#openTables');
@@ -406,7 +464,6 @@ async function renderAdmin() {
   if (admin) reloadTables();
   app.querySelector('#newUser').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const $ = (id) => app.querySelector(id);
     const name = $('#newName').value.trim();
     if (!name) return;
     try {

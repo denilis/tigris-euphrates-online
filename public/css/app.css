@@ -1005,3 +1005,62 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 /* здание в окошке лежит поверх тайла, как на поле */
 .pfield .ptile .bover{position:absolute;inset:0}
 .pfield .ptile img{border-radius:5px;filter:drop-shadow(0 1.6px 1.4px rgba(0,0,0,.55))}
+/* коды игроков (05.11): поиск, сортировка, таблица; на телефоне строки карточками */
+.uctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:4px 0 10px;color:var(--muted);font-size:14px}
+.uctl input[type=search]{flex:1 1 220px;max-width:340px}
+.uctl select{margin-left:4px}
+.ulistw{overflow-x:auto;background:var(--card);border-radius:10px}
+.ulist{width:100%;border-collapse:collapse;font-size:14px}
+.ulist th{text-align:left;font-size:11px;letter-spacing:.06em;font-weight:600;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ulist th .linkbtn{padding:0;font-size:11px;letter-spacing:.06em;font-weight:600;color:var(--muted);text-decoration:none}
+.ulist th .linkbtn:hover,.ulist th .linkbtn.on{color:var(--gold)}
+.ulist td{padding:7px 12px;border-bottom:1px solid #3a2e22;vertical-align:middle}
+.ulist td b{color:var(--gold)}
+.ulist td:first-child{white-space:nowrap}
+.ulist td .chk{display:block;font-size:12px;color:var(--muted)}
+.ulist tr.me td{background:rgba(214,170,90,.07)}
+.ulist tr.off td{color:var(--muted)}
+.ulist .uacts{text-align:right;white-space:nowrap}
+.ulist .uacts .btn+.btn{margin-left:6px}
+@media (max-width:700px){
+  .ulist thead{display:none}
+  .ulist tr{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;padding:10px 12px;border-bottom:1px solid #3a2e22}
+  .ulist td{display:block;padding:0;border:0}
+  .ulist td[data-l]::before{content:attr(data-l) ": ";color:var(--muted);font-size:12px}
+  .ulist td[data-l="Имя"]{grid-column:1/-1;font-size:15px}
+  .ulist td[data-l="Имя"]::before{content:none}
+  .ulist .uacts{grid-column:1/-1;text-align:left;margin-top:6px}
+}
+/* карточки ботов «Какого бота выбрать» (05.11) */
+.botnote{flex-basis:100%;margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.botnote .linkbtn{font-size:12.5px;padding:0 4px}
+.lcard.clay .botnote{color:var(--ink2)}
+.newgame .ngact.mid{flex-direction:column}
+.bgwrap{position:fixed;inset:0;z-index:60;background:rgba(10,7,4,.66);display:grid;place-items:start center;overflow:auto;padding:4vh 12px}
+.bguide{background:var(--card);border:1px solid var(--gold2);border-radius:14px;max-width:780px;width:100%;padding:16px 20px 18px;color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.bguide h2{margin:0;color:var(--gold)}
+.bguide h3{margin:16px 0 8px}
+.bguide p{line-height:1.5}
+.bgtop{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.btabs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.btabs button{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:3px 12px 3px 3px;font-size:13px;cursor:pointer}
+.btabs button:hover{color:var(--text)}
+.btabs button.on{border-color:var(--gold);color:var(--gold)}
+.btabs .face{width:28px;height:28px}
+.bcard{background:var(--card2);border-radius:12px;padding:14px 16px}
+.bcard .bhead{display:flex;gap:14px;align-items:center}
+.bcard .bhead .face{width:76px;height:76px;box-shadow:0 0 0 2px var(--gold2)}
+.bcard .bhead h3{margin:0;color:var(--gold)}
+.bcard .bhead small{color:var(--muted)}
+.bcard .bhead p{margin:4px 0 0}
+.bcard p{margin:8px 0}
+.btraits{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 22px;margin:12px 0 4px}
+.btraits div{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);cursor:help}
+.bdots{display:inline-flex;gap:3px}
+.bdots i{width:10px;height:10px;border-radius:50%;background:var(--bg);border:1px solid var(--line)}
+.bdots i.on{background:var(--gold);border-color:var(--gold)}
+.bsteps{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.bstep{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.bstep b{color:var(--gold)}
+.bstep small{color:var(--muted);line-height:1.4}
+.bstep .btn{align-self:flex-start;margin-top:auto;min-height:34px}

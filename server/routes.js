@@ -148,15 +148,21 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   /**
    * Коды игроков. Роли (просьба Дениса 04.11): администратор как раньше; подтвержденный игрок
-   * (любой с действующим кодом) заводит новых игроков, видит тех, кого пригласил сам, и может выдать
-   * им новый код. Отзыв кода и права администратора только у администраторов.
+   * (любой с действующим кодом) заводит новых игроков, видит себя и тех, кого пригласил сам (05.11),
+   * и может выдать им новый код. Отзыв кода и права администратора только у администраторов.
+   * У каждого число партий сайта и время последней (для сортировки, Денис 05.11).
    */
   async function adminUsers(method, rest, body, u) {
     if (method === 'GET' && !rest.length) {
       const all = await store.listUsers();
       const names = new Map(all.map((x) => [x.id, x.name]));
-      const list = u.admin ? all : all.filter((x) => x.invitedBy === u.id);
-      return list.map((x) => ({ ...publicUser(x), revoked: Boolean(x.revoked), createdAt: x.createdAt, invitedBy: x.invitedBy ? names.get(x.invitedBy) || null : null }));
+      const list = u.admin ? all : all.filter((x) => x.invitedBy === u.id || x.id === u.id);
+      const played = gamesOf(all, await store.listHistory());
+      return list.map((x) => ({
+        ...publicUser(x), self: x.id === u.id, revoked: Boolean(x.revoked), createdAt: x.createdAt ?? null,
+        invitedBy: x.invitedBy ? names.get(x.invitedBy) || null : null,
+        games: played.get(x.id)?.n || 0, lastGameAt: played.get(x.id)?.last ?? null,
+      }));
     }
     if (method === 'POST' && !rest.length) {
       const name = String(body.name || '').trim();
@@ -202,6 +208,26 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true };
     }
     http(404, 'no-route', 'Нет такого адреса');
+  }
+
+  /**
+   * Партии сайта по игрокам: id -> { n, last }. Место человека узнается по userId, у старых записей
+   * без него по имени, как в личной статистике.
+   */
+  function gamesOf(users, history) {
+    const byName = new Map(users.map((x) => [x.name.trim().toLowerCase(), x.id]));
+    const out = new Map();
+    for (const e of history) {
+      const ids = new Set(e.seats.filter((s) => s.kind === 'human').map((s) => s.userId || byName.get(String(s.name || '').trim().toLowerCase())));
+      for (const id of ids) {
+        if (!id) continue;
+        const r = out.get(id) || { n: 0, last: null };
+        r.n++;
+        if (e.finishedAt && (r.last === null || e.finishedAt > r.last)) r.last = e.finishedAt;
+        out.set(id, r);
+      }
+    }
+    return out;
   }
 
   // --- фото игрока
