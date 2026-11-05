@@ -170,12 +170,15 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
         <label>Риск <input type="range" min="0" max="100" step="5" value="${b.risk}" data-bot="risk" data-seat="${s.id}" ${dis}> <b>${b.risk}</b></label>
         <label>Ошибки <input type="range" min="0" max="30" step="1" value="${b.errors}" data-bot="errors" data-seat="${s.id}" ${dis}> <b>${b.errors}%</b></label>
         ${host ? `<button class="btn sm" data-max="${s.id}">Максимум</button>` : ''}
-        <p class="botnote">${esc(botShort(b.style))} <button class="linkbtn" data-botinfo="${s.id}" type="button">Подробнее о ботах и силе</button></p>
+        <p class="botnote">${esc(botShort(b.style))}</p>
       </div>` : '';
+    // досье бота (Денис 05.11, схема одобрена): кнопка справа от героев, вместо ссылки под настройками
+    const doss = s.kind === 'bot' ? `<div class="doss"><button class="btn sm" data-botinfo="${s.id}" type="button">Досье бота</button></div>` : '';
     return `<div class="seat">
       <div class="num">Место ${i + 1}<small>${s.kind === 'bot' ? 'бот' : mine && host ? 'вы, хозяин стола' : mine ? 'вы' : s.taken ? 'игрок' : 'ждет игрока'}</small>${move}</div>
       <div class="who">${who}${kindSwitch}${mine ? '<button class="linkbtn" data-leave="1">Встать</button>' : ''}</div>
       <div class="heroes">${heroes}</div>
+      ${doss}
       ${botset}
     </div>`;
   }).join('');
@@ -269,11 +272,15 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
   on('[data-bot]', 'change', (el) => act({ action: 'bot', seat: +el.dataset.seat, settings: { [el.dataset.bot]: el.type === 'range' ? +el.value : el.value } }));
   on('[data-bot][type=range]', 'input', (el) => { el.nextElementSibling.textContent = el.value + (el.dataset.bot === 'errors' ? '%' : ''); });
   on('[data-max]', 'click', (el) => act({ action: 'bot', seat: +el.dataset.max, settings: { strength: 100, errors: 0, counting: 'exact' } }));
-  // карточки ботов (05.11): хозяин из окна ставит стиль или ступень силы этому боту
+  // досье бота (05.11): сводка по этому боту, ниже выбор; хозяин из окна ставит стиль или ступень силы
   on('[data-botinfo]', 'click', (el) => {
     const seat = +el.dataset.botinfo;
     const s = view.seats.find((x) => x.id === seat);
-    openBotGuide(s?.bot?.style || 'universal', { onPick: host ? (settings) => act({ action: 'bot', seat, settings }) : null });
+    if (!s?.bot) return;
+    openBotGuide(s.bot.style || 'universal', {
+      onPick: host ? (settings) => act({ action: 'bot', seat, settings }) : null,
+      bot: { name: s.name || 'Бот', face: faceBg(s), settings: s.bot },
+    });
   });
   on('input[name=ord]', 'change', (el) => act({ action: 'options', options: { order: el.value } }));
   on('[data-board]', 'click', (el) => act({ action: 'options', options: { board: el.dataset.board } }));

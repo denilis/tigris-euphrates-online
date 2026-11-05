@@ -85,6 +85,31 @@ export function stepChance(set) {
   return `Против бота по умолчанию выигрывает ${LADDER.chance[i][BASE_IDX]}% партий один на один.`;
 }
 
+const riskText = (r) => (r > 50 ? 'чаще нападает' : r < 50 ? 'бережет лидеров' : 'как по умолчанию');
+
+/** Ступень силы для настроек: ступень турнира при точном совпадении, иначе ближайшая по силе из карточек. */
+export function stepOf(set) {
+  const i = ladderIdx(set);
+  if (i >= 0) return { title: LADDER.levels[i].title, exact: true };
+  const d = (g) => Math.abs(g.set.strength - set.strength);
+  return { title: STRENGTH_GUIDE.reduce((a, g) => (d(g) < d(a) ? g : a)).title, exact: false };
+}
+
+/** Досье бота за столом (Денис 05.11, схема одобрена): стиль, настройки простыми словами, ступень силы. */
+export function dossierHTML({ face, settings: s }) {
+  const style = BOT_INFO[s.style] ? s.style : 'universal';
+  const st = stepOf(s);
+  const step = st.exact
+    ? `Ступень силы «${esc(st.title)}». ${esc(stepChance(s))}`
+    : `Ближе всего к ступени «${esc(st.title)}». Точных шансов для такой настройки нет: турнир ботов играл только ступени из списка ниже.`;
+  return `<div class="bdoss">
+    <i class="face" style="background-image:${face}"></i>
+    <div><p><b>Стиль ${esc(STYLES[style])}.</b> ${esc(BOT_INFO[style].short)}</p>
+      <p>Сила ${s.strength}, ошибки ${s.errors}%, подсчет тайлов: ${COUNT_TEXT[s.counting] || COUNT_TEXT.none}, риск ${s.risk} (${riskText(s.risk)}).</p>
+      <p class="bchance">${step}</p></div>
+  </div>`;
+}
+
 /** Таблица шансов один на один: строка против столбца. */
 function ladderTable() {
   const L = LADDER.levels;
@@ -112,11 +137,13 @@ function cardHTML(style, canPick) {
   </div>`;
 }
 
-/** Разметка окна: вкладки стилей, карточка выбранного, ступени силы. */
-export function guideHTML(style = 'universal', { canPick = false } = {}) {
+/** Разметка окна: досье бота за столом (если bot), вкладки стилей, карточка выбранного, ступени силы. */
+export function guideHTML(style = 'universal', { canPick = false, bot = null } = {}) {
   const cur = BOT_INFO[style] ? style : 'universal';
-  return `<div class="bguide" role="dialog" aria-modal="true" aria-label="Какого бота выбрать">
-    <div class="bgtop"><h2>Какого бота выбрать</h2><button class="btn sm" data-bgclose type="button">Закрыть</button></div>
+  const title = bot ? `Досье: ${bot.name}` : 'Какого бота выбрать';
+  return `<div class="bguide" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="bgtop"><h2>${esc(title)}</h2><button class="btn sm" data-bgclose type="button">Закрыть</button></div>
+    ${bot ? `${dossierHTML(bot)}<h3>Какого бота выбрать</h3>` : ''}
     <p class="muted">Стили отличаются характером, а не силой: считают все одинаково глубоко. Силу задают ползунки «Сила» и «Ошибки» в настройках бота. Бот по партиям игрока похож на него выбором ходов, но не копия.</p>
     <div class="btabs">${Object.keys(BOT_INFO).map((k) => `<button class="${k === cur ? 'on' : ''}" data-bgstyle="${k}" type="button"><i class="face" style="background-image:url(/img/bots/${k}.webp)"></i>${esc(STYLES[k])}</button>`).join('')}</div>
     <div id="bgCard">${cardHTML(cur, canPick)}</div>
@@ -129,15 +156,16 @@ export function guideHTML(style = 'universal', { canPick = false } = {}) {
 
 /**
  * Открыть окно поверх страницы. onPick(settings) есть у хозяина стола в лобби: кнопки ставят
- * стиль или ступень силы выбранному боту. Закрывается кнопкой, щелчком мимо окна и Esc.
+ * стиль или ступень силы выбранному боту. bot = { name, face, settings }: досье бота за столом.
+ * Закрывается кнопкой, щелчком мимо окна и Esc.
  */
-export function openBotGuide(style, { onPick = null } = {}) {
+export function openBotGuide(style, { onPick = null, bot = null } = {}) {
   closeBotGuide();
   const wrap = document.createElement('div');
   wrap.className = 'bgwrap';
   wrap.id = 'botGuide';
   let cur = style;
-  const draw = () => { wrap.innerHTML = guideHTML(cur, { canPick: Boolean(onPick) }); };
+  const draw = () => { wrap.innerHTML = guideHTML(cur, { canPick: Boolean(onPick), bot }); };
   draw();
   const key = (e) => { if (e.key === 'Escape') closeBotGuide(); };
   wrap._key = key;

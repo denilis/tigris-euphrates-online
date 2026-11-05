@@ -2,7 +2,7 @@
 // без длинного тире и многоточия; окно знает все стили сайта и ставит ступени силы.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOT_INFO, TRAITS, STRENGTH_GUIDE, guideHTML, botShort, stepChance } from '../public/js/bots-info.js';
+import { BOT_INFO, TRAITS, STRENGTH_GUIDE, guideHTML, botShort, stepChance, stepOf, dossierHTML } from '../public/js/bots-info.js';
 import { LADDER } from '../public/js/bot-ladder.js';
 import { LEVELS } from '../tools/calibration-levels.mjs';
 import { STYLES } from '../public/js/util.js';
@@ -65,4 +65,25 @@ test('шансы по турниру ботов: те же ступени, ша�
   for (const g of STRENGTH_GUIDE) assert.ok(stepChance(g.set), g.title);
   assert.equal(stepChance({ strength: 33, errors: 1, counting: 'none' }), '', 'чужая настройка без строки');
   assert.match(guideHTML('universal'), /Шансы один на один по турниру ботов/);
+});
+
+test('досье бота: ступень при точном совпадении с шансом, иначе ближайшая по силе без шанса', () => {
+  assert.deepEqual(stepOf({ strength: 50, errors: 5, counting: 'none' }), { title: 'Играю иногда', exact: true });
+  assert.deepEqual(stepOf({ strength: 0, errors: 30, counting: 'none' }), { title: 'Самый слабый', exact: true });
+  assert.deepEqual(stepOf({ strength: 80, errors: 5, counting: 'none' }), { title: 'Уверенный игрок', exact: false });
+  assert.equal(stepOf({ strength: 65, errors: 5, counting: 'none' }).title, 'Играю иногда', 'поровну до 50 и 80: берем слабее');
+  const bot = (set) => ({ name: 'Бот <3>', face: 'url(/img/bots/top.webp)', settings: { style: 'top', risk: 50, ...set } });
+  const exact = dossierHTML(bot({ strength: 100, errors: 0, counting: 'exact', risk: 70 }));
+  assert.match(exact, /Стиль Топ-мастера\./);
+  assert.match(exact, /Сила 100, ошибки 0%, подсчет тайлов: точно, риск 70 \(чаще нападает\)/);
+  assert.match(exact, /Ступень силы «Серьезный бой»\. Против бота по умолчанию выигрывает \d+%/);
+  const near = dossierHTML(bot({ strength: 70, errors: 3, counting: 'approx', risk: 30 }));
+  assert.match(near, /Ближе всего к ступени «Уверенный игрок»\. Точных шансов/);
+  assert.match(near, /риск 30 \(бережет лидеров\)/);
+  const g = guideHTML('top', { bot: bot({ strength: 50, errors: 5, counting: 'none' }) });
+  assert.match(g, /<h2>Досье: Бот &lt;3&gt;<\/h2>/, 'имя экранировано');
+  assert.match(g, /Ступень силы «Играю иногда»\. Это бот по умолчанию\./);
+  assert.match(g, /<h3>Какого бота выбрать<\/h3>/);
+  assert.doesNotMatch(guideHTML('top'), /Досье/, 'без бота окно как раньше');
+  assert.doesNotMatch(exact + near, /[—…]/);
 });

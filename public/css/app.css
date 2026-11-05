@@ -214,7 +214,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .lcard h2{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
 .invite{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border-radius:10px;padding:8px 10px}
 .invite code{flex:1 1 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f3d99a}
-.seat{display:grid;grid-template-columns:110px 220px 1fr;gap:12px;align-items:center;background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.seat{display:grid;grid-template-columns:110px 220px 1fr auto;gap:12px;align-items:center;background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .seat .num{font-weight:600}
 .seat .num small{display:block;color:var(--muted);font-weight:400;font-size:11.5px}
 .seat .mv{display:inline-flex;gap:4px;margin-top:6px}
@@ -237,7 +237,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .hero.on{color:var(--gold);font-weight:600}
 .hero.taken{opacity:.3}
 .hero[disabled]:not(.on):not(.taken){opacity:.6}
-.botset{grid-column:1 / 4;display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.botset{grid-column:1 / -1;display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
 .botset label{display:flex;gap:6px;align-items:center}
 .botset b{color:var(--text);min-width:28px}
 .botset select{background:#1b1713;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
@@ -1033,6 +1033,13 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   .ulist .ubtns{justify-content:flex-start}
   .ulist .ubtns .btn{flex:none}
 }
+/* досье бота (05.11): кнопка справа от героев, сводка сверху окна выбора */
+.seat .doss{justify-self:end}
+.bdoss{display:flex;gap:14px;align-items:flex-start;background:var(--card2);border-radius:12px;padding:12px 16px;margin:12px 0 4px}
+.bdoss .face{flex:none;width:76px;height:76px;box-shadow:0 0 0 2px var(--gold2)}
+.bdoss p{margin:0 0 6px;line-height:1.45}
+.bdoss p:last-child{margin:0}
+.bdoss .bchance{color:#cfe6b8}
 /* карточки ботов «Какого бота выбрать» (05.11) */
 .botnote{flex-basis:100%;margin:2px 0 0;font-size:12.5px;color:var(--muted)}
 .botnote .linkbtn{font-size:12.5px;padding:0 4px}
