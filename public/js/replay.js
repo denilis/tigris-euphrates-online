@@ -8,6 +8,7 @@ import { trailMarks, TRAIL_FRESH_MS } from './trail.js';
 import { logLines, lineHTML } from './logview.js';
 import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle } from './util.js';
 import { framesBoards, timelineMarks } from './replay-core.js';
+import { mountStats } from './replay-stats.js';
 
 const SPEED = { 1: 1400, 2: 700 };
 
@@ -82,17 +83,22 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
         </div>
         <div class="rlegend"><span><i class="war"></i>бой</span><span><i class="mon"></i>монумент</span></div>
       </div>
-      <aside class="rside">
-        <div class="rtitle" id="rTitle"></div>
-        <div class="rhint" id="rHint" hidden></div>
-        <ul class="log rlog" id="rLog"></ul>
-        <h3>Очки на этот момент</h3>
-        <div id="rScore"></div>
-      </aside>
+      <div class="rcol">
+        <aside class="rside">
+          <div class="rtitle" id="rTitle"></div>
+          <div class="rhint" id="rHint" hidden></div>
+          <ul class="log rlog" id="rLog"></ul>
+          <h3>Очки на этот момент</h3>
+          <div id="rScore"></div>
+        </aside>
+        <section class="rside rstats" id="rStats" aria-label="Аналитика партии на этот момент"></section>
+      </div>
     </div>`;
 
   const $ = (id) => main.querySelector('#' + id);
   const svg = $('rBoard');
+  // аналитика справа (05.11): щелчок по графику переходит на кадр
+  const drawStats = mountStats($('rStats'), data, boards, { name, go: (to) => { stop(); go(to); } });
 
   const draw = () => {
     const b = boards[k];
@@ -118,6 +124,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
       return `<div class="rsc"><b>${esc(name(id))}</b><span class="sc">${SCORE_ORDER.map((c) => `<span style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}" title="${COLNAME[c]}">${sc[c]}</span>`).join('')}</span>
         <small>${tr ? `+${tr} ${treasureWord(tr)}, ` : ''}итог ${finalScore(sc, tr)}</small></div>`;
     }).join('');
+    drawStats(k);
   };
 
   const go = (to) => {

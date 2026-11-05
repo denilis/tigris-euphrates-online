@@ -684,7 +684,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .pcard.replay{width:min(1500px,calc(100% - 24px))}
 .replay .rhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .replay .rhead h1{margin:0}
-.replay .rgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;margin-top:12px;align-items:start}
+.replay .rgrid{display:grid;grid-template-columns:minmax(0,calc((100vh - 250px) * 1.43 + 8px)) minmax(340px,1fr);gap:14px;margin-top:12px;align-items:start}
 .replay .boardwrap{background:#14110e;border-radius:10px;padding:4px;max-width:calc((100vh - 250px) * 1.43)}
 .replay .rleft{min-width:0}
 .replay svg.board{display:block;width:100%;height:auto}
@@ -709,7 +709,36 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .replay .rsc{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:6px 0;border-bottom:1px solid #3a2e22}
 .replay .rsc:last-child{border-bottom:0}
 .replay .rsc small{color:var(--muted);flex-basis:100%}
+/* аналитика просмотра (05.11): графики на пергаменте под цвет поля, таблицы боев и монументов */
+.replay .rcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.replay .rstats>h3:first-child{margin-top:2px}
+.replay .rleg2{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-bottom:8px}
+.replay .rleg2 i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.replay .rleg2 i.k{outline:1px solid #cfc6b4}
+.replay .rleg2 i.dash{width:14px;height:0;border-top:2px dashed #b8935a;border-radius:0;vertical-align:3px}
+.replay .rcharts{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
+.replay .rchart{position:relative;background:#efe3c4;border-radius:8px;padding:6px 4px 0;color:#3b2d1f}
+.replay .rch{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:0 6px 2px}
+.replay .rch span{color:#6e5a3e}
+.replay .rch span b{color:#3b2d1f}
+.replay .rchart svg{display:block;width:100%;height:auto;cursor:pointer;touch-action:pan-y}
+.replay .rtip{position:absolute;top:24px;left:0;pointer-events:none;background:#1b1713;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-size:12px;white-space:nowrap;z-index:2;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.replay .rtip div{color:var(--muted);margin-bottom:2px}
+.replay i.csq{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 2px;vertical-align:-1px}
+.replay i.csq[style*="#1f1f1f"]{outline:1px solid #cfc6b4}
+.replay .rnote{font-size:12px;color:var(--muted);margin:0 0 6px}
+.replay table.rtab{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.replay .rtab th{font-weight:600;color:var(--text);font-size:12px;text-align:center;padding:2px 4px 4px;vertical-align:bottom}
+.replay .rtab th small,.replay .rtab td small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.replay .rtab td{padding:5px 4px;border-top:1px solid #3a2e22;text-align:center}
+.replay .rtab td:first-child,.replay .rtab th:first-child{text-align:left}
+.replay .rtab td.z{color:#6b5d48}
+.replay .rmons{display:inline-flex;gap:4px;vertical-align:middle;margin-right:4px}
+.replay i.rmon{display:inline-flex;width:18px;height:18px;border-radius:3px;overflow:hidden;transform:rotate(45deg) scale(.8);outline:1px solid #cfc6b4}
+.replay i.rmon span{flex:1}
+.replay i.rmon span.off{opacity:.28}
 @media (max-width:900px){.replay .rgrid{grid-template-columns:1fr}}
+@media (max-width:480px){.replay table.rtab{font-size:12px}.replay .rtab th,.replay .rtab td{padding-left:2px;padding-right:2px}.replay .rtab th small,.replay .rtab td small{font-size:10.5px}}
 .titem [data-replay]{margin-left:6px}
 
 /* ---------- картинка итога (этап 4, 04.11) ---------- */
