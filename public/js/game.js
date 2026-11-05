@@ -91,8 +91,9 @@ const SKELETON = `<div class="app" id="game">
 /**
  * Нарисовать партию в root. act(body) отправляет действие стола, go(hash) переходит.
  * lesson: { panel, cells, pick, hint, miss, selected } включает режим урока (lesson.js).
+ * tour: экскурсия по кнопкам (tour.js, 05.11): экран как в партии, но без звуков хода.
  */
-export function renderGame(root, view, { act, go, lesson = null }) {
+export function renderGame(root, view, { act, go, lesson = null, tour = false }) {
   setTileStyle(view.options?.tiles || 'plate'); // вид тайлов стола (04.11): до опции столы получают плитки
   if (!root.querySelector('#game')) {
     root.innerHTML = SKELETON;
@@ -132,7 +133,7 @@ export function renderGame(root, view, { act, go, lesson = null }) {
     });
   }
   current = view;
-  ctl = { act, go, root, lesson };
+  ctl = { act, go, root, lesson, tour };
   resetFor(view);
   const entries = newEntries(ui.snap, view); // до signal: он запомнит новый снимок
   signal(view, entries);
@@ -145,7 +146,7 @@ export function renderGame(root, view, { act, go, lesson = null }) {
 function signal(view, entries) {
   const snap = snapOf(view), was = ui.snap;
   ui.snap = snap;
-  if (ctl.lesson) return;
+  if (ctl.lesson || ctl.tour) return;
   const s = soundsFor(was, snap);
   play({ ...s, events: eventSounds(entries, view.me, view.game.result) });
   if (!s.chime) return;
@@ -683,7 +684,7 @@ function updateClocks() {
   // заголовок вкладки и мигающая надпись (просьба Дениса 03.11): видно и из другой вкладки
   const onGame = Boolean(current?.game && ctl?.root.querySelector('#game'));
   const g = onGame ? current.game : null, k = g ? clockNow(g) : null;
-  const mine = onGame && !ctl.lesson && snapOf(current).mine && g.phase !== 'confirm';
+  const mine = onGame && !ctl.lesson && !ctl.tour && snapOf(current).mine && g.phase !== 'confirm';
   const overdue = mine && Boolean(k?.live) && k.left <= 0;
   // время хода вышло: один раз напомнить звуком (просьба Дениса 04.11: «не слышно, что я должен ходить»)
   if (overdue && !ui.overdueRang && !ctl.lesson) play({ remind: true });

@@ -5,6 +5,8 @@ import { rulesTabs } from './rules.js';
 import { judgeMove, stepView, nextLabel, handHint, loadDone, saveDone, LAST_LESSON } from './lesson-core.js';
 import { whyNot } from './lesson-why.js';
 import { esc } from './util.js';
+import { TOURS } from './tours-data.js';
+import { toursDone } from './tour.js';
 
 const WATCH_NOTE = 'Сейчас режим просмотра: ход сделает урок. Нажмите «Дальше». Ходить самому можно в режиме «Играть самому».';
 const PAUSE_MS = 350; // второй щелчок двойного нажатия не должен перескочить через шаг
@@ -24,6 +26,9 @@ export async function renderLearn(app, top, bindTop) {
     ${rulesTabs('learn')}
     <p class="muted">Короткие уроки на настоящем поле. В режиме «Смотреть» ходит сам урок и объясняет каждый шаг. В режиме «Играть самому» ходите вы, а наставник подсказывает и говорит, почему так, а не иначе. Уроки открыты без входа и в статистику не идут.</p>
     <ol class="lessons" id="lList"><li class="muted">Загружаем уроки</li></ol>
+    <h2 class="tourhead">Как пользоваться сайтом</h2>
+    <p class="muted">Короткие экскурсии по настоящим экранам: подсвечена кнопка, рядом объяснение, что она делает и что дает ее отключение. Нажимать можно, ничего не сломается.</p>
+    <ol class="lessons tours">${toursHTML()}</ol>
   </main></div>`;
   bindTop();
   const el = app.querySelector('#lList');
@@ -39,6 +44,16 @@ export async function renderLearn(app, top, bindTop) {
     <img class="lcover" src="/img/lessons/${l.id}.webp" width="64" height="64" alt="">
     <div class="ltext"><b>${l.id}. ${esc(l.title)}</b>${done.has(l.id) ? ' <span class="ldone">пройден</span>' : ''}<span>${esc(l.goal)}</span><small>${minutes(l.minutes)}, ${l.steps} шагов</small></div>
     <div class="lacts"><a class="btn sm" href="#/learn/${l.id}/watch">Смотреть</a><a class="btn sm primary" href="#/learn/${l.id}/play">Играть самому</a></div>
+  </li>`).join('');
+}
+
+/** Экскурсии по сайту (05.11): список на странице «Обучение». */
+function toursHTML() {
+  const done = toursDone();
+  return TOURS.map((t, i) => `<li class="litem">
+    <span class="lcover tico" aria-hidden="true">${i + 1}</span>
+    <div class="ltext"><b>${esc(t.title)}</b>${done.has(t.id) ? ' <span class="ldone">пройдена</span>' : ''}<span>${esc(t.goal)}</span><small>${minutes(t.minutes)}, ${t.steps.length} шагов</small></div>
+    <div class="lacts"><a class="btn sm primary" href="#/learn/tour/${t.id}">Пройти</a></div>
   </li>`).join('');
 }
 

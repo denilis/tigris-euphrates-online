@@ -10,6 +10,7 @@ import { renderReplay } from './replay.js';
 import { welcomeHTML } from './welcome.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
+import { openTour } from './tour.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion } from './online.js';
@@ -480,10 +481,12 @@ async function renderAdmin() {
 
 // --- маршрутизация
 
-const LEARN = /^learn(?:\/([1-8])\/(watch|play))?$/;
+// #/learn/tour/i1..i4 экскурсии по сайту (05.11)
+const LEARN = /^learn(?:\/([1-8])\/(watch|play)|\/tour\/(i[1-4]))?$/;
 
 function showLearn(m, bar) {
   if (m[1]) return openLesson(app, +m[1], m[2], { go });
+  if (m[3]) return openTour(app, m[3], { go, bar, bindTop: bindTopbar, loggedIn: Boolean(session.get()?.token) });
   return renderLearn(app, bar, bindTopbar);
 }
 
@@ -493,7 +496,8 @@ function route() {
   closePicker();
   const s = session.get();
   const h = location.hash.replace(/^#\/?/, '');
-  setBackdrop(!LEARN.exec(h)?.[1]); // в уроке поле, ролик на телефоне качался бы впустую
+  const lm = LEARN.exec(h);
+  setBackdrop(!(lm?.[1] || lm?.[3] === 'i2')); // в уроке и экскурсии по партии поле, ролик на телефоне качался бы впустую
   if (!s?.token) {
     stopPresence();
     if (h === 'rules') return renderRules(app, GUEST_BAR, bindTopbar);

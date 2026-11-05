@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { LESSONS } from '../lessons/index.js';
 import { buildLesson } from '../lessons/kit.js';
+import { tourLobby } from '../lessons/tour.js';
 
 const OUT = new URL('../public/lessons/', import.meta.url);
 mkdirSync(OUT, { recursive: true });
@@ -15,3 +16,6 @@ for (const def of LESSONS) {
   console.log(`урок ${lesson.id}: ${lesson.steps.length} шагов, ${Math.round(json.length / 1024)} КБ`);
 }
 writeFileSync(new URL('index.json', OUT), JSON.stringify(list));
+// учебный стол экскурсии по сайту (05.11)
+writeFileSync(new URL('tour-lobby.json', OUT), JSON.stringify(tourLobby()));
+console.log('учебный стол экскурсии');

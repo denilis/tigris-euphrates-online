@@ -1064,3 +1064,24 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .bstep b{color:var(--gold)}
 .bstep small{color:var(--muted);line-height:1.4}
 .bstep .btn{align-self:flex-start;margin-top:auto;min-height:34px}
+/* экскурсии по сайту (05.11): затемнение с окном вокруг элемента и карточка шага */
+.tourhead{margin-top:26px}
+.litem span.tico{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f3d48a,#b8903e 70%);color:#2a180a;font:700 26px/1 Georgia,serif;box-shadow:inset 0 -3px 6px rgba(60,30,10,.4)}
+.tlayer{position:fixed;inset:0;z-index:55;pointer-events:none}
+.tdim{position:fixed;background:rgba(8,5,2,.62)}
+.tspot{position:fixed;border-radius:8px;box-shadow:0 0 0 2px var(--gold),0 0 18px 4px rgba(224,182,90,.55)}
+.tcard{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(560px,calc(100vw - 24px));pointer-events:auto;background:var(--card);color:var(--text);border:1px solid var(--gold2);border-radius:14px;padding:14px 18px 12px;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.tcard.up{bottom:auto;top:16px}
+.tcard.mid{bottom:auto;top:50%;transform:translate(-50%,-50%)}
+.tcard h3{margin:4px 0 6px;color:var(--gold)}
+.tcard p{margin:0 0 8px;line-height:1.5}
+.tchead{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted)}
+.ttry{color:#cfe6b8}
+.tbtns{display:flex;align-items:center;gap:8px;margin-top:6px}
+.tbtns span{flex:1}
+.tbtns .btn{min-height:38px}
+.tourmap .tmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:14px}
+.tmcard{background:var(--card2);border-radius:12px;padding:12px 14px}
+.tmcard h3{margin:0 0 6px;color:var(--gold)}
+.tmcard p{margin:0 0 8px;line-height:1.45;font-size:14px}
+.tmcard .tmwhere{color:var(--muted)}
