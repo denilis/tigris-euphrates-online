@@ -114,7 +114,7 @@ function dashCards(players, avatars, d) {
 function fightsChart(players, d) {
   const ROWS = [['войны, атака', 'war', 0], ['войны, защита', 'war', 2], ['восстания, атака', 'revolt', 0], ['восстания, защита', 'revolt', 2]];
   const max = Math.max(1, ...d.players.flatMap((p) => ROWS.map(([, k, j]) => p[k][j] + p[k][j + 1])));
-  const L = 118, R = 360;
+  const L = 118, R = 320; // справа место под подпись «194 из 258, 75%» (Денис 05.11)
   let s = '', y = 4;
   d.players.forEach((p, i) => {
     s += `<text x="0" y="${y + 13}" fill="${COLS[i]}" font-size="13">${esc(players[i])}</text>`;
@@ -124,7 +124,7 @@ function fightsChart(players, d) {
       s += `<text x="${L - 8}" y="${y + 11}" text-anchor="end" fill="${MUTED}" font-size="11">${label}</text>`;
       if (w1 > 0) s += `<rect x="${L}" y="${y}" width="${Math.max(w1 - 1, 1)}" height="14" rx="2" fill="${COLS[i]}"><title>выиграно ${win}</title></rect>`;
       if (w2 > 0) s += `<rect x="${L + w1}" y="${y}" width="${Math.max(w2, 1)}" height="14" rx="2" fill="${LOST}"><title>проиграно ${lose}</title></rect>`;
-      s += `<text x="${L + w1 + w2 + 6}" y="${y + 11}" fill="#e8dcc4" font-size="11">${win} из ${win + lose}</text>`;
+      s += `<text x="${L + w1 + w2 + 6}" y="${y + 11}" fill="#e8dcc4" font-size="11">${win} из ${win + lose}${win + lose ? `, ${Math.round((100 * win) / (win + lose))}%` : ''}</text>`;
       y += 19;
     }
     y += 12;

@@ -350,7 +350,7 @@ async function renderAdmin() {
       <input id="uq" type="search" placeholder="Поиск по имени" aria-label="Поиск по имени" autocomplete="off">
       <label>Сортировка <select id="usort">${USER_SORTS.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
       <label id="ubyBox" hidden>Пригласил <select id="uby"></select></label>
-      <label class="chk" id="urevBox" hidden><input type="checkbox" id="urev"> Показывать отозванных (<span id="urevN">0</span>)</label>
+      <label class="chk" id="urevBox" hidden><input type="checkbox" id="urev"> <span>Показывать отозванных (<span id="urevN">0</span>)</span></label>
     </div>
     <div class="ulistw"><table class="ulist"><thead><tr>
       <th><button class="linkbtn" data-usort="name" type="button">Имя</button></th>${admin ? '<th>Пригласил</th>' : ''}
@@ -384,7 +384,7 @@ async function renderAdmin() {
       <td data-l="Партий">${u.games}</td>
       <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
       <td data-l="Код"><span>${u.main ? 'главный' : u.revoked ? 'отозван' : 'действует'}</span>${flag}</td>
-      <td class="uacts">${may ? `<button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}` : ''}</td>
+      <td class="uacts">${may ? `<div class="ubtns"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}</div>` : ''}</td>
     </tr>`;
   };
   const draw = () => {
