@@ -2,7 +2,9 @@
 // без длинного тире и многоточия; окно знает все стили сайта и ставит ступени силы.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BOT_INFO, TRAITS, STRENGTH_GUIDE, guideHTML, botShort } from '../public/js/bots-info.js';
+import { BOT_INFO, TRAITS, STRENGTH_GUIDE, guideHTML, botShort, stepChance } from '../public/js/bots-info.js';
+import { LADDER } from '../public/js/bot-ladder.js';
+import { LEVELS } from '../tools/calibration-levels.mjs';
 import { STYLES } from '../public/js/util.js';
 import { styleParams } from '../game/vendor/bot/styles.js';
 
@@ -53,4 +55,14 @@ test('окно: вкладки всех стилей, кнопки только 
     assert.ok(['none', 'approx', 'exact'].includes(g.set.counting));
   }
   assert.equal(botShort('mix'), BOT_INFO.universal.short);
+});
+
+test('шансы по турниру ботов: те же ступени, шансы пары дают в сумме 100, у каждой ступени карточки строка шанса', () => {
+  assert.deepEqual(LADDER.levels.map((l) => l.id), LEVELS.map((l) => l.id));
+  assert.deepEqual(LADDER.levels.map((l) => l.set), LEVELS.map((l) => l.set), 'турнир играл нынешние ступени: после правки ступеней перезапустить tools/calibrate.mjs');
+  const n = LADDER.levels.length;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j) assert.ok(Math.abs(LADDER.chance[i][j] + LADDER.chance[j][i] - 100) <= 1);
+  for (const g of STRENGTH_GUIDE) assert.ok(stepChance(g.set), g.title);
+  assert.equal(stepChance({ strength: 33, errors: 1, counting: 'none' }), '', 'чужая настройка без строки');
+  assert.match(guideHTML('universal'), /Шансы один на один по турниру ботов/);
 });

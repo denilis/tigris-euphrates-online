@@ -5,6 +5,8 @@
 // от 22.10 (отложенные партии), турниры: PROJECT_MEMORY. Описания ботов Андрея и Влада только по
 // поведению бота, без данных из личных профилей игроков.
 import { esc, STYLES, BOT_FACES } from './util.js';
+import { LADDER } from './bot-ladder.js';
+import { STRENGTH_GUIDE } from './bot-steps.js';
 
 /** Черты характера: подпись и что значат точки (1 мало, 5 много). */
 export const TRAITS = [
@@ -66,15 +68,32 @@ export const BOT_INFO = {
   },
 };
 
-/** Ступени силы. set: что ставит кнопка «Поставить» (как кнопка «Максимум» в лобби). */
-export const STRENGTH_GUIDE = [
-  { title: 'Учу правила', text: 'Делает заметные ошибки и не считает вышедшие тайлы. Можно спокойно разбираться в правилах.', set: { strength: 10, errors: 25, counting: 'none' } },
-  { title: 'Играю иногда', text: 'Как бот по умолчанию: играет разумно, иногда ошибается.', set: { strength: 50, errors: 5, counting: 'none' } },
-  { title: 'Уверенный игрок', text: 'Почти без ошибок, примерно помнит, какие тайлы вышли.', set: { strength: 80, errors: 2, counting: 'approx' } },
-  { title: 'Серьезный бой', text: 'Кнопка «Максимум»: полная сила, без ошибок, точно считает тайлы.', set: { strength: 100, errors: 0, counting: 'exact' } },
-];
+export { STRENGTH_GUIDE };
 
 const COUNT_TEXT = { none: 'не считает', approx: 'примерно', exact: 'точно' };
+
+// шансы по калибровочному турниру ботов (05.11, tools/calibrate.mjs): ступень карточки ищется по настройкам
+const sameSet = (a, b) => a.strength === b.strength && a.errors === b.errors && a.counting === b.counting;
+const ladderIdx = (set) => LADDER.levels.findIndex((l) => sameSet(l.set, set));
+const BASE_IDX = LADDER.levels.findIndex((l) => l.id === LADDER.anchor);
+
+/** Строка шанса ступени против бота по умолчанию, один на один. */
+export function stepChance(set) {
+  const i = ladderIdx(set);
+  if (i < 0) return '';
+  if (i === BASE_IDX) return 'Это бот по умолчанию.';
+  return `Против бота по умолчанию выигрывает ${LADDER.chance[i][BASE_IDX]}% партий один на один.`;
+}
+
+/** Таблица шансов один на один: строка против столбца. */
+function ladderTable() {
+  const L = LADDER.levels;
+  return `<details class="bladder"><summary>Шансы один на один по турниру ботов (${LADDER.games} партий)</summary>
+    <div class="tw"><table><thead><tr><th>Кто против кого</th>${L.map((l) => `<th>${esc(l.title)}</th>`).join('')}</tr></thead>
+    <tbody>${L.map((l, i) => `<tr><th>${esc(l.title)}<small>сила ${l.set.strength}, ошибки ${l.set.errors}%</small></th>${L.map((_, j) => (i === j ? '<td class="self">-</td>' : `<td>${LADDER.chance[i][j]}%</td>`)).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="muted">Строка против столбца: какую долю партий вдвоем выигрывает бот строки. Все боты стиля Универсальный, продвинутое поле и правила сайта по умолчанию, раздумья как на сервере. Против трех соперников шансы любого бота ниже, чем один на один.</p>
+  </details>`;
+}
 const dots = (n) => `<span class="bdots" aria-label="${n} из 5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
 
 /** Строка под выбором стиля в лобби. */
@@ -102,8 +121,9 @@ export function guideHTML(style = 'universal', { canPick = false } = {}) {
     <div class="btabs">${Object.keys(BOT_INFO).map((k) => `<button class="${k === cur ? 'on' : ''}" data-bgstyle="${k}" type="button"><i class="face" style="background-image:url(/img/bots/${k}.webp)"></i>${esc(STYLES[k])}</button>`).join('')}</div>
     <div id="bgCard">${cardHTML(cur, canPick)}</div>
     <h3>Сила игры: как выбрать</h3>
-    <div class="bsteps">${STRENGTH_GUIDE.map((g, i) => `<div class="bstep"><b>${esc(g.title)}</b><span>сила ${g.set.strength}, ошибки ${g.set.errors}%, подсчет тайлов: ${COUNT_TEXT[g.set.counting]}</span><small>${esc(g.text)}</small>${canPick ? `<button class="btn sm" data-pickstep="${i}" type="button">Поставить</button>` : ''}</div>`).join('')}</div>
-    <p class="muted"><b>Риск</b>: выше значит чаще нападает, ниже значит бережет лидеров; по умолчанию 50. <b>Ошибки</b>: доля решений, где бот нарочно берет не лучший ход. Что известно о силе по замерам: бот силы 80 выиграл у бота силы 0 все 10 партий, «Максимум» против трех ботов по умолчанию выигрывает 42% партий при честной доле 25%. Таблица примерная: точные шансы появятся после турнира ботов разной силы.</p>
+    <div class="bsteps">${STRENGTH_GUIDE.map((g, i) => `<div class="bstep"><b>${esc(g.title)}</b><span>сила ${g.set.strength}, ошибки ${g.set.errors}%, подсчет тайлов: ${COUNT_TEXT[g.set.counting]}</span><small>${esc(g.text)}</small>${stepChance(g.set) ? `<small class="bchance">${esc(stepChance(g.set))}</small>` : ''}${canPick ? `<button class="btn sm" data-pickstep="${i}" type="button">Поставить</button>` : ''}</div>`).join('')}</div>
+    ${ladderTable()}
+    <p class="muted"><b>Риск</b>: выше значит чаще нападает, ниже значит бережет лидеров; по умолчанию 50. <b>Ошибки</b>: доля решений, где бот нарочно берет не лучший ход.</p>
   </div>`;
 }
 
