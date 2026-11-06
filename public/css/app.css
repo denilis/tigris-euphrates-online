@@ -209,6 +209,10 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .lobby{padding:24px 16px 40px;display:flex;justify-content:center;align-items:flex-start} /* табличка по содержимому, не до низа окна */
 .lcard{width:100%;max-width:880px;background:rgba(20,17,14,.92);border:1px solid var(--line);border-radius:14px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .lhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+/* «Назад» и «Закрыть» в заголовке стола (06.11); на телефоне над заголовком */
+.lnav{display:flex;gap:8px;flex:none;align-self:center}
+.lnav .lclose{min-width:34px;padding:0 10px;font-size:18px;line-height:1}
+@media (max-width:700px){.lhead{flex-wrap:wrap}.lnav{order:-1;width:100%;justify-content:flex-end}}
 .lcard h1{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:26px;letter-spacing:.05em}
 .lcard .sub{color:var(--muted);margin:0 0 12px}
 .lcard h2{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}

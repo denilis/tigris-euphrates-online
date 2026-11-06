@@ -138,7 +138,7 @@ function arrivals(view, here) {
   play({ events: ['arrive'] });
 }
 
-export function renderLobby(root, view, { act, bar = '', bindBar, tour = false }) {
+export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, back = null, close = null }) {
   const host = view.isHost, me = view.me;
   const canChat = (me != null || host) && chatAllowed(view, session.get()?.user?.name);
   const ready = view.seats.every((s) => s.taken && s.hero);
@@ -204,7 +204,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false }
   root.innerHTML = `${bar}<div class="lobby">
     <div class="lcard clay">
       <div class="band top" aria-hidden="true"></div>
-      <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1></div>
+      <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1>${tour ? '' : `<div class="lnav"><button class="btn sm" id="lBack" type="button">Назад</button><button class="btn sm lclose" id="lClose" type="button" aria-label="Закрыть" title="Закрыть: к моим столам. Место за столом остается за вами">×</button></div>`}</div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
       <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}${tour ? '' : '<button class="btn sm" id="lJoin" type="button">Ссылка для нового игрока</button>'}</div>
       ${made ? madeHTML(made) : ''}
@@ -248,6 +248,9 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false }
 
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
   bindBar?.();
+  // «Назад» и «Закрыть» (Денис 06.11): уходят со страницы стола, место за столом не освобождают
+  root.querySelector('#lBack')?.addEventListener('click', () => (back ? back() : (location.hash = '#/tables')));
+  root.querySelector('#lClose')?.addEventListener('click', () => (close ? close() : (location.hash = '#/tables')));
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
   const bindMade = (m) => root.querySelector('#lJoinCopy')?.addEventListener('click', () => copy(joinUrl(m.token)));
   if (made) bindMade(made);

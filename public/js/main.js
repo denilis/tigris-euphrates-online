@@ -13,7 +13,7 @@ import { renderLearn, openLesson } from './lesson.js';
 import { openTour } from './tour.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
-import { freeSeat, deleteQuestion } from './online.js';
+import { freeSeat, deleteQuestion, backFrom } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
 import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
@@ -322,7 +322,13 @@ function openTable(code) {
     if (m !== mode) { closePicker(); app.innerHTML = ''; mode = m; }
     setBusy(v.status === 'playing' && v.me != null);
     setBackdrop(m === 'lobby');
-    if (m === 'lobby') renderLobby(app, v, { act, go, bar: topbar(''), bindBar: bindTopbar });
+    if (m === 'lobby') {
+      renderLobby(app, v, {
+        act, go, bar: topbar(''), bindBar: bindTopbar,
+        back: () => (backFrom(prevHash, code) === 'back' ? history.back() : go('#/tables')),
+        close: () => go('#/tables'),
+      });
+    }
     else renderGame(app, v, { act, go });
     if (takeAccepted(code)) sitInvited(v);
   }, (e) => {
@@ -522,7 +528,11 @@ function showLearn(m, bar) {
   return renderLearn(app, bar, bindTopbar);
 }
 
+// прошлая страница сайта для «Назад» в лобби (06.11): null, пока по сайту не переходили
+let curHash = location.hash, prevHash = null;
+
 function route() {
+  if (location.hash !== curHash) { prevHash = curHash; curHash = location.hash; }
   watcher?.stop();
   watcher = null;
   closePicker();

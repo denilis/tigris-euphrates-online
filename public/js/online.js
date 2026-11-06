@@ -36,6 +36,15 @@ export function chatNote(chat) {
   return chat ? 'Игроки за столом, сообщение ушло в чат' : 'Игроки за столом, в чат сообщение не ушло';
 }
 
+/**
+ * «Назад» из лобби (Денис 06.11): 'back' — на прошлую страницу сайта. Если прошлой страницы нет
+ * (стол открыт по ссылке снаружи), это ссылка-приглашение или этот же стол, то в «Мои столы».
+ */
+export function backFrom(prev, code) {
+  if (prev == null || prev.startsWith('#/join/') || prev === `#/t/${code}` || prev.startsWith(`#/t/${code}/`)) return '#/tables';
+  return 'back';
+}
+
 /** Вопрос перед удалением стола: кроме себя называем всех людей за ним. */
 export function deleteQuestion(t, myName) {
   const others = t.seats.filter((s) => s.kind === 'human' && s.name && s.name !== myName).map((s) => s.name);
