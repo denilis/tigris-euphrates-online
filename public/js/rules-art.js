@@ -1,10 +1,51 @@
 // Рисунки к правилам: участки из rules-scenes.js теми же тайлами и жетонами, что на поле.
+// 06.11 (просьба Дениса): земля как на поле с рельефом, песок и вода текстурами, на целых
+// картах река извилистым руслом (river.js), монумент картинкой, как на сайте по умолчанию.
 import { HEX, tileImg, catImg, uniteImg, tokenImg } from './util.js';
-import { monDefs, sealSVG, buildingSVG, wonderSVG } from './board.js';
+import { monDefs, monImg, buildingSVG, wonderSVG } from './board.js';
+import { riverLayer } from './river.js';
 import { SCENES, FIGURES, parseScene, cellAt } from './rules-scenes.js';
 
 const C = 60, T = C - 6;
 const HERO = { 1: 'lion', 2: 'bull' };
+const MON_STYLE = 'enamel'; // вид монумента у столов без своей настройки (game.js monOf)
+const SAND = 640, WATER = 420; // размер текстур, как на поле
+
+// id внутри рисунка: на странице правил несколько SVG, у каждого своя маска реки
+const scoped = (svg, k, ids) => svg.replace(new RegExp(`(id="|url\\(#)(${ids.join('|')})(["\\)])`, 'g'), `$1$2-${k}$3`);
+
+/** Земля участка: песок, речные клетки чуть зеленее, вода руслом (целая карта) или по клеткам. */
+function ground(p, k) {
+  const vw = p.w * C, vh = p.h * C, river = [];
+  let rects = '';
+  p.cells.forEach((row, y) => row.forEach((c, x) => {
+    if (!c.river) return;
+    river.push(y * p.w + x);
+    // у края участка вода уходит за край, чтобы край не скруглялся
+    const x0 = x === 0 ? -30 : x * C - 0.5, y0 = y === 0 ? -30 : y * C - 0.5;
+    const x1 = x === p.w - 1 ? vw + 30 : (x + 1) * C + 0.5, y1 = y === p.h - 1 ? vh + 30 : (y + 1) * C + 0.5;
+    rects += `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="#fff"/>`;
+  }));
+  const R = `width="${vw}" height="${vh}"`;
+  const defs = `<pattern id="sandP" patternUnits="userSpaceOnUse" width="${SAND}" height="${SAND}"><image href="/img/terrain/sand.webp" width="${SAND}" height="${SAND}"/></pattern>
+    <pattern id="waterP" patternUnits="userSpaceOnUse" width="${WATER}" height="${WATER}"><image href="/img/terrain/water.webp" width="${WATER}" height="${WATER}"/></pattern>
+    <filter id="goo" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -13"/></filter>
+    <filter id="goo2" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="8"/><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 28 -6"/></filter>
+    <mask id="riverM" maskUnits="userSpaceOnUse" x="-40" y="-40" width="${vw + 80}" height="${vh + 80}"><g filter="url(#goo)">${rects}</g></mask>
+    <mask id="bankM" maskUnits="userSpaceOnUse" x="-40" y="-40" width="${vw + 80}" height="${vh + 80}"><g filter="url(#goo2)">${rects}</g></mask>
+    <clipPath id="land"><rect ${R}/></clipPath>`;
+  // целая карта поля: то же русло, что в партии; на малом участке вода по речным клеткам
+  const stream = p.w === 16 && p.h === 11 ? riverLayer(river, true, C, 0) : null;
+  const water = stream ?? (river.length ? `<rect ${R} fill="#5a4220" fill-opacity=".35" mask="url(#bankM)"/><rect ${R} fill="url(#waterP)" mask="url(#riverM)"/>` : '');
+  let grid = '';
+  for (let x = 1; x < p.w; x++) grid += `M${x * C} 0V${vh}`;
+  for (let y = 1; y < p.h; y++) grid += `M0 ${y * C}H${vw}`;
+  // сетка гравировкой, как на поле с рельефом: темная линия и светлая под ней
+  const art = `<g clip-path="url(#land)"><rect ${R} fill="url(#sandP)"/>${water}</g>
+    <path d="${grid}" stroke="#3a2810" stroke-opacity=".34" stroke-width="1" fill="none"/><path d="${grid}" transform="translate(1 1)" stroke="#fff6dc" stroke-opacity=".22" stroke-width="1" fill="none"/>`;
+  const ids = ['sandP', 'waterP', 'goo', 'goo2', 'riverM', 'bankM', 'land', 'bankBlur', 'deep'];
+  return { defs: scoped(defs, k, ids), art: scoped(art, k, ids) };
+}
 
 const tile = (href, x, y) => `<image href="${href}" x="${x + 3}" y="${y + 3}" width="${T}" height="${T}" preserveAspectRatio="xMidYMid slice" clip-path="url(#rr)"/>`;
 
@@ -72,10 +113,10 @@ function outlines({ w, h, cells }) {
 function sceneSVG(key, label) {
   const scene = SCENES[key], p = parseScene(scene);
   const vw = p.w * C, vh = p.h * C, id = `rf${key}`;
-  let ground = '', pieces = '', marks = '';
+  const land = ground(p, key);
+  let pieces = '', marks = '';
   p.cells.forEach((row, y) => row.forEach((c, gx) => {
     const x = gx * C, py = y * C;
-    if (c.river) ground += `<rect x="${x - 0.5}" y="${py - 0.5}" width="${C + 1}" height="${C + 1}" fill="#3a7aa3"/>`;
     if (c.tile !== null) pieces += tile(tileImg(c.tile, 'classic'), x, py); // правила с прежними тайлами (04.11)
     else if (c.cat) pieces += tile(catImg, x, py);
     else if (c.unite) pieces += tile(uniteImg, x, py);
@@ -88,20 +129,19 @@ function sceneSVG(key, label) {
   }));
   if (scene.mon) {
     const { x, y } = cellAt(scene.mon.at);
-    pieces += sealSVG(scene.mon.c1, scene.mon.c2, x * C, y * C, id);
+    const [a, b] = [scene.mon.c1, scene.mon.c2].sort((m, n) => m - n);
+    pieces += `<image href="${monImg(MON_STYLE, a, b)}" x="${x * C + 3}" y="${y * C + 3}" width="${2 * C - 6}" height="${2 * C - 6}" filter="url(#sh-${key})"/>`;
   }
   if (scene.wonder) {
     const { x, y } = cellAt(scene.wonder);
     pieces += wonderSVG(x * C, y * C, C);
   }
-  let grid = '';
-  for (let x = 1; x < p.w; x++) grid += `M${x * C} 0V${vh}`;
-  for (let y = 1; y < p.h; y++) grid += `M0 ${y * C}H${vw}`;
   return `<svg viewBox="-2 -2 ${vw + 4} ${vh + 4}" style="--n:${p.w}" role="img" aria-label="${label}">
     <defs>${monDefs(id)}<clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
-      <radialGradient id="rgold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient></defs>
-    <rect width="${vw}" height="${vh}" fill="#d6bd88"/>${ground}
-    <path d="${grid}" stroke="#4b3418" stroke-opacity=".22" fill="none"/>
+      <radialGradient id="rgold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff2b8"/><stop offset=".45" stop-color="#e8b84a"/><stop offset="1" stop-color="#8a5f17"/></radialGradient>
+      <filter id="sh-${key}" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
+      ${land.defs}</defs>
+    <rect width="${vw}" height="${vh}" fill="#d6bd88"/>${land.art}
     <rect width="${vw}" height="${vh}" fill="none" stroke="#e0b65a" stroke-opacity=".6" stroke-width="2"/>
     ${pieces}${scene.size ? '' : outlines(p)}${marks}
   </svg>`;
