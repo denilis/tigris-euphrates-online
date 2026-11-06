@@ -285,6 +285,13 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .app.lesson .layers{display:none}
 .meta{margin-left:auto;display:flex;gap:14px;white-space:nowrap;color:var(--muted)}
 .meta b{color:var(--text)}
+/* сокровища на поле (06.11): на широком экране словами, на ноутбуке кубиком (шапка в одну строку
+   и так почти полная), на телефоне коротко «сокровищ»; полный текст в подсказке */
+.meta .trs,.meta .tri{display:none}
+.meta .tri{width:15px;height:15px;vertical-align:-2px;background:url(/img/treasure/cube.webp) center/contain no-repeat;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+.meta b.low{color:#ff6b5a}
+@media (min-width:901px) and (max-width:1599px){.meta .trl{display:none}.meta .tri{display:inline-block}}
+@media (min-width:901px) and (max-width:1400px){.top{gap:10px}.layers{gap:6px}.meta{gap:10px}.code .cw{display:none}}
 .nav{display:flex;gap:6px}
 .navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
@@ -668,6 +675,7 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
   .side section.shut .blockhead{margin-bottom:7px}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
   .meta{margin-left:0}
+  .meta .trl{display:none}.meta .trs{display:inline}
   .nav{flex-wrap:wrap}
   .layers{flex-wrap:wrap;flex-shrink:1}
   .navbtn{padding:7px 8px}

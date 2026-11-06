@@ -18,7 +18,7 @@ import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newE
 import { logLines, lineHTML } from './logview.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
-  unitePos, toast, momentKey,
+  unitePos, toast, momentKey, TREASURE_END, treasuresOn, treasureLow,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -68,7 +68,7 @@ const SKELETON = `<div class="app" id="game">
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
     <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button></div>
-    <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span></div>
+    <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
     <nav class="nav"><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/tables">Мои столы</a></nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
@@ -385,7 +385,7 @@ function draw() {
   const d = D();
   const { view, g, root = ctl.root } = { ...d, root: ctl.root };
   updateTrail(d);
-  root.querySelector('#gCode').innerHTML = `стол <b>${esc(view.title || view.code)}</b>`;
+  root.querySelector('#gCode').innerHTML = `<span class="cw">стол </span><b>${esc(view.title || view.code)}</b>`;
   const o = view.options;
   root.querySelector('#gBadges').innerHTML = [
     o.board === 'advanced' ? 'Продвинутое поле' : 'Обычное поле',
@@ -396,6 +396,11 @@ function draw() {
   root.querySelector('#gBag').textContent = g.bagPct + '%';
   root.querySelector('#gBagBox').title = 'Сколько тайлов осталось в мешке, в процентах от мешка после выкладки стартовых храмов';
   root.querySelector('#gTurn').textContent = g.turn;
+  // сокровища на поле (просьба Дениса 06.11): за одно взятие до конца партии число красное
+  const tr = treasuresOn(g), trB = root.querySelector('#gTr');
+  trB.textContent = tr;
+  trB.classList.toggle('low', treasureLow(tr));
+  root.querySelector('#gTrBox').title = `Партия кончается, когда на поле остается ${TREASURE_END} сокровища`;
   root.querySelectorAll('#gLayers [data-layer]').forEach((b) => b.setAttribute('aria-checked', String(ui.layers[b.dataset.layer])));
   root.querySelector('#gSound').setAttribute('aria-checked', String(soundOn()));
   root.querySelector('#game').classList.toggle('myturn', !ctl.lesson && snapOf(view).mine); // золотая рамка поля, пока решать вам

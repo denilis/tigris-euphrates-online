@@ -3,6 +3,7 @@
 // варианта считает сервер (view.game.preview). Восстание и выбор цвета войны — здесь же.
 import {
   HEX, COLNAME, SCORE_ORDER, COLGEN, COLDAT, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
+  TREASURE_END, treasuresOn,
 } from './util.js';
 
 const PHASES = ['warSupport', 'revoltSupport', 'warChoose'];
@@ -135,7 +136,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
   }
 
   // сведения для решения: мешок процентом, сокровища до конца, свои очки и итог по слабейшему
-  const treasuresLeft = g.board.treasure.reduce((a, b) => a + b, 0);
+  const treasuresLeft = treasuresOn(g);
   const myFinal = finalScore(pl.score, pl.treasures);
   const minC = Math.min(...pl.score);
   const chips = SCORE_ORDER.map((c) => `<span class="${pl.score[c] === minC ? 'weak' : ''}" style="background:${HEX[c]}" title="${COLNAME[c]}">${pl.score[c]}</span>`).join('');
@@ -160,7 +161,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     </div>
     <div class="facts">
       <div><span>Мешок</span><b>${g.bagPct}%</b><small>тайлов осталось</small></div>
-      <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при 2</small></div>
+      <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при ${TREASURE_END}</small></div>
       <div><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
     </div>
     <div class="mfoot">

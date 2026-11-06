@@ -32,6 +32,12 @@ export const tileImg = (c, style = tileStyle) => (style === 'plate' ? `/img/tile
 export const catImg = '/img/tiles/catastrophe.jpg';
 export const uniteImg = '/img/tiles/unification.jpg';
 export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.png`;
+
+// Сокровища на поле: партия кончается, когда их остается столько или меньше (движок, конец хода).
+export const TREASURE_END = 2;
+export const treasuresOn = (g) => g.board.treasure.reduce((a, b) => a + b, 0);
+/** До конца партии одно взятие сокровища: число в верхней строке красное (Денис 06.11). */
+export const treasureLow = (n) => n <= TREASURE_END + 1;
 /**
  * Лицо игрока для background-image: фото, а под ним жетон героя. Жетон виден, если фото нет
  * или его уже сменили, а за старым столом остался прежний адрес.
