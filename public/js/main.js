@@ -13,7 +13,7 @@ import { renderLearn, openLesson } from './lesson.js';
 import { openTour } from './tour.js';
 import { renderProfile } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
-import { freeSeat, deleteQuestion, backFrom } from './online.js';
+import { freeSeat, deleteQuestion, backFrom, NAV_PAGES, pageBack } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
 import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
@@ -531,6 +531,30 @@ function showLearn(m, bar) {
 // прошлая страница сайта для «Назад» в лобби (06.11): null, пока по сайту не переходили
 let curHash = location.hash, prevHash = null;
 
+// «Назад» и «×» на страницах-карточках (Денис 06.11): в строку заголовка справа, как в лобби.
+// Страницы рисуются по-разному и перерисовывают себя, поэтому кнопки ставит наблюдатель.
+let navOn = false;
+function pageNav() {
+  const main = app.querySelector('main.pcard, .lcard.newgame'); // «Начать игру» — глиняная карточка
+  const h1 = main?.querySelector('h1');
+  if (!h1 || main.querySelector('.lnav')) return;
+  let row = h1.parentElement;
+  if (row === main) {
+    row = document.createElement('div');
+    row.className = 'phead';
+    h1.before(row);
+    row.append(h1);
+  }
+  row.insertAdjacentHTML('beforeend', '<div class="lnav pnav"><button class="btn sm" type="button" data-pnav="back">Назад</button><button class="btn sm lclose" type="button" data-pnav="close" aria-label="Закрыть" title="Закрыть: на стартовый экран">×</button></div>');
+}
+new MutationObserver(() => { if (navOn) pageNav(); }).observe(app, { childList: true, subtree: true });
+app.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pnav]');
+  if (!b) return;
+  if (b.dataset.pnav === 'back' && pageBack(prevHash, curHash) === 'back') history.back();
+  else go('#/');
+});
+
 function route() {
   if (location.hash !== curHash) { prevHash = curHash; curHash = location.hash; }
   watcher?.stop();
@@ -538,6 +562,7 @@ function route() {
   closePicker();
   const s = session.get();
   const h = location.hash.replace(/^#\/?/, '');
+  navOn = NAV_PAGES.test(h);
   const lm = LEARN.exec(h);
   setBackdrop(!(lm?.[1] || lm?.[3] === 'i2')); // в уроке и экскурсии по партии поле, ролик на телефоне качался бы впустую
   const jm = JOIN_ROUTE.exec(h); // ссылка-приглашение (06.11): открывается и без кода

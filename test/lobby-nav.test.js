@@ -16,3 +16,13 @@ test('кнопки в заголовке стола есть в лобби и с
   assert.match(src, /id="lClose"[^>]*aria-label="Закрыть"/);
   assert.match(src, /tour \? '' : `<div class="lnav">/);
 });
+
+test('«Назад» и «×» на страницах-карточках (06.11): где есть кнопки и куда ведет «Назад»', async () => {
+  const { NAV_PAGES, pageBack } = await import('../public/js/online.js');
+  for (const h of ['rules', 'learn', 'stats', 'stats/me', 'me', 'tables', 'new', 'admin', 't/ABC123/replay', 't/ABC123/replay/7']) assert.ok(NAV_PAGES.test(h), h);
+  for (const h of ['', 't/ABC123', 'learn/3/play', 'learn/tour/i2', 'join/xyz']) assert.ok(!NAV_PAGES.test(h), `${h}: у партии, урока, лобби и стартового экрана своя навигация`);
+  assert.equal(pageBack(null, '#/rules'), '#/', 'открыли по ссылке: на стартовый экран');
+  assert.equal(pageBack('#/rules', '#/rules'), '#/');
+  assert.equal(pageBack('#/join/abc', '#/tables'), '#/');
+  assert.equal(pageBack('#/tables', '#/new'), 'back');
+});

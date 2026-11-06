@@ -45,6 +45,19 @@ export function backFrom(prev, code) {
   return 'back';
 }
 
+/**
+ * «Назад» и «×» на страницах-карточках (Денис 06.11). На каких страницах: правила, обучение,
+ * статистика, профиль, мои столы, новая игра, коды игроков, просмотр партии. У лобби свои
+ * кнопки, у партии и урока своя навигация, на стартовом экране кнопок нет.
+ */
+export const NAV_PAGES = /^(rules|learn|stats|stats\/me|me|tables|new|admin|t\/[A-Za-z0-9]+\/replay(\/\d+)?)$/;
+
+/** «Назад» со страницы: 'back' — на прошлую страницу сайта, иначе (открыли по ссылке) на стартовый экран. */
+export function pageBack(prev, cur) {
+  if (prev == null || prev === cur || prev.startsWith('#/join/')) return '#/';
+  return 'back';
+}
+
 /** Вопрос перед удалением стола: кроме себя называем всех людей за ним. */
 export function deleteQuestion(t, myName) {
   const others = t.seats.filter((s) => s.kind === 'human' && s.name && s.name !== myName).map((s) => s.name);

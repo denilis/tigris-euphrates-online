@@ -216,6 +216,9 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .lnav{display:flex;gap:8px;flex:none;align-self:center}
 .lnav .lclose{min-width:34px;padding:0 10px;font-size:18px;line-height:1}
 @media (max-width:700px){.lhead{flex-wrap:wrap}.lnav{order:-1;width:100%;justify-content:flex-end}}
+/* «Назад» и «×» на страницах-карточках (06.11): заголовок и кнопки в одной строке */
+.phead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+@media (max-width:700px){.phead,.homehead,.rhead{flex-wrap:wrap}}
 .lcard h1{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:26px;letter-spacing:.05em}
 .lcard .sub{color:var(--muted);margin:0 0 12px}
 .lcard h2{font:600 11.5px/1 "Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
