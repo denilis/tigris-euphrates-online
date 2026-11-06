@@ -5,8 +5,9 @@
 // заново (отрицательная задержка, как у следа хода).
 import { W, CATASTROPHE } from './util.js';
 
-// burn и fall (схема одобрена Денисом 06.11): тайл, снятый войной, сгорает; проигравший лидер
-// падает набок и улетает к карточке хозяина (сам перелет запускает game.js)
+// burn и fall (06.11): тайл, снятый войной, становится трофеем победителя (монета летит к его
+// очкам, рисует ruin.js, выбор Дениса из пяти вариантов); проигравший лидер падает набок и
+// улетает к карточке хозяина (перелеты запускает game.js). Имя burn осталось от первого варианта.
 export const FX_MS = { gone: 700, crack: 900, grow: 900, cube: 900, burn: 1600, fall: 560 };
 export const BURN_STEP = 80; // мс между соседними кольцами огня
 export const BURN_RINGS = 10; // дальше волна не тянется: большое царство горит не дольше 0,8 с сверх
@@ -22,8 +23,9 @@ function fireFrom(prev, entries) {
 
 /**
  * Что изменилось на поле между двумя видами одной партии: [{ kind, pos, c?, delay?, seat? }].
- * gone: тайл цвета c исчез (отмена хода и все, что не война); burn: тайл сняла война, delay —
- * через сколько мс до него дойдет волна огня от места стычки; crack: на клетку легла катастрофа;
+ * gone: тайл цвета c исчез (отмена хода и все, что не война); burn: тайл сняла война, seat —
+ * победитель этой войны, delay — через сколько мс до тайла дойдет волна от места стычки;
+ * crack: на клетку легла катастрофа;
  * grow: построен монумент (pos — левая верхняя клетка); cube: со храма взяли сокровище;
  * fall: лидер цвета c места seat снят боем (проиграл войну или восстание, остался без храма).
  * Под монументом тайлы не исчезают, а переворачиваются, поэтому ложных gone нет.
@@ -33,10 +35,12 @@ export function boardChanges(prev, next, entries = []) {
   if (!prev || !next) return [];
   const a = prev.board, b = next.board, out = [];
   const fought = entries.some((e) => e.ev === 'war');
+  const won = new Map(); // цвет войны -> место победителя: ему летят трофеи за снятые тайлы
+  for (const e of entries) if (e.ev === 'war') won.set(e.color, e.winner);
   for (let i = 0; i < b.tile.length; i++) {
     const was = a.tile[i], now = b.tile[i];
     if (now === CATASTROPHE && was !== CATASTROPHE) out.push({ kind: 'crack', pos: i, c: was });
-    else if (was >= 0 && was <= 3 && now < 0) out.push({ kind: fought ? 'burn' : 'gone', pos: i, c: was });
+    else if (was >= 0 && was <= 3 && now < 0) out.push(fought ? { kind: 'burn', pos: i, c: was, seat: won.get(was) ?? null } : { kind: 'gone', pos: i, c: was });
     if (a.treasure[i] && !b.treasure[i]) out.push({ kind: 'cube', pos: i });
   }
   const burn = out.filter((f) => f.kind === 'burn');
@@ -74,7 +78,8 @@ export function ageFx(list, fresh, now) {
 /** Кто взял сокровище с клетки pos: место из записей журнала этого обновления. */
 export const takerOf = (entries, pos) => entries.find((e) => e.ev === 'treasure' && e.pos === pos)?.seat ?? null;
 
-const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** Система просит «уменьшить движение»: тогда без анимаций и перелетов. */
+export const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
  * Перелет картинки src из прямоугольника from в прямоугольник to (координаты экрана), ms.

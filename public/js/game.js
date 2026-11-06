@@ -1,7 +1,8 @@
 // Экран партии: поле, рука, карточки игроков, панель «Сейчас», журнал. Клиент только
 // рисует вид от сервера: допустимые ходы приходят списком legal, ход уходит номером в нём.
 import { renderBoard, sealIcon, buildingIcon, cellScreen, TREASURE_IMG } from './board.js';
-import { boardChanges, ageFx, takerOf, fly, boxOf, FX_MS } from './fx.js';
+import { boardChanges, ageFx, takerOf, fly, boxOf, still, FX_MS } from './fx.js';
+import { ruinLayer } from './ruin.js';
 import { api } from './api.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd, endReasonText, stopText } from './end.js';
@@ -141,6 +142,7 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
   draw();
   flyCubes();
   flyLeaders();
+  trophies();
 }
 
 /** Звук и вспышка рамки при новом виде стола (в уроке тихо: там ходы по шагам). entries — новое в журнале. */
@@ -175,6 +177,56 @@ function updateFx(view, entries) {
   ui.fx = ageFx(same ? ui.fx : [], fresh, Date.now());
   ui.cubes = fresh.filter((f) => f.kind === 'cube').map((f) => ({ pos: f.pos, seat: takerOf(entries, f.pos) }));
   ui.falls = fresh.filter((f) => f.kind === 'fall');
+  ui.burns = fresh.filter((f) => f.kind === 'burn');
+}
+
+// трофей идет в 3 раза медленнее, чем в демо (Денис 06.11: «вариант замедленный в 3 раза»)
+const TROPHY_SLOW = 3;
+
+/**
+ * Трофей победителю (06.11, выбор Дениса из пяти вариантов): тайл, снятый войной, стоит целым до
+ * своей очереди в волне, вспыхивает золотом, сворачивается в монету и летит к очку своего цвета в
+ * карточке победителя; при закрытом счете к самому счету. Долетела монета: очко вспыхивает.
+ * Холст над всем экраном партии, иначе монета пропала бы на краю поля.
+ */
+function trophies() {
+  const list = ui.burns || [];
+  ui.burns = [];
+  const host = ctl.root.querySelector('#game');
+  if (!list.length || !host || still()) return;
+  if (!ui.ruin?.alive || ui.ruinHost !== host) {
+    Object.assign(ui, { ruin: ruinLayer(host), ruinHost: host });
+    ui.ruin.speed = 1 / TROPHY_SLOW;
+  }
+  const local = (b) => {
+    const hr = host.getBoundingClientRect();
+    return b && { x: b.x - hr.left, y: b.y - hr.top, w: b.w, h: b.h };
+  };
+  const chip = (f) => {
+    const sc = ctl.root.querySelector(`.pc[data-seat="${f.seat}"] .sc`);
+    return sc?.querySelector(`span[data-c="${f.c}"]`) || sc;
+  };
+  ui.tileArt ||= {};
+  for (const f of list) {
+    const src = tileImg(f.c);
+    if (!ui.tileArt[src]) Object.assign((ui.tileArt[src] = new Image()), { src });
+    const img = ui.tileArt[src];
+    ui.ruin.play('trophy', () => local(cellScreen(ctl.root.querySelector('#board'), f.pos)), {
+      img,
+      delay: (f.delay || 0) * TROPHY_SLOW,
+      target: () => {
+        const b = local(boxOf(chip(f)));
+        return b && { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      },
+      onArrive: () => {
+        const el = chip(f);
+        if (!el) return;
+        el.classList.remove('gain');
+        void el.offsetWidth; // перезапуск вспышки, если монеты прилетают одна за другой
+        el.classList.add('gain');
+      },
+    });
+  }
 }
 
 /** Упавший лидер улетает к своему жетону в карточке хозяина (06.11): по правилам он вернулся в руку. */
@@ -476,7 +528,7 @@ function drawPlayers({ view, g, me, seat }) {
     };
     const tr = pl.treasures ?? '?';
     const sc = pl.score
-      ? `<span class="sc" title="очки: ${SCORE_ORDER.map((c) => COLNAME[c]).join(', ')}">${SCORE_ORDER.map((c) => `<span style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}">${pl.score[c]}</span>`).join('')}</span>`
+      ? `<span class="sc" title="очки: ${SCORE_ORDER.map((c) => COLNAME[c]).join(', ')}">${SCORE_ORDER.map((c) => `<span data-c="${c}" style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}">${pl.score[c]}</span>`).join('')}</span>`
       : '<span class="sc hid" title="закрытый счет: очки соперников не видны">счет скрыт</span>';
     const bot = s.kind === 'bot' ? `<span class="tag" title="${esc(STYLES[s.bot?.style] || '')}, сила ${s.bot?.strength ?? ''}">бот</span>` : '';
     return `<div class="pc${deciding ? ' deciding' : active ? ' active' : ''}" data-seat="${pl.seat}">

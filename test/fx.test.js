@@ -1,7 +1,9 @@
 // Анимации поля (04.11): что изменилось между видами, возраст эффектов, рисунок эффектов.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { boardChanges, ageFx, takerOf, FX_MS, BURN_STEP, BURN_RINGS } from '../public/js/fx.js';
+import { RUIN_S } from '../public/js/ruin.js';
 import { fxSVG } from '../public/js/board.js';
 import { CATASTROPHE, FACEDOWN } from '../public/js/util.js';
 import { started, playOut } from './support.js';
@@ -76,10 +78,10 @@ test('огонь войны: снятые войной тайлы горят в�
   b.board.tile[19] = 0; // тайл объединения (D2) лег этим же ходом
   const entries = [{ ev: 'tile', pos: 19, c: 0 }, { ev: 'warStart' }, war(1, 2)];
   assert.deepEqual(boardChanges(a, b, entries), [
-    { kind: 'burn', pos: 20, c: 2, delay: 0 },
-    { kind: 'burn', pos: 21, c: 2, delay: BURN_STEP },
-    { kind: 'burn', pos: 22, c: 2, delay: 2 * BURN_STEP },
-    { kind: 'burn', pos: 40, c: 2, delay: 4 * BURN_STEP },
+    { kind: 'burn', pos: 20, c: 2, delay: 0, seat: 9 },
+    { kind: 'burn', pos: 21, c: 2, delay: BURN_STEP, seat: 9 },
+    { kind: 'burn', pos: 22, c: 2, delay: 2 * BURN_STEP, seat: 9 },
+    { kind: 'burn', pos: 40, c: 2, delay: 4 * BURN_STEP, seat: 9 },
   ]);
   // тайл лег прошлым обновлением, игрок решал поддержку: место стычки из метки объединения
   assert.deepEqual(boardChanges({ ...a, unite: 19 }, b, [war(1, 2)]).map((f) => f.delay), [0, BURN_STEP, 2 * BURN_STEP, 4 * BURN_STEP]);
@@ -159,18 +161,30 @@ test('огонь: эффект с задержкой волны живет до�
   assert.equal(ageFx(list, [], FX_MS.burn + 321).length, 0);
 });
 
-test('огонь: рисунок горящего тайла и падающего лидера', () => {
+test('трофей (06.11): снятый войной тайл поле не рисует, его рисует холст ruin.js; лидер падает', () => {
   const s = fxSVG([
-    { kind: 'burn', pos: 0, c: 2, delay: 160, age: 40 },
-    { kind: 'burn', pos: 1, c: -1, delay: 0, age: 0 },
+    { kind: 'burn', pos: 0, c: 2, delay: 160, age: 40, seat: 1 },
     { kind: 'fall', pos: 5, c: 1, seat: 0, hero: 'lion', age: 100 },
   ]);
-  assert.equal((s.match(/class="fx-burn"/g) || []).length, 1, 'без цвета тайл не горит');
-  assert.match(s, /class="burn-tile" href="#tl2"[^>]*animation-delay:120ms/, 'ждет своей очереди в волне');
-  assert.ok((s.match(/class="fl-env/g) || []).length >= 3, 'языки пламени');
-  assert.ok((s.match(/class="ember"/g) || []).length >= 3, 'искры');
+  assert.doesNotMatch(s, /fx-burn|href="#tl2"/);
   assert.match(s, /class="fx-fall"[^>]*animation-delay:-100ms/);
   assert.match(s, /href="#tk_lion_1"/);
+});
+
+test('трофей (06.11): победитель у каждой войны свой, монеты летят медленно, к очку своего цвета', () => {
+  const a = empty();
+  a.board.tile[20] = 2;
+  a.board.tile[60] = 3;
+  const b = clone(a);
+  b.board.tile[20] = -1;
+  b.board.tile[60] = -1;
+  const ch = boardChanges(a, b, [{ ev: 'war', winner: 4, loser: 1, color: 2 }, { ev: 'war', winner: 6, loser: 4, color: 3 }]);
+  assert.deepEqual(ch.map((f) => [f.pos, f.seat]), [[20, 4], [60, 6]]);
+  assert.ok(RUIN_S.trophy > 1, 'монета успевает долететь');
+  const game = readFileSync(new URL('../public/js/game.js', import.meta.url), 'utf8');
+  assert.match(game, /const TROPHY_SLOW = 3;/, 'в 3 раза медленнее (Денис 06.11)');
+  assert.match(game, /play\('trophy'/, 'на поле стоит трофей');
+  assert.match(game, /<span data-c="\$\{c\}"/, 'у очков в карточке есть цвет: туда летит монета');
 });
 
 test('анимации: возраст растет, отыгравший эффект уходит', () => {

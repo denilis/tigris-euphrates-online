@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- Демо разрушения тайлов (06.11). Денис выбрал «Трофей победителю», в 3 раза медленнее.
+     Посмотреть: скопировать файл в public/ (не коммитить там), запустить локальный сервер,
+     открыть /demo.html. Огонь из частиц (первый вариант) удален вместе с fire.js. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Разрушение тайлов: варианты</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  body{margin:0;padding:22px;background:#14110e;color:#f3e6c8;overflow:auto}
+  h1{font-size:22px;margin:0 0 6px}
+  p.sub{margin:0 0 16px;color:#bfae8e;font-size:14px;max-width:760px}
+  .row{display:flex;gap:22px 26px;flex-wrap:wrap}
+  .panel h2{font-size:16px;margin:0 0 4px;color:#e0b65a}
+  .panel p{margin:0 0 8px;color:#bfae8e;font-size:13px;max-width:560px}
+  .host{position:relative;width:min(560px,92vw);border:1px solid #4a3b2b;border-radius:10px;overflow:hidden}
+  .host svg{display:block;width:100%;height:auto}
+  .card{position:absolute;right:8px;top:8px;background:rgba(36,28,20,.95);border:1px solid #8a6a3a;border-radius:10px;padding:6px 10px;font-size:12px;display:flex;gap:8px;align-items:center}
+  .card b{color:#f3e6c8}
+  .chip{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;border-radius:6px;background:#2f6db0;color:#fff;font-weight:700;transition:transform .15s}
+  .chip.pop{transform:scale(1.35)}
+  .ctl{position:sticky;bottom:0;display:flex;gap:18px;align-items:center;margin-top:18px;padding:10px 0;flex-wrap:wrap;font-size:15px;background:#14110e}
+  .ctl label{display:flex;gap:6px;align-items:center;cursor:pointer}
+</style>
+</head>
+<body>
+<h1>Разрушение тайлов</h1>
+<p class="sub">Синее царство проиграло войну, его тайлы снимаются. Тайл с рамкой объединил царства, эффект бежит от него волной. На сайте стоит «Трофей победителю» в 3 раза медленнее.</p>
+<div class="row" id="panels"></div>
+<div class="ctl">
+  <button class="btn primary" id="go">Повторить</button>
+  <label><input type="checkbox" id="slow"> Замедлить в 3 раза</label>
+  <label><input type="checkbox" id="loop" checked> Повторять</label>
+</div>
+<script type="module">
+import { tileImg } from '/js/util.js';
+import { ruinLayer } from '/js/ruin.js';
+
+const C = 60, G = 24, W = 16;
+const cx = (i) => G + (i % W) * C, cy = (i) => G + ((i / W) | 0) * C;
+const UNITE = 33, BURN = [34, 35, 19, 51, 36, 52], STILL = [[22, 2], [54, 2], [38, 0], [20, 3]];
+const ring = (a, b) => Math.max(Math.abs((a % W) - (b % W)), Math.abs(((a / W) | 0) - ((b / W) | 0)));
+const near = Math.min(...BURN.map((p) => ring(UNITE, p)));
+const delayOf = (p) => (ring(UNITE, p) - near) * 80;
+
+const defs = `<defs>
+  <pattern id="sandP" patternUnits="userSpaceOnUse" width="640" height="640"><image href="/img/terrain/sand.webp" width="640" height="640"/></pattern>
+  <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
+  ${[0, 1, 2, 3].map((c) => `<image id="tl${c}" width="${C - 6}" height="${C - 6}" href="${tileImg(c)}" preserveAspectRatio="xMidYMid slice"/>`).join('')}
+</defs>`;
+
+function base() {
+  let s = `<svg viewBox="84 84 420 180" xmlns="http://www.w3.org/2000/svg">${defs}<rect x="84" y="84" width="420" height="180" fill="url(#sandP)"/>`;
+  for (let x = 84; x <= 504; x += C) s += `<line x1="${x}" y1="84" x2="${x}" y2="264" stroke="rgba(60,40,20,.18)"/>`;
+  for (let y = 84; y <= 264; y += C) s += `<line x1="84" y1="${y}" x2="504" y2="${y}" stroke="rgba(60,40,20,.18)"/>`;
+  for (const [p, c] of [[UNITE, 0], ...STILL]) s += `<use href="#tl${c}" x="${cx(p) + 3}" y="${cy(p) + 3}" clip-path="url(#rr)"/>`;
+  s += `<rect x="${cx(UNITE) + 1.5}" y="${cy(UNITE) + 1.5}" width="${C - 3}" height="${C - 3}" rx="6" fill="none" stroke="#ffe08a" stroke-width="3"/>`;
+  return s + '<g class="fx"></g></svg>';
+}
+
+const VARIANTS = [
+  ['sand', '2. Рассыпается песком', 'Тайл распадается на песчинки полосой, ветер уносит их вбок, в полете они становятся песком.'],
+  ['shards', '3. Раскалывается, как глиняная табличка', 'От точки удара бегут трещины, тайл разлетается черепками, поднимается пыль.'],
+  ['flood', '4. Уходит под воду', 'Наводнение: тайл синеет и тонет, по воде расходятся круги, летят брызги.'],
+  ['trophy', '5. Трофей победителю', 'Тайл вспыхивает золотом, сворачивается в монету и летит к очкам победителя: видно, кому достались очки за снятые тайлы.'],
+];
+
+const img = new Image();
+img.src = tileImg(1);
+await img.decode().catch(() => {});
+
+const panels = VARIANTS.map(([kind, title, note]) => {
+  const p = document.createElement('div');
+  p.className = 'panel';
+  p.innerHTML = `<h2>${title}</h2><p>${note}</p><div class="host">${base()}${kind === 'trophy' ? '<div class="card"><b>Победитель</b><span>синие</span><span class="chip">4</span></div>' : ''}</div>`;
+  document.getElementById('panels').appendChild(p);
+  const host = p.querySelector('.host');
+  return { kind, host, svg: host.querySelector('svg'), layer: ruinLayer(host), chip: host.querySelector('.chip') };
+});
+
+function rectOf(pn, pos) {
+  return () => {
+    const m = pn.svg.getScreenCTM(), hr = pn.host.getBoundingClientRect();
+    const a = new DOMPoint(cx(pos) + 3, cy(pos) + 3).matrixTransform(m), b = new DOMPoint(cx(pos) + C - 3, cy(pos) + C - 3).matrixTransform(m);
+    return { x: a.x - hr.left, y: a.y - hr.top, w: b.x - a.x, h: b.y - a.y };
+  };
+}
+const chipAt = (pn) => () => {
+  const c = pn.chip.getBoundingClientRect(), hr = pn.host.getBoundingClientRect();
+  return { x: c.left + c.width / 2 - hr.left, y: c.top + c.height / 2 - hr.top };
+};
+
+let timer = 0;
+function ignite() {
+  clearTimeout(timer);
+  const slow = document.getElementById('slow').checked, k = slow ? 3 : 1;
+  for (const pn of panels) {
+    const g = pn.svg.querySelector('.fx');
+    pn.layer.clear();
+    pn.layer.speed = 1 / k;
+    g.innerHTML = '';
+    if (pn.chip) pn.chip.textContent = '4';
+    for (const pos of BURN) {
+      pn.layer.play(pn.kind, rectOf(pn, pos), {
+        img,
+        delay: delayOf(pos) * k,
+        target: pn.chip ? chipAt(pn) : null,
+        onArrive: pn.chip ? () => { pn.chip.textContent = String(+pn.chip.textContent + 1); pn.chip.classList.add('pop'); setTimeout(() => pn.chip.classList.remove('pop'), 160); } : null,
+      });
+    }
+  }
+  document.getAnimations().forEach((a) => { a.playbackRate = 1 / k; });
+  if (document.getElementById('loop').checked) timer = setTimeout(ignite, k * 3600);
+}
+document.getElementById('go').addEventListener('click', ignite);
+document.getElementById('slow').addEventListener('change', ignite);
+document.getElementById('loop').addEventListener('change', (e) => { if (e.target.checked) ignite(); else clearTimeout(timer); });
+ignite();
+</script>
+</body>
+</html>
