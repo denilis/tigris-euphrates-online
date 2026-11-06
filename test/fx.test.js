@@ -1,7 +1,7 @@
 // Анимации поля (04.11): что изменилось между видами, возраст эффектов, рисунок эффектов.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardChanges, ageFx, takerOf, FX_MS } from '../public/js/fx.js';
+import { boardChanges, ageFx, takerOf, FX_MS, BURN_STEP, BURN_RINGS } from '../public/js/fx.js';
 import { fxSVG } from '../public/js/board.js';
 import { CATASTROPHE, FACEDOWN } from '../public/js/util.js';
 import { started, playOut } from './support.js';
@@ -63,6 +63,114 @@ test('анимации на настоящих партиях: эффект то
     });
   }
   assert.ok(seen.gone > 0 && seen.crack > 0 && seen.cube > 0, JSON.stringify(seen));
+});
+
+// --- огонь войны и падение лидера (схема одобрена Денисом 06.11)
+const war = (loser, color) => ({ ev: 'war', winner: 9, loser, color, att: 9, def: loser });
+
+test('огонь войны: снятые войной тайлы горят волной от тайла, что объединил царства', () => {
+  const a = empty();
+  for (const i of [20, 21, 22, 40]) a.board.tile[i] = 2; // E2, F2, G2 и I3
+  const b = clone(a);
+  for (const i of [20, 21, 22, 40]) b.board.tile[i] = -1;
+  b.board.tile[19] = 0; // тайл объединения (D2) лег этим же ходом
+  const entries = [{ ev: 'tile', pos: 19, c: 0 }, { ev: 'warStart' }, war(1, 2)];
+  assert.deepEqual(boardChanges(a, b, entries), [
+    { kind: 'burn', pos: 20, c: 2, delay: 0 },
+    { kind: 'burn', pos: 21, c: 2, delay: BURN_STEP },
+    { kind: 'burn', pos: 22, c: 2, delay: 2 * BURN_STEP },
+    { kind: 'burn', pos: 40, c: 2, delay: 4 * BURN_STEP },
+  ]);
+  // тайл лег прошлым обновлением, игрок решал поддержку: место стычки из метки объединения
+  assert.deepEqual(boardChanges({ ...a, unite: 19 }, b, [war(1, 2)]).map((f) => f.delay), [0, BURN_STEP, 2 * BURN_STEP, 4 * BURN_STEP]);
+  // места не знаем: горят разом
+  assert.deepEqual(boardChanges(a, b, [war(1, 2)]).map((f) => f.delay), [0, 0, 0, 0]);
+});
+
+test('огонь войны: без боя тайлы гаснут как раньше (отмена хода), волна не тянется дольше 10 шагов', () => {
+  const a = empty();
+  a.board.tile[1] = 3;
+  a.board.tile[175] = 3; // дальний угол
+  const b = clone(a);
+  b.board.tile[1] = -1;
+  b.board.tile[175] = -1;
+  assert.deepEqual(boardChanges(a, b, [{ ev: 'undo' }]).map((f) => f.kind), ['gone', 'gone']);
+  assert.deepEqual(boardChanges(a, b).map((f) => f.kind), ['gone', 'gone']);
+  assert.deepEqual(boardChanges(a, b, [{ ev: 'tile', pos: 0, c: 3 }, war(1, 3)]).map((f) => f.delay), [0, BURN_RINGS * BURN_STEP]);
+});
+
+test('падение лидера: проигравший в войне и восстании, лидер без храма; свой уход лидера не анимируется', () => {
+  const a = empty();
+  a.board.leader = Array(176).fill(-1);
+  a.board.leader[50] = 1 * 4 + 2; // место 3 (индекс движка 1), зеленый
+  a.board.leader[60] = 0 * 4 + 0; // место 7, красный
+  a.board.leader[70] = 0 * 4 + 1; // место 7, синий: уходит сам
+  const b = clone(a);
+  b.order = [7, 3];
+  for (const i of [50, 60, 70]) b.board.leader[i] = -1;
+  const entries = [war(3, 2), { ev: 'leaderReturned', seat: 7, c: 0, pos: 60 }, { ev: 'leaderWithdraw', seat: 7, c: 1 }];
+  assert.deepEqual(boardChanges(a, b, entries), [
+    { kind: 'fall', pos: 50, c: 2, seat: 3 },
+    { kind: 'fall', pos: 60, c: 0, seat: 7 },
+  ]);
+  assert.deepEqual(boardChanges(a, b, [{ ev: 'revolt', winner: 3, loser: 7, color: 1 }]), [{ kind: 'fall', pos: 70, c: 1, seat: 7 }]);
+  assert.deepEqual(boardChanges(a, b, []), [], 'без боя лидеры уходят без анимации');
+  // лидер переставлен на другую клетку: не падение
+  const m = clone(a);
+  m.order = [7, 3];
+  m.board.leader[50] = -1;
+  m.board.leader[51] = 1 * 4 + 2;
+  assert.deepEqual(boardChanges(a, m, [war(3, 2)]), []);
+});
+
+test('огонь и падение на настоящих партиях: каждая война жжет снятые тайлы, каждый проигравший падает', () => {
+  const seen = { burn: 0, fall: 0 };
+  for (const seed of [2, 4, 8, 13]) {
+    const t = started(seed);
+    playOut(t, seed);
+    let prev = null;
+    replay(t.game.rec, (s) => {
+      const next = {
+        board: { tile: [...s.tile], treasure: [...s.treasure], leader: [...s.leader] },
+        monuments: s.monuments.map((m) => ({ id: m.id, pos: m.pos })),
+        order: s.players.map((_, p) => p),
+        unite: s.ctx?.unite && s.ctx.pos != null ? s.ctx.pos : null,
+      };
+      const entries = s.log.map((e) => ('p' in e ? { ...e, seat: e.p } : e)); // как журнал сайта: место вместо индекса
+      const ch = boardChanges(prev, next, entries);
+      if (prev) {
+        const removed = entries.filter((e) => e.ev === 'score' && e.why === 'war').reduce((x, e) => x + e.n - 1, 0);
+        assert.equal(ch.filter((f) => f.kind === 'burn').length, removed, 'горит ровно то, что сняла война');
+        const out = entries.filter((e) => ['war', 'revolt', 'leaderReturned'].includes(e.ev)).length;
+        assert.equal(ch.filter((f) => f.kind === 'fall').length, out, 'падает каждый снятый лидер');
+        for (const f of ch.filter((x) => x.kind === 'burn')) assert.ok(f.delay >= 0 && f.delay <= BURN_RINGS * BURN_STEP);
+      }
+      for (const f of ch) if (f.kind in seen) seen[f.kind]++;
+      prev = next;
+    });
+  }
+  assert.ok(seen.burn > 0 && seen.fall > 0, JSON.stringify(seen));
+});
+
+test('огонь: эффект с задержкой волны живет дольше на эту задержку', () => {
+  const list = ageFx([], [{ kind: 'burn', pos: 1, c: 0, delay: 320 }, { kind: 'fall', pos: 2, c: 1, seat: 0 }], 0);
+  assert.equal(ageFx(list, [], FX_MS.fall + 1).length, 1, 'лидер уже улетел');
+  assert.equal(ageFx(list, [], FX_MS.burn + 319).length, 1);
+  assert.equal(ageFx(list, [], FX_MS.burn + 321).length, 0);
+});
+
+test('огонь: рисунок горящего тайла и падающего лидера', () => {
+  const s = fxSVG([
+    { kind: 'burn', pos: 0, c: 2, delay: 160, age: 40 },
+    { kind: 'burn', pos: 1, c: -1, delay: 0, age: 0 },
+    { kind: 'fall', pos: 5, c: 1, seat: 0, hero: 'lion', age: 100 },
+  ]);
+  assert.equal((s.match(/class="fx-burn"/g) || []).length, 1, 'без цвета тайл не горит');
+  assert.match(s, /class="burn-tile" href="#tl2"[^>]*animation-delay:120ms/, 'ждет своей очереди в волне');
+  assert.ok((s.match(/class="fl-env/g) || []).length >= 3, 'языки пламени');
+  assert.ok((s.match(/class="ember"/g) || []).length >= 3, 'искры');
+  assert.match(s, /class="fx-fall"[^>]*animation-delay:-100ms/);
+  assert.match(s, /href="#tk_lion_1"/);
 });
 
 test('анимации: возраст растет, отыгравший эффект уходит', () => {

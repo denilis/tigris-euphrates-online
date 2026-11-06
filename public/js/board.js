@@ -162,14 +162,42 @@ export function treasureSVG(i, special) {
 }
 
 /**
+ * Горящий тайл (огонь войны, 06.11): кромка вспыхивает, языки пламени, тайл обугливается,
+ * тлеющий след с искрами тает. Все части идут по одной шкале 1,6 с, t — задержка в мс
+ * (положительная, пока волна огня не дошла до клетки, потом отрицательная: возраст).
+ */
+function burnSVG(x, y, c, t) {
+  const at = (ms) => `animation-delay:${Math.round(t + ms)}ms`;
+  const d = ` style="${at(0)}"`, S = C - 6;
+  const mx = x + C / 2, by = y + C - 9;
+  const flame = (dx, h, w, k, fill) => {
+    const bx = mx + dx;
+    return `<g class="fl-env fl${k}"${d}><path class="fl-flick" d="M${f1(bx - w * 0.55)} ${by}Q${f1(bx - w)} ${f1(by - h * 0.45)} ${f1(bx)} ${f1(by - h)}Q${f1(bx + w)} ${f1(by - h * 0.45)} ${f1(bx + w * 0.55)} ${by}Q${f1(bx)} ${f1(by + h * 0.12)} ${f1(bx - w * 0.55)} ${by}Z" fill="${fill}"/></g>`;
+  };
+  const embers = [[-14, 0, -5], [-4, 120, 4], [7, 60, -3], [15, 180, 6], [2, 240, -2]]
+    .map(([dx, ms, drift], k) => `<circle class="ember" cx="${mx + dx}" cy="${by - 6}" r="${k % 2 ? 1.6 : 2.2}" fill="#ffd27a" style="--dx:${drift}px;${at(ms)}"/>`).join('');
+  return `<g class="fx-burn"><use class="burn-tile" href="#tl${c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${d}/>
+    <rect class="burn-char" x="${x + 3}" y="${y + 3}" width="${S}" height="${S}" rx="5" fill="#1a0d05"${d}/>
+    <rect class="burn-edge" x="${x + 3}" y="${y + 3}" width="${S}" height="${S}" rx="5" fill="none" stroke="#ffb347"${d}/>
+    <rect class="burn-glow" x="${x + 5}" y="${y + 5}" width="${S - 4}" height="${S - 4}" rx="4" fill="none" stroke="#ff7b2a" stroke-width="2" stroke-dasharray="7 5"${d}/>
+    ${flame(-12, 30, 13, 1, 'url(#flameG)')}${flame(11, 26, 12, 2, 'url(#flameG)')}${flame(0, 42, 17, 3, 'url(#flameG)')}${flame(0, 22, 8, 4, '#fff1b8')}${embers}</g>`;
+}
+
+/**
  * Эффекты поля из fx.js (анимации 04.11): снятый тайл гаснет, катастрофа трескается, у нового
  * монумента золотая вспышка, кубик сокровища подпрыгивает. age — сколько мс эффект уже идет.
+ * 06.11: тайл, снятый войной, горит (burn), проигравший лидер падает набок (fall).
  */
 export function fxSVG(list) {
   let s = '';
   for (const f of list) {
     const x = cx(f.pos), y = cy(f.pos), d = ` style="animation-delay:-${f.age}ms"`;
     if (f.kind === 'gone' && f.c >= 0) s += `<use class="fx-gone" href="#tl${f.c}" x="${x + 3}" y="${y + 3}" clip-path="url(#rr)"${d}/>`;
+    if (f.kind === 'burn' && f.c >= 0) s += burnSVG(x, y, f.c, (f.delay || 0) - f.age);
+    if (f.kind === 'fall') {
+      const lx = x + C / 2, ly = y + C / 2;
+      s += `<g class="fx-fall"${d}><g filter="url(#shadow2)"><circle cx="${lx}" cy="${ly}" r="24.5" fill="${HEX[f.c]}"/><use href="#tk_${f.hero || 'pot'}_${f.c}" x="${lx - 22}" y="${ly - 22}"/></g></g>`;
+    }
     if (f.kind === 'crack') {
       const crack = `M${x + 12} ${y + 8}l9 13l-6 7l11 10l-4 9l10 6M${x + 21} ${y + 21}l12 -6l9 4M${x + 26} ${y + 38}l-10 8`;
       s += `<g class="fx-crack"${d}><rect x="${x + 3}" y="${y + 3}" width="${C - 6}" height="${C - 6}" rx="5" fill="#120c06" opacity=".55"/>
@@ -225,6 +253,7 @@ function staticLayer(river, look = 'relief', monStyle = null) {
     <filter id="shadow2" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".6"/></filter>
     <clipPath id="boardClip"><rect x="${G}" y="${G}" width="${W * C}" height="${H * C}"/></clipPath>
     <clipPath id="rr" clipPathUnits="objectBoundingBox"><rect width="1" height="1" rx=".09"/></clipPath>
+    <linearGradient id="flameG" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fff0a8"/><stop offset=".3" stop-color="#ffb02e"/><stop offset=".7" stop-color="#ff5a14" stop-opacity=".95"/><stop offset="1" stop-color="#b8160a" stop-opacity=".7"/></linearGradient>
     <marker id="trailArrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ffe08a" stroke="#1b1309" stroke-width=".8"/></marker>
     ${monDefs('b')}
     ${[0, 1, 2, 3].map((c) => `<image id="tl${c}" width="${C - 6}" height="${C - 6}" href="${tileImg(c)}" preserveAspectRatio="xMidYMid slice"/>`).join('')}

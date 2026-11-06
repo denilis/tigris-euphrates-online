@@ -1,7 +1,7 @@
 // Экран партии: поле, рука, карточки игроков, панель «Сейчас», журнал. Клиент только
 // рисует вид от сервера: допустимые ходы приходят списком legal, ход уходит номером в нём.
 import { renderBoard, sealIcon, buildingIcon, cellScreen, TREASURE_IMG } from './board.js';
-import { boardChanges, ageFx, takerOf, fly, boxOf } from './fx.js';
+import { boardChanges, ageFx, takerOf, fly, boxOf, FX_MS } from './fx.js';
 import { api } from './api.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd, endReasonText, stopText } from './end.js';
@@ -140,6 +140,7 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
   updateFx(view, entries);
   draw();
   flyCubes();
+  flyLeaders();
 }
 
 /** Звук и вспышка рамки при новом виде стола (в уроке тихо: там ходы по шагам). entries — новое в журнале. */
@@ -162,11 +163,33 @@ function signal(view, entries) {
  */
 function updateFx(view, entries) {
   const g = view.game, same = ui.fxCode === view.code && !ctl.lesson;
-  const fresh = same ? boardChanges(ui.fxPrev, g) : [];
+  const hero = (id) => view.seats.find((s) => s.id === id)?.hero;
+  // огонь войны и падение лидера (06.11): по записям журнала видно, был ли бой и кто проиграл
+  const fresh = same ? boardChanges(ui.fxPrev, g, entries).map((f) => (f.kind === 'fall' ? { ...f, hero: hero(f.seat) } : f)) : [];
   ui.fxCode = view.code;
-  ui.fxPrev = { board: { tile: [...g.board.tile], treasure: [...g.board.treasure] }, monuments: g.monuments.map((m) => ({ id: m.id, pos: m.pos })) };
+  ui.fxPrev = {
+    board: { tile: [...g.board.tile], treasure: [...g.board.treasure], leader: [...g.board.leader] },
+    monuments: g.monuments.map((m) => ({ id: m.id, pos: m.pos })),
+    unite: unitePos(g),
+  };
   ui.fx = ageFx(same ? ui.fx : [], fresh, Date.now());
   ui.cubes = fresh.filter((f) => f.kind === 'cube').map((f) => ({ pos: f.pos, seat: takerOf(entries, f.pos) }));
+  ui.falls = fresh.filter((f) => f.kind === 'fall');
+}
+
+/** Упавший лидер улетает к своему жетону в карточке хозяина (06.11): по правилам он вернулся в руку. */
+function flyLeaders() {
+  const list = ui.falls || [];
+  ui.falls = [];
+  for (const f of list) {
+    const card = ctl.root.querySelector(`.pc[data-seat="${f.seat}"]`);
+    const target = card?.querySelector(`.ltok[data-c="${f.c}"]`) || card?.querySelector('.av');
+    const cell = cellScreen(ctl.root.querySelector('#board'), f.pos);
+    if (!cell || !target) continue;
+    const k = 49 / 54; // жетон (r 24.5) в клетке без полей (54)
+    const box = { x: cell.x + (cell.w * (1 - k)) / 2, y: cell.y + (cell.h * (1 - k)) / 2, w: cell.w * k, h: cell.h * k };
+    setTimeout(() => fly(tokenImg(f.hero, f.c), box, boxOf(target), { ms: 700, round: 999 }), FX_MS.fall - 90);
+  }
 }
 
 /** Кубик сокровища улетает со храма к значку сокровищ в карточке того, кто его взял. */
@@ -446,7 +469,7 @@ function drawPlayers({ view, g, me, seat }) {
     const tag = deciding && !active ? '<span class="tag gold">решает</span>' : active && !g.over ? `<span class="tag gold">${g.actionNo}/2</span>` : '';
     // лидеры двумя группами жетонами героя (просьба Дениса 03.11): черный кружок в руке и на поле
     // выглядел одинаково, теперь место видно по группе, а не по оттенку
-    const tok = (c) => `<i class="ltok" title="${LEADER[c]}" style="border-color:${RING[c]};background-image:url(${tokenImg(s.hero, c)})"></i>`;
+    const tok = (c) => `<i class="ltok" data-c="${c}" title="${LEADER[c]}" style="border-color:${RING[c]};background-image:url(${tokenImg(s.hero, c)})"></i>`;
     const group = (label, on) => {
       const cs = [0, 1, 2, 3].filter((c) => (pl.leaders[c] >= 0) === on);
       return `<span class="lgrp"><small>${label}</small>${cs.length ? cs.map(tok).join('') : '<em>нет</em>'}</span>`;
