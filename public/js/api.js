@@ -58,6 +58,7 @@ export async function api(method, path, body) {
  */
 export function watchTable(code, onView, onError) {
   let view = null, version = -1, stopped = false, timer = null, ticking = false, busy = false;
+  let soon = null; // через сколько мс бот «додумает» (06.11): следующий опрос ровно тогда
   let hiddenAt = document.hidden ? Date.now() : null;
 
   const merge = (v, appendLog) => {
@@ -92,9 +93,12 @@ export function watchTable(code, onView, onError) {
         onView(view);
       }
       if (p.version !== version) await fetchView();
+      if (Number.isFinite(p.botIn)) soon = p.botIn;
       if (p.botDue && !p.locked && !ticking) {
         ticking = true;
-        api('POST', `tables/${code}/bot-tick`).catch(() => {}).finally(() => { ticking = false; });
+        api('POST', `tables/${code}/bot-tick`)
+          .then((r) => { if (Number.isFinite(r?.botIn) && !busy) { soon = r.botIn; schedule(); } })
+          .catch(() => {}).finally(() => { ticking = false; });
       }
     } catch (e) {
       onError?.(e);
@@ -107,7 +111,9 @@ export function watchTable(code, onView, onError) {
   function schedule() {
     if (stopped) return;
     clearTimeout(timer);
-    const wait = pollDelay(view, document.hidden, hiddenAt === null ? 0 : Date.now() - hiddenAt);
+    let wait = pollDelay(view, document.hidden, hiddenAt === null ? 0 : Date.now() - hiddenAt);
+    if (wait !== null && soon !== null && !document.hidden) wait = Math.min(wait, soon + 60);
+    soon = null;
     if (wait !== null) timer = setTimeout(tick, wait);
   }
 

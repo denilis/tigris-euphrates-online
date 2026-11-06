@@ -59,8 +59,11 @@ const JOIN_ACTIVE_MAX = 10; // действующих ссылок у одног
 const NEW_PLAYERS_DAY = 10; // новых игроков в сутки от игрока без прав администратора
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
-const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
-const due = (m, at) => m === 'bot' || (m[0] === 'c' && at >= Number(m.slice(1)));
+// b<срок>: бот уже решил и «думает» до срока (пауза 06.11), ход покажет первый bot-tick после
+const meta = (t) => (botDue(t) !== null ? (t.game.botPlan ? `b${t.game.botPlan.at}` : 'bot') : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
+const due = (m, at) => m === 'bot' || ((m[0] === 'c' || m[0] === 'b') && at >= Number(m.slice(1)));
+/** Через сколько мс бот «додумает» (браузер спросит ровно тогда), если он уже решил; иначе нет поля. */
+const botIn = (m, at) => (m[0] === 'b' && Number(m.slice(1)) > at ? { botIn: Number(m.slice(1)) - at } : {});
 const DELETED = 'deleted'; // отметка удаленного стола для опроса: он отвечает «нет такого стола»
 const TABLE_LOG_MAX = 300; // журнал удалений хранит последние записи
 const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
@@ -69,7 +72,12 @@ const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const normName = (raw) => String(raw || '').normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/[\s\p{Cc}]+/gu, ' ').trim();
 const letterId = () => randomBytes(6).toString('hex');
 
-export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, tg = telegram(env) }) {
+/**
+ * botPace — пауза «бот думает» в мс { min, max } (Денис 06.11: первое действие бота до 5 с,
+ * второе до 10 с, за ходом можно проследить); null — бот ходит сразу (тесты с остановленными
+ * часами). На сайте и локальном сервере пауза включена в api/index.js.
+ */
+export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, botPace = null, tg = telegram(env) }) {
   const secret = env.SESSION_SECRET, pepper = env.CODE_PEPPER;
   const adminCode = normalizeCode(env.ADMIN_CODE || '');
   const adminHash = adminCode && pepper ? Buffer.from(codeHash(adminCode, pepper)) : null;
@@ -905,10 +913,16 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       while (now() - t0 < botBudget) {
         const cur = await store.getTable(code);
         if (!cur) break;
+        let waiting = false;
         if (confirmDue(cur.doc, now())) autoConfirm(cur.doc, { now: now() });
-        else if (botDue(cur.doc) !== null) await botStep(cur.doc, { now: now(), ...botOptions });
-        else break;
+        else if (botDue(cur.doc) !== null) {
+          const r = await botStep(cur.doc, { now: now(), pace: botPace, clock: now, ...botOptions });
+          // бот «думает»: новый план сохраняем, ход покажем, когда выйдет время раздумий
+          if (r?.waiting && !r.planned) break;
+          waiting = Boolean(r?.waiting);
+        } else break;
         if (!(await store.putTable(cur.doc, cur.version, meta(cur.doc)))) break;
+        if (waiting) break;
         moved++;
         if (cur.doc.status === 'over') await ensureHistory(cur.doc, cur.doc.version);
       }
@@ -916,7 +930,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       await store.unlock(code, token);
     }
     const p = await store.poll(code);
-    return { moved, locked: false, botDue: due(p?.meta || '', now()), version: p?.version ?? null };
+    const at = now();
+    return { moved, locked: false, botDue: due(p?.meta || '', at), ...botIn(p?.meta || '', at), version: p?.version ?? null };
   }
 
   // --- маршрутизация
@@ -933,7 +948,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const who = await auth(token, { light: true });
       const p = await store.poll(rest[0]);
       if (!p || p.meta === DELETED) http(404, 'no-table', 'Нет такого стола');
-      const out = { version: p.version, botDue: due(p.meta, now()), locked: p.locked };
+      const at = now();
+      const out = { version: p.version, botDue: due(p.meta, at), ...botIn(p.meta, at), locked: p.locked };
       // в лобби: кто на месте за столом, и отметка смотрящего
       if (query.here) {
         const r = await store.getTable(rest[0]);
