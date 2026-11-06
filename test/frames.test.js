@@ -105,3 +105,30 @@ test('API: просмотр после входа, 409 для идущей па�
   assert.ok(Array.isArray(r.body.river) && r.body.river.length > 20);
   assert.doesNotMatch(JSON.stringify(r.body), /"(hand|bag|seed|moves|discarded|rng)":/);
 });
+
+test('просмотр (06.11): шаг вперед дает трофеи победителю и падение лидера, как за столом', async () => {
+  const { boardChanges } = await import('../public/js/fx.js');
+  let burns = 0, falls = 0;
+  for (const seed of [7, 8, 9]) {
+    const t = started(seed);
+    playOut(t, seed);
+    const data = JSON.parse(JSON.stringify(replayFrames(t)));
+    const boards = framesBoards(data);
+    const order = t.game.order; // состав и порядок сервер добавляет к записи в ответе API
+    const snap = (j) => ({ board: boards[j].board, monuments: boards[j].mons.map((pos, i) => ({ id: i, pos })), order });
+    for (let k = 1; k <= data.frames.length; k++) {
+      const entries = data.frames[k - 1].entries;
+      const ch = boardChanges(snap(k - 1), snap(k), entries);
+      const removed = entries.filter((e) => e.ev === 'score' && e.why === 'war').reduce((a, e) => a + e.n - 1, 0);
+      assert.equal(ch.filter((f) => f.kind === 'burn').length, removed, `кадр ${k}: трофей за каждый снятый войной тайл`);
+      for (const f of ch.filter((x) => x.kind === 'burn')) assert.ok(order.includes(f.seat), 'монета летит победителю за столом');
+      const out = entries.filter((e) => ['war', 'revolt', 'leaderReturned'].includes(e.ev)).length;
+      // лидер, поставленный и снятый в этом же кадре (восстание проиграно сразу), на поле не был: падать нечему
+      const placed = entries.filter((e) => e.ev === 'leader').length, fell = ch.filter((f) => f.kind === 'fall').length;
+      assert.ok(fell <= out && fell >= out - placed, `кадр ${k}: падает каждый снятый лидер, что стоял на поле`);
+      burns += removed;
+      falls += fell;
+    }
+  }
+  assert.ok(burns > 0 && falls > 0, `трофеев ${burns}, падений ${falls}`);
+});

@@ -6,9 +6,14 @@ import { api } from './api.js';
 import { renderBoard } from './board.js';
 import { trailMarks, TRAIL_FRESH_MS } from './trail.js';
 import { logLines, lineHTML } from './logview.js';
-import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle } from './util.js';
+import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle, tileImg } from './util.js';
 import { framesBoards, timelineMarks } from './replay-core.js';
 import { mountStats } from './replay-stats.js';
+import { boardChanges, ageFx, still } from './fx.js';
+import { ruinLayer } from './ruin.js';
+import { cellScreen } from './board.js';
+
+const TROPHY_SLOW = 3; // как за столом (game.js): монета трофея в 3 раза медленнее демо
 
 const SPEED = { 1: 1400, 2: 700 };
 
@@ -100,6 +105,46 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
   // аналитика справа (05.11): щелчок по графику переходит на кадр
   const drawStats = mountStats($('rStats'), data, boards, { name, go: (to) => { stop(); go(to); } });
 
+  // эффекты при шаге вперед (06.11, как за столом): трофеи победителю, падение лидера, вспышки
+  let fx = [], ruin = null;
+  const snapAt = (j) => ({ board: boards[j].board, monuments: data.monDefs.map((m, i) => ({ id: i, pos: boards[j].mons[i] })), order: data.order });
+  const stepFx = (from, to) => {
+    if (to !== from + 1 || still()) return [];
+    return boardChanges(snapAt(from), snapAt(to), data.frames[to - 1].entries).map((x) => (x.kind === 'fall' ? { ...x, hero: seat(x.seat)?.hero } : x));
+  };
+  const trophies = (list) => {
+    if (!list.length) return;
+    if (!ruin?.alive) {
+      ruin = ruinLayer(main);
+      ruin.speed = 1 / TROPHY_SLOW;
+    }
+    const local = (bx) => {
+      const hr = main.getBoundingClientRect();
+      return bx && { x: bx.x - hr.left, y: bx.y - hr.top, w: bx.w, h: bx.h };
+    };
+    const chip = (x) => main.querySelector(`#rScore .rsc[data-seat="${x.seat}"] span[data-c="${x.c}"]`);
+    for (const x of list) {
+      const img = new Image();
+      img.src = tileImg(x.c);
+      ruin.play('trophy', () => local(cellScreen(svg, x.pos)), {
+        img,
+        delay: (x.delay || 0) * TROPHY_SLOW,
+        target: () => {
+          const r = chip(x)?.getBoundingClientRect();
+          const b = r && local({ x: r.left, y: r.top, w: r.width, h: r.height });
+          return b && { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+        },
+        onArrive: () => {
+          const el = chip(x);
+          if (!el) return;
+          el.classList.remove('gain');
+          void el.offsetWidth;
+          el.classList.add('gain');
+        },
+      });
+    }
+  };
+
   const draw = () => {
     const b = boards[k];
     const f = k ? data.frames[k - 1] : null;
@@ -110,7 +155,8 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     // след действия: рамки и номер на клетках, как у хода соперника, без вспышки
     const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, hero: seat(m.actor)?.hero })) : [];
     setTileStyle(data.options.tiles || 'plate');
-    renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building }, data.options.look || 'relief');
+    fx = ageFx(fx, [], Date.now());
+    renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building, fx }, data.options.look || 'relief');
     drawHint(svg, $('rHint'), hintsAt(data.analysis, k), name);
     $('rRange').value = k;
     $('rPos').textContent = `${k} / ${N}`;
@@ -121,16 +167,24 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     $('rScore').innerHTML = data.order.map((id, p) => {
       const [r, bl, gr, bk, tr] = b.scores[p];
       const sc = [r, bl, gr, bk];
-      return `<div class="rsc"><b>${esc(name(id))}</b><span class="sc">${SCORE_ORDER.map((c) => `<span style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}" title="${COLNAME[c]}">${sc[c]}</span>`).join('')}</span>
+      return `<div class="rsc" data-seat="${id}"><b>${esc(name(id))}</b><span class="sc">${SCORE_ORDER.map((c) => `<span data-c="${c}" style="background:${HEX[c]}${c === 3 ? ';outline:1px solid #cfc6b4' : ''}" title="${COLNAME[c]}">${sc[c]}</span>`).join('')}</span>
         <small>${tr ? `+${tr} ${treasureWord(tr)}, ` : ''}итог ${finalScore(sc, tr)}</small></div>`;
     }).join('');
     drawStats(k);
   };
 
   const go = (to) => {
+    const from = k;
     k = Math.max(0, Math.min(N, to));
     if (k >= N) stop();
+    const fresh = stepFx(from, k);
+    if (k !== from + 1) { // прыжок по шкале или назад: идущие эффекты больше не к месту
+      fx = [];
+      ruin?.clear();
+    }
+    fx = ageFx(fx, fresh.filter((x) => x.kind !== 'burn'), Date.now());
     draw();
+    trophies(fresh.filter((x) => x.kind === 'burn'));
   };
   const stop = () => {
     clearInterval(timer);
