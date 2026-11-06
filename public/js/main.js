@@ -19,6 +19,8 @@ import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
 import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText } from './admin-list.js';
 import { openBotGuide } from './bots-info.js';
+import { renderJoin } from './join.js';
+import { JOIN_ROUTE, joinUrl, linkNote, linkLine } from './join-link.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -103,7 +105,7 @@ function renderActivate() {
   app.innerHTML = `<div class="gate">
     <form class="gcard" id="actForm" autocomplete="off">
       <h1>Тигр и Евфрат</h1>
-      <p>Стол для своей компании. Введите личный код, его выдает администратор. Код нужен один раз на устройстве, вход запоминается на 90 дней.</p>
+      <p>Стол для своей компании. Введите личный код: его дает игрок, который вас пригласил, или вы получаете его сами по ссылке-приглашению. Код нужен один раз на устройстве, вход запоминается на 90 дней.</p>
       <input id="actCode" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false" aria-label="Личный код">
       <button class="btn primary" type="submit">Войти</button>
       <p class="err" id="actErr" role="alert"></p>
@@ -345,6 +347,9 @@ async function renderAdmin() {
       : 'Пригласите нового игрока: впишите его имя, и он получит свой код для входа. Код показывается один раз: сразу отправьте его игроку. Ниже вы и те, кого вы пригласили.'} Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
     <form id="newUser" class="join"><input id="newName" placeholder="Имя нового игрока" maxlength="30" aria-label="Имя нового игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
     <div id="newCode"></div>
+    <div class="jlinks"><span class="muted">Или ссылкой: новичок сам впишет имя, получит код и сразу войдет.</span><button class="btn sm" id="newLink" type="button">Создать ссылку-приглашение</button></div>
+    <div id="newLinkBox"></div>
+    <div id="linkList"></div>
     <h2 id="uHead">Игроки</h2>
     <div class="uctl">
       <input id="uq" type="search" placeholder="Поиск по имени" aria-label="Поиск по имени" autocomplete="off">
@@ -373,6 +378,33 @@ async function renderAdmin() {
   };
   // список (Денис 05.11): поиск, сортировка, отозванные по желанию, у администратора отбор по пригласившему
   const $ = (id) => app.querySelector(id);
+  // ссылки-приглашения (Денис 06.11): новая показывается один раз, ниже действующие с отзывом
+  const drawLinks = (list) => {
+    $('#linkList').innerHTML = list.length ? `<p class="muted small">Ссылки, по которым еще не зарегистрировались (${list.length}):</p>
+      <ul class="jlist">${list.map((x) => `<li>${esc(linkLine(x))} <button class="linkbtn" data-unlink="${esc(x.id)}" type="button">Отозвать</button></li>`).join('')}</ul>` : '';
+  };
+  const loadLinks = () => api('GET', 'joinlinks').then(drawLinks).catch(() => {});
+  $('#newLink').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const r = await api('POST', 'joinlinks', {});
+      const url = joinUrl(r.token);
+      $('#newLinkBox').innerHTML = `<div class="codebox"><span>Ссылка-приглашение:</span><code class="jurl">${esc(url)}</code><button class="btn sm" id="cpLink" type="button">Скопировать</button></div><p class="muted small">${esc(linkNote(r))}</p>`;
+      $('#cpLink').addEventListener('click', () => copy(url));
+      loadLinks();
+    } catch (ex) { toast(ex.message); } finally { b.disabled = false; }
+  });
+  $('#linkList').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-unlink]');
+    if (!b) return;
+    b.disabled = true;
+    try {
+      await api('POST', `joinlinks/${b.dataset.unlink}/revoke`, {});
+      loadLinks();
+    } catch (ex) { toast(ex.message); b.disabled = false; }
+  });
+  loadLinks();
   const st = { q: '', sort: 'created', dir: defaultDir('created'), revoked: false, by: '' };
   let users = [], iAmMain = false;
   const row = (u) => {
@@ -498,6 +530,8 @@ function route() {
   const h = location.hash.replace(/^#\/?/, '');
   const lm = LEARN.exec(h);
   setBackdrop(!(lm?.[1] || lm?.[3] === 'i2')); // в уроке и экскурсии по партии поле, ролик на телефоне качался бы впустую
+  const jm = JOIN_ROUTE.exec(h); // ссылка-приглашение (06.11): открывается и без кода
+  if (jm) return renderJoin(app, jm[1]);
   if (!s?.token) {
     stopPresence();
     if (h === 'rules') return renderRules(app, GUEST_BAR, bindTopbar);

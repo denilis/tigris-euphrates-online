@@ -1005,6 +1005,17 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 /* здание в окошке лежит поверх тайла, как на поле */
 .pfield .ptile .bover{position:absolute;inset:0}
 .pfield .ptile img{border-radius:5px;filter:drop-shadow(0 1.6px 1.4px rgba(0,0,0,.55))}
+/* ссылки-приглашения (06.11): блок в «Кодах игроков», страница новичка, ссылка за стол в лобби */
+.jlinks{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin:4px 0 6px}
+.codebox code.jurl{flex:1 1 220px;min-width:0;font-size:13px;letter-spacing:0;word-break:break-all}
+.jlist{margin:2px 0 12px;padding-left:20px;font-size:13.5px;color:var(--muted)}
+.jlist li{margin:3px 0}
+.jform{display:flex;flex-direction:column;gap:8px}
+.jform label{text-align:center;color:var(--text)}
+.jform small{text-align:center;color:var(--muted)}
+.gcard input.jname{text-transform:none;letter-spacing:0;font-size:18px}
+.jcard .codebox{justify-content:center;margin:4px 0}
+.invite.jnew{margin-top:6px}
 /* коды игроков (05.11): поиск, сортировка, таблица; на телефоне строки карточками */
 .uctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:4px 0 10px;color:var(--muted);font-size:14px}
 .uctl input[type=search]{flex:1 1 220px;max-width:340px}

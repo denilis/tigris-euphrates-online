@@ -92,6 +92,9 @@ export const onlineNow = () => st.online;
 /** Приняли приглашение за этот стол? Ответ дается один раз. */
 export const takeAccepted = (code) => st.accepted.delete(code);
 
+/** Новичок пришел по ссылке за стол (06.11): лобби посадит его так же, как принявшего приглашение. */
+export const markAccepted = (code) => st.accepted.add(code);
+
 export function startPresence() {
   if (st.on) return;
   st.on = true;

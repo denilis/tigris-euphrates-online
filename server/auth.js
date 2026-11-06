@@ -1,6 +1,6 @@
 // Вход по личному коду (решение Дениса 28.10): код выдаёт админ, в базе только отпечаток
 // кода с солью, сессия — подписанный токен в браузере. Пароли и почту не храним.
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto';
 import { cryptoRng } from '../game/random.js';
 
 // без похожих знаков: нет 0/O, 1/I/L
@@ -45,6 +45,13 @@ export const isPin = (text) => /^[0-9]+$/.test(text) && text.length >= PIN_MIN &
 /** Отпечаток короткого кода: normalizeCode такой не пропускает, и codeHash дал бы один отпечаток на все короткие коды. */
 export function pinHash(pin, pepper) {
   return createHmac('sha256', pepper).update(`pin:${pin}`).digest('hex');
+}
+
+// ссылка-приглашение (06.11): 128 бит случайности, в базе только отпечаток, как у кода
+export const newJoinToken = () => randomBytes(16).toString('base64url');
+export const isJoinToken = (t) => typeof t === 'string' && /^[A-Za-z0-9_-]{22}$/.test(t);
+export function joinHash(token, pepper) {
+  return createHmac('sha256', pepper).update(`join:${token}`).digest('hex');
 }
 
 const b64 = (s) => Buffer.from(s).toString('base64url');

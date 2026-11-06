@@ -2,7 +2,7 @@
 // → { status, body }. Функция Vercel (api/index.js) и локальный сервер (dev/server.js) — тонкие
 // переходники. Запись стола атомарна по версии: два хода в один стол не портят партию.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode } from './auth.js';
+import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode, newJoinToken, isJoinToken, joinHash } from './auth.js';
 import {
   createTable, sit, leave, seatPeople, unseat, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
   start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready,
@@ -54,6 +54,9 @@ const CHAT_CALL_MS = 3 * 60 * 1000; // повторно позвать в чат
 const CHAT_CALLS = 3; // и всего от одного игрока за это время: новые столы не обходят замок стола
 const PHOTO_MS = 60 * 1000; // картинку итога одной партии в чат не чаще раза в минуту
 const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
+const JOIN_MS = 7 * 24 * 3600 * 1000; // ссылка-приглашение действует неделю (Денис 06.11)
+const JOIN_ACTIVE_MAX = 10; // действующих ссылок у одного игрока
+const NEW_PLAYERS_DAY = 10; // новых игроков в сутки от игрока без прав администратора
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 const meta = (t) => (botDue(t) !== null ? 'bot' : t.status === 'playing' && t.game?.confirmBy ? `c${t.game.confirmBy}` : '');
@@ -62,6 +65,8 @@ const DELETED = 'deleted'; // отметка удаленного стола д�
 const TABLE_LOG_MAX = 300; // журнал удалений хранит последние записи
 const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
+/** Имя без невидимых знаков (нулевой ширины и управляющих) и с одиночными пробелами (06.11). */
+const normName = (raw) => String(raw || '').normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/[\s\p{Cc}]+/gu, ' ').trim();
 const letterId = () => randomBytes(6).toString('hex');
 
 export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, tg = telegram(env) }) {
@@ -146,6 +151,21 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { code, hash };
   }
 
+  const cleanName = (raw) => {
+    const name = normName(raw);
+    if (!name || name.length > 30) http(400, 'bad-name', 'Имя от 1 до 30 знаков');
+    return name;
+  };
+  // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы (и с невидимым знаком тоже)
+  async function nameFree(name) {
+    const same = (await store.listUsers()).some((x) => normName(x.name).toLowerCase() === name.toLowerCase());
+    if (same) http(409, 'name-taken', 'Такое имя уже есть');
+  }
+  // игрок без прав администратора заводит не больше 10 человек в сутки: кодом или ссылкой
+  async function countNewPlayer(u) {
+    if (!u.admin && (await store.hit(`newplayer:${u.id}`, 24 * 3600 * 1000)) > NEW_PLAYERS_DAY) http(429, 'too-many', 'Сегодня вы уже завели много игроков, попробуйте завтра');
+  }
+
   /**
    * Коды игроков. Роли (просьба Дениса 04.11): администратор как раньше; подтвержденный игрок
    * (любой с действующим кодом) заводит новых игроков, видит себя и тех, кого пригласил сам (05.11),
@@ -165,14 +185,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       }));
     }
     if (method === 'POST' && !rest.length) {
-      const name = String(body.name || '').trim();
-      if (!name || name.length > 30) http(400, 'bad-name', 'Имя от 1 до 30 знаков');
+      const name = cleanName(body.name);
       if (body.admin) needMain(u);
-      // игрок без прав администратора заводит не больше 10 человек в сутки
-      if (!u.admin && (await store.hit(`newplayer:${u.id}`, 24 * 3600 * 1000)) > 10) http(429, 'too-many', 'Сегодня вы уже завели много игроков, попробуйте завтра');
-      // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы
-      const same = (await store.listUsers()).some((x) => x.name.trim().toLowerCase() === name.toLowerCase());
-      if (same) http(409, 'name-taken', 'Такое имя уже есть');
+      await countNewPlayer(u);
+      await nameFree(name);
       const id = 'u-' + randomBytes(6).toString('hex');
       const { code, hash } = await claimCode(body.code, id, u);
       const user = { id, name, admin: Boolean(body.admin), revoked: false, codeHash: hash, createdAt: now(), invitedBy: u.id };
@@ -190,6 +206,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (user.admin) needMain(u);
     if (method === 'POST' && op === 'revoke') {
       if (user.codeHash) await store.delCode(user.codeHash);
+      await dropJoinsOf(user.id); // его ссылки гаснут насовсем, новый код их не вернет
       await store.putUser({ ...user, revoked: true, codeHash: null, sv: (user.sv || 0) + 1 });
       forgetPeople();
       return { ok: true };
@@ -205,6 +222,95 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       needMain(u);
       await store.putUser({ ...user, admin: Boolean(body.admin) });
       forgetPeople();
+      return { ok: true };
+    }
+    http(404, 'no-route', 'Нет такого адреса');
+  }
+
+  // --- ссылки-приглашения (Денис 06.11): новичок сам вписывает имя, получает код и сразу входит.
+  // Ссылка на одного человека, 7 дней; в базе отпечаток, ссылку целиком отдаем один раз при создании.
+
+  const joinGone = () => http(410, 'join-gone', 'Ссылка уже не действует: попросите у пригласившего новую');
+  const tableBrief = async (code) => {
+    const r = code ? await store.getTable(code) : null;
+    return r ? { code, title: r.doc.title || code } : null;
+  };
+
+  /** Действующее приглашение: запись есть, срок не вышел, пригласивший играет. Иначе 410. */
+  async function joinOf(body, ip) {
+    if (!secret || !pepper) http(500, 'not-configured', 'Сервер не настроен');
+    // подбирать ссылки под тем же лимитом, что и коды
+    if ((await store.hit(`act:${ip || 'unknown'}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) http(429, 'too-many', 'Слишком много попыток, подождите несколько минут');
+    if (!isJoinToken(body.token)) joinGone();
+    const hash = joinHash(body.token, pepper);
+    const inv = await store.getJoin(hash);
+    if (!inv || !(inv.until > now())) joinGone();
+    const by = await store.getUser(inv.by);
+    if (!by || by.revoked) joinGone();
+    return { hash, inv, by };
+  }
+
+  async function joinInfo(body, ip) {
+    const { inv, by } = await joinOf(body, ip);
+    return { by: by.name, table: await tableBrief(inv.table) };
+  }
+
+  async function joinRegister(body, ip) {
+    const { hash, inv } = await joinOf(body, ip);
+    const name = cleanName(body.name);
+    await nameFree(name); // занятое имя не сжигает ссылку
+    if (!(await store.takeJoin(hash))) joinGone(); // забор атомарный: по одной ссылке проходит один
+    const id = 'u-' + randomBytes(6).toString('hex');
+    const { code, hash: codeHash } = await claimCode('', id, null);
+    const user = { id, name, admin: false, revoked: false, codeHash, createdAt: now(), invitedBy: inv.by };
+    await store.putUser(user);
+    forgetPeople();
+    await store.delJoinItems(inv.by, [inv.id]);
+    return { token: signSession(id, secret, now(), 0), user: publicUser(user), code, table: await tableBrief(inv.table) };
+  }
+
+  /** Ссылки игрока, по которым еще никто не зарегистрировался; просроченные выпадают из списка. */
+  async function liveJoins(userId) {
+    const all = await store.joinItems(userId);
+    const old = all.filter((x) => !(x.until > now()));
+    if (old.length) await store.delJoinItems(userId, old.map((x) => x.id));
+    return all.filter((x) => x.until > now()).sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  async function dropJoinsOf(userId) {
+    const all = await store.joinItems(userId);
+    for (const x of all) await store.dropJoin(x.hash);
+    await store.delJoinItems(userId, all.map((x) => x.id));
+  }
+
+  async function joinLinks(method, rest, body, u) {
+    if (method === 'GET' && !rest.length) {
+      return (await liveJoins(u.id)).map(({ id, createdAt, until, table }) => ({ id, createdAt, until, table }));
+    }
+    if (method === 'POST' && !rest.length) {
+      let table = null;
+      if (body.table != null) {
+        const code = String(body.table).toUpperCase();
+        const r = /^[A-Z0-9]{6}$/.test(code) ? await store.getTable(code) : null;
+        if (!r || r.doc.status === 'deleted') http(404, 'no-table', 'Нет такого стола');
+        if (r.doc.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
+        table = { code, title: r.doc.title || code };
+      }
+      const live = await liveJoins(u.id);
+      if (live.length >= JOIN_ACTIVE_MAX) http(429, 'too-many', `Действующих ссылок уже ${JOIN_ACTIVE_MAX}: отзовите ненужные`);
+      await countNewPlayer(u);
+      const token = newJoinToken(), hash = joinHash(token, pepper);
+      const inv = { id: hash.slice(0, 12), by: u.id, table: table?.code || null, createdAt: now(), until: now() + JOIN_MS };
+      await store.putJoin(hash, inv, JOIN_MS);
+      await store.addJoinItem(u.id, { id: inv.id, hash, table, createdAt: inv.createdAt, until: inv.until });
+      return { token, until: inv.until, table };
+    }
+    const [id, op] = rest;
+    if (method === 'POST' && op === 'revoke' && rest.length === 2) {
+      const x = (await store.joinItems(u.id)).find((j) => j.id === id);
+      if (!x) http(404, 'no-link', 'Нет такой ссылки');
+      await store.dropJoin(x.hash);
+      await store.delJoinItems(u.id, [x.id]);
       return { ok: true };
     }
     http(404, 'no-route', 'Нет такого адреса');
@@ -836,6 +942,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return out;
     }
     if (method === 'POST' && head === 'beat') return beat(await auth(token, { light: true }), body);
+    // ссылка-приглашение: без входа, токен ссылки телом запроса, не в адресе (журналы его не видят)
+    if (method === 'POST' && head === 'join' && rest.length === 1 && rest[0] === 'info') return joinInfo(body, ip);
+    if (method === 'POST' && head === 'join' && !rest.length) return joinRegister(body, ip);
     const u = await auth(token);
     if (method === 'GET' && head === 'me') return publicUser(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
@@ -853,6 +962,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true };
     }
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
+    if (head === 'joinlinks') return joinLinks(method, rest, body, u);
     if (head === 'admin' && rest[0] === 'tables') return adminTables(method, rest.slice(1), u);
     if (method === 'GET' && head === 'deletions' && !rest.length) return deletions(u);
     if (head === 'tables') {

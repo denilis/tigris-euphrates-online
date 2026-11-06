@@ -5,7 +5,7 @@ import { upstash, CAS_PUT, CAS_USER, UNLOCK, MINE_PUSH, RATE_HIT } from '../serv
 
 /** Поддельный Upstash: принимает тело запроса как настоящий и отвечает { result }. */
 export function fakeUpstash() {
-  const kv = new Map(), sets = new Map(), lists = new Map(), ttl = new Map();
+  const kv = new Map(), sets = new Map(), lists = new Map(), ttl = new Map(), hashes = new Map();
   const expiry = new Map(); // срок хранения в секундах, как его поставила запись стола (EX)
   const commands = [];
   const run = (cmd) => {
@@ -20,6 +20,10 @@ export function fakeUpstash() {
         kv.set(a[0], a[1]);
         return 'OK';
       }
+      case 'GETDEL': { const v = kv.has(a[0]) ? kv.get(a[0]) : null; kv.delete(a[0]); return v; }
+      case 'HSET': { const h = hashes.get(a[0]) || new Map(); for (let i = 1; i < a.length; i += 2) h.set(a[i], a[i + 1]); hashes.set(a[0], h); return 1; }
+      case 'HVALS': return [...(hashes.get(a[0])?.values() || [])];
+      case 'HDEL': { const h = hashes.get(a[0]); return a.slice(1).reduce((n, f) => n + (h?.delete(f) ? 1 : 0), 0); }
       case 'DEL': return a.reduce((n, key) => n + (kv.delete(key) ? 1 : 0), 0);
       case 'PERSIST': return expiry.delete(a[0]) ? 1 : 0;
       case 'SCAN': {

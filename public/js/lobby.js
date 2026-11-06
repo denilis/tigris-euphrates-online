@@ -8,6 +8,15 @@ import { fitTours, tourChoice } from './season.js';
 import { play } from './signals.js';
 import { buildingIcon, monImg, CHIPS_READY } from './board.js';
 import { botShort, openBotGuide } from './bots-info.js';
+import { joinUrl, linkNote } from './join-link.js';
+
+// ссылка для нового игрока за этот стол (06.11): показывается один раз, а лобби перерисовывается
+// при каждом изменении стола, поэтому созданная ссылка живет здесь, пока открыта страница. Ключ с
+// игроком и очистка при выходе: следующий человек на этой вкладке чужую ссылку не увидит
+const madeLinks = new Map(); // «игрок:стол» -> { token, until, table }
+const madeKey = (code) => `${session.get()?.user?.id || ''}:${code}`;
+window.addEventListener('tigris:logout', () => madeLinks.clear());
+const madeHTML = (m) => `<div class="invite jnew"><code>${esc(joinUrl(m.token))}</code><button class="btn sm" id="lJoinCopy" type="button">Скопировать</button></div><p class="muted small jnote">${esc(linkNote(m))}</p>`;
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -129,7 +138,7 @@ function arrivals(view, here) {
   play({ events: ['arrive'] });
 }
 
-export function renderLobby(root, view, { act, bar = '', bindBar }) {
+export function renderLobby(root, view, { act, bar = '', bindBar, tour = false }) {
   const host = view.isHost, me = view.me;
   const canChat = (me != null || host) && chatAllowed(view, session.get()?.user?.name);
   const ready = view.seats.every((s) => s.taken && s.hero);
@@ -187,6 +196,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
   const dis = host ? '' : 'disabled';
   const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.'
     : waiting.length ? `Ждем за столом: ${waiting.map((s) => s.name).join(', ')}.` : '';
+  const made = tour ? null : madeLinks.get(madeKey(view.code));
   // сверху меню сайта, как на других страницах (просьба Дениса 03.11): раньше из лобби был
   // только путь через «Мои столы»
   // лобби глиняной табличкой (схема одобрена Денисом 04.11): полосы клинописи сверху и снизу,
@@ -196,7 +206,8 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
       <div class="band top" aria-hidden="true"></div>
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1></div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
-      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}</div>
+      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}${tour ? '' : '<button class="btn sm" id="lJoin" type="button">Ссылка для нового игрока</button>'}</div>
+      ${made ? madeHTML(made) : ''}
 
       <h2>Места и герои</h2>
       ${host ? `<div class="opts"><span class="muted">Мест за столом</span><span class="seg">${[2, 3, 4].map((n) => `<button data-count="${n}" class="${view.seats.length === n ? 'on' : ''}">${n}</button>`).join('')}</span></div>` : ''}
@@ -238,6 +249,24 @@ export function renderLobby(root, view, { act, bar = '', bindBar }) {
   const on = (sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
   bindBar?.();
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
+  const bindMade = (m) => root.querySelector('#lJoinCopy')?.addEventListener('click', () => copy(joinUrl(m.token)));
+  if (made) bindMade(made);
+  root.querySelector('#lJoin')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const m = await api('POST', 'joinlinks', { table: view.code });
+      madeLinks.set(madeKey(view.code), m);
+      // вставляем ссылку на месте, а не перерисовкой: вид стола в замыкании мог устареть, пока шел запрос
+      const box = root.querySelector('.invite.jnew');
+      if (box) { box.nextElementSibling?.classList.contains('jnote') && box.nextElementSibling.remove(); box.remove(); }
+      root.querySelector('.invite')?.insertAdjacentHTML('afterend', madeHTML(m));
+      bindMade(m);
+    } catch (ex) {
+      toast(ex.message);
+    }
+    b.disabled = false;
+  });
   root.querySelector('#lChat')?.addEventListener('click', async (e) => {
     e.currentTarget.disabled = true;
     try {

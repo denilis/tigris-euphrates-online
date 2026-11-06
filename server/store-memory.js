@@ -138,6 +138,36 @@ export function memoryStore() {
       kv.delete(`code:${hash}`);
     },
 
+    /** Ссылки-приглашения (06.11): запись по отпечатку живет ttlMs; забрать можно один раз. */
+    async putJoin(hash, value, ttlMs) {
+      set(`join:${hash}`, JSON.stringify(value), ttlMs);
+    },
+    async getJoin(hash) {
+      const v = alive(`join:${hash}`);
+      return v ? JSON.parse(v) : null;
+    },
+    async takeJoin(hash) {
+      const v = alive(`join:${hash}`);
+      kv.delete(`join:${hash}`);
+      return v ? JSON.parse(v) : null;
+    },
+    async dropJoin(hash) {
+      kv.delete(`join:${hash}`);
+    },
+    /** Ссылки игрока для списка в «Кодах игроков»: по полю на ссылку, записи друг друга не затирают. */
+    async addJoinItem(userId, item) {
+      const m = lists.get(`joins:${userId}`) || new Map();
+      m.set(item.id, JSON.stringify(item));
+      lists.set(`joins:${userId}`, m);
+    },
+    async joinItems(userId) {
+      return [...(lists.get(`joins:${userId}`)?.values() || [])].map((x) => JSON.parse(x));
+    },
+    async delJoinItems(userId, ids) {
+      const m = lists.get(`joins:${userId}`);
+      for (const id of ids) m?.delete(id);
+    },
+
     /** Фото игрока по случайному номеру. */
     async getAvatar(token) {
       const a = alive(`ava:${token}`);

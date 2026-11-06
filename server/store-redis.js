@@ -189,6 +189,30 @@ export function redisStore({ exec, prefix = '' }) {
       await exec(['DEL', k(`code:${hash}`)]);
     },
 
+    /** Ссылки-приглашения (06.11): забор одной командой GETDEL, двое одну ссылку не используют. */
+    async putJoin(hash, value, ttlMs) {
+      await exec(['SET', k(`join:${hash}`), JSON.stringify(value), 'PX', String(ttlMs)]);
+    },
+    async getJoin(hash) {
+      return parse(await exec(['GET', k(`join:${hash}`)]));
+    },
+    async takeJoin(hash) {
+      return parse(await exec(['GETDEL', k(`join:${hash}`)]));
+    },
+    async dropJoin(hash) {
+      await exec(['DEL', k(`join:${hash}`)]);
+    },
+    /** Список ссылок игрока хешем: поле на ссылку, одновременные записи друг друга не затирают. */
+    async addJoinItem(userId, item) {
+      await exec(['HSET', k(`joins:${userId}`), item.id, JSON.stringify(item)]);
+    },
+    async joinItems(userId) {
+      return ((await exec(['HVALS', k(`joins:${userId}`)])) || []).map((x) => JSON.parse(x));
+    },
+    async delJoinItems(userId, ids) {
+      if (ids.length) await exec(['HDEL', k(`joins:${userId}`), ...ids]);
+    },
+
     async getAvatar(token) {
       return parse(await exec(['GET', k(`ava:${token}`)]));
     },

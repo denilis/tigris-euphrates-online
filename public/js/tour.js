@@ -69,7 +69,7 @@ export async function openTour(app, id, { go, bar, bindTop, loggedIn = false }) 
         draw();
       };
       const draw = () => {
-        renderLobby(app, view, { act, bar, bindBar: bindTop });
+        renderLobby(app, view, { act, bar, bindBar: bindTop, tour: true }); // в экскурсии ссылку новичку не создаем
         layer?.place();
       };
       draw();
