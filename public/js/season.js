@@ -115,18 +115,19 @@ export function dashboard(games, n) {
     battle: top((p) => p.big),
     streak: top((p, i) => (streak[i] ? { v: streak[i] } : null)),
   };
+  // key: имя медали public/img/awards/<key>.webp (Денис 06.11)
   const AWARDS = [
-    ['Полководец', 'больше всех побед в войнах', (p) => won(p.war)],
-    ['Строитель', 'больше всех монументов', (p) => p.mon],
-    ['Мятежник', 'больше всех побед в восстаниях', (p) => won(p.revolt)],
-    ['Разрушитель', 'больше всех катастроф', (p) => p.cat],
-    ['Казначей', 'больше всех сокровищ', (p) => p.tr],
-    ['Серия', 'самая длинная серия первых мест подряд', (p, i) => streak[i]],
+    ['war', 'Полководец', 'больше всех побед в войнах', (p) => won(p.war)],
+    ['mon', 'Строитель', 'больше всех монументов', (p) => p.mon],
+    ['revolt', 'Мятежник', 'больше всех побед в восстаниях', (p) => won(p.revolt)],
+    ['cat', 'Разрушитель', 'больше всех катастроф', (p) => p.cat],
+    ['tr', 'Казначей', 'больше всех сокровищ', (p) => p.tr],
+    ['streak', 'Серия', 'самая длинная серия первых мест подряд', (p, i) => streak[i]],
   ];
-  const awards = AWARDS.map(([title, text, val]) => {
+  const awards = AWARDS.map(([key, title, text, val]) => {
     const vals = players.map(val);
     const max = Math.max(...vals);
-    return { title, text, value: max, winners: max > 0 ? vals.flatMap((v, i) => (v === max ? [i] : [])) : [] };
+    return { key, title, text, value: max, winners: max > 0 ? vals.flatMap((v, i) => (v === max ? [i] : [])) : [] };
   });
   return { count: withD.length, total: games.length, players, records, awards };
 }

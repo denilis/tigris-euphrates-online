@@ -190,11 +190,15 @@ function recordsList(players, d) {
   return li.join('');
 }
 
+/** Награды: медаль слева (Денис 06.11, схема одобрена), бледная, пока награды ни у кого нет. */
 function awardTiles(players, avatars, d) {
-  return d.awards.map((a) => `<div class="award">
-    <div class="atitle">${a.title}</div>
-    <div class="awho">${a.winners.length ? a.winners.map((i) => `${face(i, players, avatars)}<b style="color:${COLS[i]}">${esc(players[i])}</b>`).join(' ') : '<em>пока никого</em>'}</div>
-    <div class="atext">${a.text}${a.winners.length ? `: ${a.value}` : ''}</div>
+  return d.awards.map((a) => `<div class="award${a.winners.length ? '' : ' none'}">
+    <img class="amedal" src="/img/awards/${a.key}.webp" width="56" height="56" alt="">
+    <div class="abody">
+      <div class="atitle">${a.title}</div>
+      <div class="awho">${a.winners.length ? a.winners.map((i) => `${face(i, players, avatars)}<b style="color:${COLS[i]}">${esc(players[i])}</b>`).join(' ') : '<em>пока никого</em>'}</div>
+      <div class="atext">${a.text}${a.winners.length ? `: ${a.value}` : ''}</div>
+    </div>
   </div>`).join('');
 }
 

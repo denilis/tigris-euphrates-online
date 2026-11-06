@@ -2,6 +2,7 @@
 // в одном формате, разовый досчет старых партий сайта, расчеты дашборда.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { gameDetails } from '../game/details.js';
 import { historyEntry } from '../game/table.js';
 import { BGA_DETAILS } from '../server/season-bga-details.js';
@@ -84,6 +85,8 @@ test('дашборд сезона: 57 партий с подробностями
   // у троих вместе атак столько же, сколько защит
   assert.equal(sum(d.players.map((p) => p.war[0] + p.war[1])), sum(d.players.map((p) => p.war[2] + p.war[3])));
   assert.deepEqual(d.awards.map((a) => a.title), ['Полководец', 'Строитель', 'Мятежник', 'Разрушитель', 'Казначей', 'Серия']);
+  // медаль у каждой награды (06.11): ключ есть и файл картинки лежит на месте
+  for (const a of d.awards) assert.ok(existsSync(new URL(`../public/img/awards/${a.key}.webp`, import.meta.url)), a.key);
   for (const a of d.awards) assert.ok(a.winners.length >= 1 && a.value > 0, a.title);
   assert.equal(d.records.colors.length, 4);
   assert.ok(d.records.colors.every((r) => r && r.v > 0 && r.g.date));

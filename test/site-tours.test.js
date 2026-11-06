@@ -2,7 +2,7 @@
 // собран настоящим столом и совпадает с файлом, кадр урока для экрана партии существует.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { TOURS, tourById, TOUR_GAME_FRAME } from '../public/js/tours-data.js';
 import { tourLobby } from '../lessons/tour.js';
 
@@ -40,4 +40,9 @@ test('кадр урока для экскурсии по партии: ход у
   assert.ok(s, 'шаг есть');
   assert.equal(s.by, 'me');
   assert.ok(s.game.log.length > 0);
+});
+
+test('у каждой экскурсии свой значок в стиле обложек уроков (06.11)', () => {
+  for (const t of TOURS) assert.ok(existsSync(new URL(`../public/img/tours/${t.id}.webp`, import.meta.url)), t.id);
+  assert.match(readFileSync(new URL('../public/js/lesson.js', import.meta.url), 'utf8'), /src="\/img\/tours\/\$\{t\.id\}\.webp"/);
 });

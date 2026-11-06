@@ -47,11 +47,11 @@ export async function renderLearn(app, top, bindTop) {
   </li>`).join('');
 }
 
-/** Экскурсии по сайту (05.11): список на странице «Обучение». */
+/** Экскурсии по сайту (05.11): список на странице «Обучение»; значки в стиле обложек уроков (06.11). */
 function toursHTML() {
   const done = toursDone();
-  return TOURS.map((t, i) => `<li class="litem">
-    <span class="lcover tico" aria-hidden="true">${i + 1}</span>
+  return TOURS.map((t) => `<li class="litem">
+    <img class="lcover" src="/img/tours/${t.id}.webp" width="64" height="64" alt="">
     <div class="ltext"><b>${esc(t.title)}</b>${done.has(t.id) ? ' <span class="ldone">пройдена</span>' : ''}<span>${esc(t.goal)}</span><small>${minutes(t.minutes)}, ${t.steps.length} шагов</small></div>
     <div class="lacts"><a class="btn sm primary" href="#/learn/tour/${t.id}">Пройти</a></div>
   </li>`).join('');
