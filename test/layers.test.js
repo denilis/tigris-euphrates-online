@@ -6,7 +6,11 @@ import { LAYERS, ALL_ON, cleanLayers } from '../public/js/layers.js';
 import { trailSVG, arrowPath, treasureSVG, TREASURE_IMG } from '../public/js/board.js';
 
 test('слои: по умолчанию все включены, мусор не ломает выбор', () => {
-  assert.deepEqual(LAYERS.map((l) => l.id), ['owners', 'support', 'moves', 'monuments']);
+  // 06.11: метки монументов под ползунком «Тайлы», на месте «Монументов» «Анимация»
+  assert.deepEqual(LAYERS.map((l) => l.id), ['owners', 'support', 'moves', 'anim']);
+  assert.deepEqual(LAYERS.map((l) => l.label), ['Тайлы', 'Сила', 'Ходы', 'Анимация']);
+  assert.deepEqual(cleanLayers({ monuments: false }), ALL_ON, 'старый выбор «Монументы» больше ничего не прячет');
+  assert.equal(ALL_ON.anim, true, 'анимация по умолчанию включена');
   assert.deepEqual(cleanLayers(null), ALL_ON);
   assert.deepEqual(cleanLayers('мусор'), ALL_ON);
   assert.deepEqual(cleanLayers({ moves: false, support: 'нет', чужое: false }), { ...ALL_ON, moves: false });

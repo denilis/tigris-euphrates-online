@@ -340,7 +340,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
 
   // метки владельца: в левом верхнем углу тайла жетон героя, к чьему лидеру идет тайл;
   // полупрозрачный черный жетон — своего лидера нет, тайл идет царю
-  const kl = L.owners || L.monuments ? kingdomLeaders(b, up) : null;
+  const kl = L.owners ? kingdomLeaders(b, up) : null;
   if (L.owners) {
     const own = tileOwners(b, kl);
     let m = '';
@@ -368,7 +368,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     s += grow ? `<g class="fx-grow"${delay(grow)}>${art}</g>` : art;
     // на каждой половине монумента жетон героя, чей лидер этого цвета стоит в том же царстве
     // (он получает очко за монумент в конце своего хода); нет лидера — пусто
-    const a = L.monuments && kl.lead.get(kl.lab[m.pos]);
+    const a = L.owners && kl.lead.get(kl.lab[m.pos]); // метки монумента под тем же ползунком «Тайлы» (06.11)
     if (!a) continue;
     for (const [c, ox, oy] of [[m.c1, 33, 35], [m.c2, 87, 85]]) {
       if (a[c] == null) continue;

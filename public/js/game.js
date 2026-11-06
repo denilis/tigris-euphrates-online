@@ -32,11 +32,17 @@ function loadLayers() {
 function toggleLayer(id) {
   ui.layers = { ...ui.layers, [id]: !ui.layers[id] };
   try { localStorage.setItem('tigris.layers', JSON.stringify(ui.layers)); } catch { /* без памяти */ }
+  if (!animOn()) { // выключили анимацию: идущие эффекты гаснут сразу
+    ui.fx = [];
+    ui.ruin?.clear();
+  }
   draw();
 }
 
 // в уроке текст говорит о метках на поле, поэтому там видны все слои и ползунков нет
 const layersOf = () => (ctl.lesson ? ALL_ON : ui.layers);
+// ползунок «Анимация» (06.11) и системное «уменьшить движение»: без трофеев, перелетов и вспышек
+const animOn = () => layersOf().anim !== false && !still();
 
 // вид монумента из настроек стола (выбор Дениса 03.11); у столов до 03.11 настройки нет, там «Печать»
 const monOf = (view) => view.options.monument || 'enamel';
@@ -167,7 +173,7 @@ function updateFx(view, entries) {
   const g = view.game, same = ui.fxCode === view.code && !ctl.lesson;
   const hero = (id) => view.seats.find((s) => s.id === id)?.hero;
   // огонь войны и падение лидера (06.11): по записям журнала видно, был ли бой и кто проиграл
-  const fresh = same ? boardChanges(ui.fxPrev, g, entries).map((f) => (f.kind === 'fall' ? { ...f, hero: hero(f.seat) } : f)) : [];
+  const fresh = same && animOn() ? boardChanges(ui.fxPrev, g, entries).map((f) => (f.kind === 'fall' ? { ...f, hero: hero(f.seat) } : f)) : [];
   ui.fxCode = view.code;
   ui.fxPrev = {
     board: { tile: [...g.board.tile], treasure: [...g.board.treasure], leader: [...g.board.leader] },
@@ -318,7 +324,7 @@ function onCell(i) {
   }
   if (idx >= 0) {
     // свой тайл или катастрофа летит из руки в клетку (анимации 04.11)
-    if (g.phase === 'action' && (ui.sel?.kind === 'tile' || ui.sel?.kind === 'cat')) {
+    if (g.phase === 'action' && (ui.sel?.kind === 'tile' || ui.sel?.kind === 'cat') && animOn()) {
       fly(ui.sel.kind === 'tile' ? tileImg(ui.sel.color) : catImg, boxOf(ctl.root.querySelector('#gHand .ht.sel')), cellScreen(ctl.root.querySelector('#board'), i));
     }
     move(idx);
@@ -385,6 +391,7 @@ function draw() {
   const d = D();
   const { view, g, root = ctl.root } = { ...d, root: ctl.root };
   updateTrail(d);
+  root.querySelector('#game').classList.toggle('noanim', !animOn()); // без появления тайла и пульса следа
   root.querySelector('#gCode').innerHTML = `<span class="cw">стол </span><b>${esc(view.title || view.code)}</b>`;
   const o = view.options;
   root.querySelector('#gBadges').innerHTML = [
