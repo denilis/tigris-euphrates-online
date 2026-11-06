@@ -90,6 +90,18 @@ body.stillbg::before{content:"";position:fixed;inset:0;z-index:0;background:var(
 .titem .tacts{display:flex;gap:6px;justify-content:flex-end}
 @media (min-width:761px){.titem:has(.tacts){grid-template-columns:128px 1fr auto auto}}
 @media (max-width:760px){.titem .tacts{grid-column:1 / -1}}
+/* фильтры «Моих столов» и портреты ботов в составе (06.11) */
+.tfilt{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px;padding:10px 12px;background:var(--card);border-radius:10px}
+.tfilt .frow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.tfilt .flab{color:var(--muted);font-size:13px;min-width:56px}
+.tfilt input{background:#1b1713;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:5px 8px;font:inherit;font-size:13px}
+.tfilt #tWho{width:min(220px,100%)}
+.tfilt .fdates{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.tfilt .fdates[hidden]{display:none}
+.tfilt .fcount{margin-left:auto}
+.titem small em{font-style:normal;color:var(--text)}
+.bfaces{display:inline-flex;gap:4px;vertical-align:middle}
+.bface{display:inline-block;width:24px;height:24px;border-radius:50%;background:#2a2119 center/cover no-repeat;border:1px solid var(--gold2)}
 .titem.static{display:flex;flex-wrap:wrap;gap:6px 14px}
 .titem.static b{margin-right:auto}
 .chk{display:inline-flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer}

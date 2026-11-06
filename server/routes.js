@@ -11,7 +11,7 @@ import { viewFor } from '../game/view.js';
 import { replayFrames } from '../game/frames.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
-import { SEASON, tourGames, publicTour, playerGames } from './stats.js';
+import { SEASON, tourGames, publicTour, playerGames, tourOf } from './stats.js';
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
@@ -806,15 +806,22 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function myTables(u) {
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
-    return docs.filter((t) => t && t.status !== 'deleted').map((t) => ({
-      code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
-      paused: Boolean(t.game?.paused),
-      replay: t.status === 'over' && Boolean(t.game?.rec), // просмотр по ходам (этап 3, 04.11)
-      me: seatOfUser(t, u.id)?.id ?? null,
-      toMove: t.game?.toMove ?? null,
-      seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero })),
-      del: !deleteRight(t, u), // кнопка «Удалить» в «Моих столах»
-    }));
+    const tours = await allTours();
+    return docs.filter((t) => t && t.status !== 'deleted').map((t) => {
+      // турнир партии так же, как его считает статистика (фильтр «Моих столов», Денис 06.11)
+      const tour = tourOf({ tour: t.options?.tournament ?? 'auto', finishedAt: t.game?.result?.finishedAt ?? t.updatedAt, seats: t.seats }, tours);
+      return {
+        code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
+        paused: Boolean(t.game?.paused),
+        replay: t.status === 'over' && Boolean(t.game?.rec), // просмотр по ходам (этап 3, 04.11)
+        me: seatOfUser(t, u.id)?.id ?? null,
+        toMove: t.game?.toMove ?? null,
+        tour: tour ? tour.name : null,
+        // у бота стиль: портрет бота в списке вместо имени (Денис 06.11)
+        seats: t.seats.map((s) => ({ id: s.id, kind: s.kind, name: s.name, hero: s.hero, ...(s.kind === 'bot' ? { bot: { style: s.bot?.style ?? null } } : {}) })),
+        del: !deleteRight(t, u), // кнопка «Удалить» в «Моих столах»
+      };
+    });
   }
 
   const ACTIONS = {

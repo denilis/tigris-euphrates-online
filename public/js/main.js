@@ -21,6 +21,7 @@ import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText } from '
 import { openBotGuide } from './bots-info.js';
 import { renderJoin } from './join.js';
 import { JOIN_ROUTE, joinUrl, linkNote, linkLine } from './join-link.js';
+import { DEFAULT_FILTER, cleanFilter, filterTables, whoNames, PEOPLE_WORD } from './tables-filter.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -239,37 +240,91 @@ async function renderStart() {
   if (card && n) card.insertAdjacentHTML('beforeend', ` <em class="wturn">ваш ход: ${n}</em>`);
 }
 
-/** «Мои столы» (#/tables): все партии игрока. */
+// фильтры «Моих столов» (06.11): браузер помнит выбор
+const FILTER_KEY = 'tigris.tablesFilter';
+const loadFilter = () => { try { return cleanFilter(JSON.parse(localStorage.getItem(FILTER_KEY))); } catch { return cleanFilter(null); } };
+const saveFilter = (f) => { try { localStorage.setItem(FILTER_KEY, JSON.stringify(f)); } catch { /* без памяти */ } };
+const segHTML = (key, opts, f) => `<span class="seg sm" data-f="${key}">${opts.map(([v, label]) => `<button type="button" data-v="${v}" class="${f[key] === v ? 'on' : ''}">${label}</button>`).join('')}</span>`;
+const whenText = (at) => (at ? new Date(at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
+
+/** Состав стола: люди именами, боты портретами с именем в подсказке (Денис 06.11). */
+function seatsHTML(seats) {
+  const people = seats.filter((s) => s.kind !== 'bot').map((s) => esc(seatName(s))).join(', ');
+  const bots = seats.filter((s) => s.kind === 'bot').map((s) => `<i class="bface" style="background-image:url(${botFace(s)})" title="${esc(seatName(s))}" aria-label="${esc(seatName(s))}"></i>`).join('');
+  return `${people}${bots ? ` <span class="bfaces">${bots}</span>` : ''}`;
+}
+
+/** «Мои столы» (#/tables): все партии игрока, фильтры сверху (06.11). */
 async function renderHome() {
+  let f = loadFilter();
   app.innerHTML = `<div class="page">${topbar('tables')}<main class="pcard">
     <div class="homehead"><h1>Мои столы</h1><a class="btn primary" href="#/new">Начать игру</a></div>
+    <div class="tfilt" id="tFilt">
+      <div class="frow"><span class="flab">Период</span>${segHTML('period', [['all', 'всё время'], ['today', 'сегодня'], ['week', 'неделя'], ['month', 'месяц'], ['custom', 'свой']], f)}
+        <span class="fdates" id="tDates"${f.period === 'custom' ? '' : ' hidden'}>с <input type="date" id="tFrom" value="${f.from}"> по <input type="date" id="tTo" value="${f.to}"></span></div>
+      <div class="frow"><span class="flab">Партии</span>${segHTML('kind', [['all', 'все'], ['tour', 'турнирные'], ['casual', 'обычные']], f)}
+        <span class="flab">Игроков</span>${segHTML('n', [['all', 'все'], ['2', '2'], ['3', '3'], ['4', '4']], f)}</div>
+      <div class="frow"><span class="flab">С кем</span><input id="tWho" list="tWhoList" placeholder="имя игрока" maxlength="40" value="${esc(f.who)}" aria-label="С кем играли"><datalist id="tWhoList"></datalist>
+        <span class="flab">Сначала</span>${segHTML('order', [['new', 'новые'], ['old', 'старые']], f)}
+        <span class="fcount muted small" id="tCount"></span><button class="linkbtn" id="tReset" type="button">Сбросить</button></div>
+    </div>
     <div id="tables" class="tables"><p class="muted">Загружаю...</p></div>
     <div id="myDel"></div>
   </main></div>`;
   bindTopbar();
+  let all = [];
+  const draw = () => {
+    const el = app.querySelector('#tables');
+    if (!el) return;
+    const list = filterTables(all, f);
+    app.querySelector('#tCount').textContent = all.length ? `показано ${list.length} из ${all.length}` : '';
+    el.innerHTML = list.length ? list.map((t) => {
+      const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
+      const del = Boolean(t.del); // свой стол с ботами всегда, стол с людьми только администратору (04.11)
+      const info = [whenText(t.updatedAt), t.tour ? 'турнирная' : 'обычная', PEOPLE_WORD[t.seats.length]].filter(Boolean).join(' | ');
+      return `<a class="titem${myTurn ? ' turn' : ''}${del ? ' del' : ''}" href="#/t/${esc(t.code)}">
+        <b>${esc(t.title || t.code)}</b>
+        <span>${seatsHTML(t.seats)}</span>
+        <small>${t.paused ? 'на паузе' : STATUS[t.status] || ''}${myTurn && !t.paused ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}<br>${esc(info)}${t.tour ? ` <em title="${esc(t.tour)}">«${esc(t.tour)}»</em>` : ''}</small>
+        ${t.replay || del ? `<span class="tacts">${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}${del ? `<button class="btn sm" data-del="${esc(t.code)}" type="button">Удалить</button>` : ''}</span>` : ''}
+      </a>`;
+    }).join('') : `<p class="muted">${all.length ? 'Под фильтр ничего не подошло. «Сбросить» вернет все столы.' : 'Пока нет столов. Новую партию собирают на странице «Начать игру».'}</p>`;
+    el.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', (e) => {
+      e.preventDefault(); // кнопка внутри ссылки на стол
+      go(`#/t/${b.dataset.replay}/replay`);
+    }));
+    el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => {
+      e.preventDefault(); // кнопка внутри ссылки на стол
+      removeTable(all.find((t) => t.code === b.dataset.del), load);
+    }));
+  };
+  const set = (patch) => {
+    f = cleanFilter({ ...f, ...patch });
+    saveFilter(f);
+    app.querySelectorAll('#tFilt [data-f]').forEach((seg) => seg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', f[seg.dataset.f] === b.dataset.v)));
+    app.querySelector('#tDates').hidden = f.period !== 'custom';
+    draw();
+  };
+  const box = app.querySelector('#tFilt');
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-f] button');
+    if (b) set({ [b.closest('[data-f]').dataset.f]: b.dataset.v });
+  });
+  box.querySelector('#tFrom').addEventListener('change', (e) => set({ from: e.target.value }));
+  box.querySelector('#tTo').addEventListener('change', (e) => set({ to: e.target.value }));
+  box.querySelector('#tWho').addEventListener('input', (e) => set({ who: e.target.value }));
+  box.querySelector('#tReset').addEventListener('click', () => {
+    box.querySelector('#tWho').value = '';
+    box.querySelector('#tFrom').value = '';
+    box.querySelector('#tTo').value = '';
+    set({ ...DEFAULT_FILTER });
+  });
   const load = async () => {
     try {
-      const list = await api('GET', 'tables');
-      const el = app.querySelector('#tables');
-      if (!el) return;
-      el.innerHTML = list.length ? list.map((t, i) => {
-        const myTurn = t.status === 'playing' && t.me != null && t.toMove === t.me;
-        const del = Boolean(t.del); // свой стол с ботами всегда, стол с людьми только администратору (04.11)
-        return `<a class="titem${myTurn ? ' turn' : ''}${del ? ' del' : ''}" href="#/t/${esc(t.code)}">
-          <b>${esc(t.title || t.code)}</b>
-          <span>${t.seats.map((s) => esc(seatName(s))).join(', ')}</span>
-          <small>${t.paused ? 'на паузе' : STATUS[t.status] || ''}${myTurn && !t.paused ? ', ваш ход' : ''}${t.next ? ', есть реванш' : ''}</small>
-          ${t.replay || del ? `<span class="tacts">${t.replay ? `<button class="btn sm" data-replay="${esc(t.code)}" type="button">Просмотр</button>` : ''}${del ? `<button class="btn sm" data-del="${i}" type="button">Удалить</button>` : ''}</span>` : ''}
-        </a>`;
-      }).join('') : '<p class="muted">Пока нет столов. Новую партию собирают на странице «Начать игру».</p>';
-      el.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', (e) => {
-        e.preventDefault(); // кнопка внутри ссылки на стол
-        go(`#/t/${b.dataset.replay}/replay`);
-      }));
-      el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => {
-        e.preventDefault(); // кнопка внутри ссылки на стол
-        removeTable(list[+b.dataset.del], load);
-      }));
+      all = await api('GET', 'tables');
+      const dl = app.querySelector('#tWhoList');
+      if (dl) dl.innerHTML = whoNames(all, session.get()?.user?.name).map((n) => `<option value="${esc(n)}">`).join('');
+      draw();
       await loadMyDel(load);
     } catch (e) { toast(e.message); }
   };
