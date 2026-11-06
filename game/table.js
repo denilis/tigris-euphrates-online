@@ -264,6 +264,13 @@ export function moveSeat(t, userId, seatId, toIndex, now) {
 // --- Партия
 
 /**
+ * Правило сайта «застой» (06.11, cfg.stallTurns движка): столько ходов подряд из мешка не берут
+ * тайлов и с поля не уходят сокровища, и партия кончается обычным подсчетом. Боты, которые оба
+ * считают себя проигравшими, иначе пасуют бесконечно. У людей на BGA такая серия не длиннее 5 ходов.
+ */
+export const STALL_TURNS = 12;
+
+/**
  * Начать партию. last — запись истории прошлой партии этой компании (или null),
  * orderMode — переопределить очерёдность (реванш всегда «проигравший первым»).
  */
@@ -276,7 +283,10 @@ export function start(t, userId, { last = null, rng = cryptoRng(), now, orderMod
   if (!ready) fail('seats-not-ready', 'Не все места заняты или не у всех выбран герой', 409);
   const ord = playOrder(t.seats, orderMode || t.options.order, { last, rng });
   const { confirmMs } = timing(t);
-  const cfg = { englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder, confirmTurn: confirmMs > 0 };
+  const cfg = {
+    englishSupport: t.options.englishSupport, buildings: t.options.buildings, wonder: t.options.wonder,
+    confirmTurn: confirmMs > 0, stallTurns: STALL_TURNS,
+  };
   // запись партии: зерно, нынешнее состояние генератора и все ходы движка (game/replay.js)
   const seed = newSeed(rng);
   const rec = { v: 1, seed, rng: seed, board: t.options.board, np: t.seats.length, cfg, moves: [] };
@@ -500,6 +510,23 @@ function finish(t, s, now) {
     })),
   };
   t.status = 'over';
+}
+
+/**
+ * Предохранитель (06.11): стол без людей, где партия ушла за столько ходов, закрывается без итога.
+ * Обычная партия идет 50-120 ходов, правило «застой» кончает зависшие; это страховка от петель,
+ * которых мы не знаем, чтобы боты не жгли CPU, пока открыта вкладка.
+ */
+export const BOT_TABLE_TURN_LIMIT = 400;
+
+/** Закрыть стол из одних ботов, если партия слишком длинная. true, если закрыли. */
+export function stopRunaway(t, now) {
+  if (t.status !== 'playing' || t.seats.some((s) => s.kind !== 'bot')) return false;
+  if (stateFromJSON(t.game.state).turn <= BOT_TABLE_TURN_LIMIT) return false;
+  t.status = 'closed';
+  t.game.stopReason = 'long';
+  touch(t, now);
+  return true;
 }
 
 /** Место бота, если сейчас решает бот; иначе null. */

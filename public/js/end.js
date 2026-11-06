@@ -21,6 +21,19 @@ function statsTable(view, list, seat) {
   </table></div>`;
 }
 
+/** Почему партия кончилась (endReason движка). 12 ходов = STALL_TURNS в game/table.js. */
+export function endReasonText(reason) {
+  if (reason === 'bag') return 'В мешке кончились тайлы.';
+  if (reason === 'stall') return '12 ходов подряд из мешка не брали тайлов и с поля не уходили сокровища.';
+  return 'На поле осталось два сокровища.';
+}
+
+/** Почему партия остановлена без итога. 400 ходов = BOT_TABLE_TURN_LIMIT в game/table.js. */
+export function stopText(g) {
+  if (g?.stopReason === 'long') return 'Боты играли без людей больше 400 ходов, и сервер остановил партию. Итога нет, в статистику она не идет.';
+  return 'Организатор завершил партию досрочно. Итога нет, в статистику она не идет.';
+}
+
 export function renderEnd(box, view, { act, go }) {
   const g = view.game;
   const stopped = Boolean(g?.stopped);
@@ -44,7 +57,7 @@ export function renderEnd(box, view, { act, go }) {
   if (stopped) {
     box.innerHTML = `<div class="endcard" role="dialog" aria-label="Партия завершена">
       <h2>Партия завершена</h2>
-      <p class="msub">Организатор завершил партию досрочно. Итога нет, в статистику она не идет.</p>
+      <p class="msub">${stopText(g)}</p>
       <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn primary" id="eHome">К столам</button></div>
     </div>`;
     box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
@@ -65,7 +78,7 @@ export function renderEnd(box, view, { act, go }) {
   }).join('');
   box.innerHTML = `<div class="endcard" role="dialog" aria-label="Итог партии">
     <h2>Партия окончена</h2>
-    <p class="msub">${g.endReason === 'bag' ? 'В мешке кончились тайлы.' : 'На поле осталось два сокровища.'} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
+    <p class="msub">${endReasonText(g.endReason)} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
     ${statsTable(view, list, seat)}
     ${g.replay ? '<div class="ana" id="eAna"></div>' : ''}

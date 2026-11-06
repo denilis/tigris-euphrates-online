@@ -4,7 +4,7 @@ import { renderBoard, sealIcon, buildingIcon, cellScreen, TREASURE_IMG } from '.
 import { boardChanges, ageFx, takerOf, fly, boxOf } from './fx.js';
 import { api } from './api.js';
 import { renderWarDock, warActive } from './war.js';
-import { renderEnd } from './end.js';
+import { renderEnd, endReasonText, stopText } from './end.js';
 import { battlesIn, battleCard, seenAfterUndo } from './battle.js';
 import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
@@ -492,10 +492,10 @@ function drawNow(d) {
   let title = 'Сейчас', body = '', buttons = '';
   if (g.stopped) {
     title = 'Партия завершена';
-    body = '<p>Организатор завершил партию досрочно. Итога нет, в статистику она не идет.</p>';
+    body = `<p>${stopText(g)}</p>`;
   } else if (g.over) {
     title = 'Партия окончена';
-    body = `<p>${g.endReason === 'bag' ? 'В мешке кончились тайлы.' : 'На поле осталось два сокровища.'}</p>`;
+    body = `<p>${endReasonText(g.endReason)}</p>`;
   } else if (g.paused) {
     title = 'Пауза';
     body = '<p>Партия на паузе: ходы, боты и часы стоят.</p>';

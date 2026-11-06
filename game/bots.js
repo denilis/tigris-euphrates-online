@@ -6,7 +6,7 @@ import { makeView, publicRemoved } from './vendor/bot/belief.js';
 import { decideAsync } from './vendor/bot/bot.js';
 import { stateFromJSON } from './serialize.js';
 import { cryptoRng } from './random.js';
-import { botDue, submitSeat } from './table.js';
+import { botDue, submitSeat, stopRunaway } from './table.js';
 import { safeMove } from './safeMove.js';
 
 // Потолок раздумий на действие: на Hobby 4 часа CPU в месяц. Бот на силе 100 по замерам
@@ -32,11 +32,16 @@ export function botView(t, seatId, counting, rng) {
 /**
  * Сделать один ход бота, если сейчас решает бот; иначе null.
  * rng — добор тайлов (на сервере криптостойкий), botRng — случайность самого бота.
- * decide подменяется в тестах.
+ * decide подменяется в тестах. Стол из одних ботов со слишком длинной партией вместо хода
+ * закрывается (stopRunaway), ответ тогда { seatId, stopped: 'long' }.
  */
 export async function botStep(t, { rng = cryptoRng(), botRng = Math.random, now = Date.now(), timeCap = DEFAULT_TIME_CAP, decide = decideAsync } = {}) {
   const seatId = botDue(t);
   if (seatId === null) return null;
+  if (stopRunaway(t, now)) {
+    console.warn(`[bots] стол ${t.code} без людей остановлен: партия длиннее предела ходов`);
+    return { seatId, stopped: 'long' };
+  }
   const seat = t.seats.find((x) => x.id === seatId);
   const settings = { ...seat.bot };
   const st = (settings.strength ?? 50) / 100;

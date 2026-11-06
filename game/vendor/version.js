@@ -1,2 +1,2 @@
 // Сгенерировано tools/sync-engine.js
-export const ENGINE = {"branch":"feat/train-eval","commit":"f9546d11eae138e32860a37febc96d11eef226ac","syncedAt":"2026-10-29T10:30:20.275Z"};
+export const ENGINE = {"branch":"feat/train-eval","commit":"39162777a8e0ffd03f89305df2d223e83e93d287","syncedAt":"2026-11-06T06:21:34.044Z"};

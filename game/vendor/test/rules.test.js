@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyMove, legalMoves, validate, finalVector, ranking, tileTargets, leaderTargets,
-  catastropheTargets, buildingOptions, createGame,
+  catastropheTargets, buildingOptions, createGame, cloneState, treasuresOnBoard,
 } from '../engine/engine.js';
 import { BOARDS } from '../engine/boards.js';
 import { RED, BLUE, GREEN, BLACK, FACEDOWN, WONDER, CATASTROPHE, EMPTY } from '../engine/constants.js';
@@ -427,4 +427,79 @@ test('подтверждение хода: случайные партии до�
     assert.ok(s.over, `партия ${seed} закончилась`);
   }
   assert.ok(confirms > 300, `подтверждений ${confirms}`);
+});
+
+// --- Застой (cfg.stallTurns, 06.11): сайт кончает партию, в которой ничего не движется
+
+const SITE_CFG = { englishSupport: true, buildings: true, wonder: true };
+const stallGame = (cfg = {}) => createGame({ layout: BOARDS.advanced, numPlayers: 2, cfg: { ...SITE_CFG, ...cfg } }, makeRng(7));
+const passes = (s, n) => { for (let k = 0; k < n; k++) play(s, { type: 'pass' }); };
+
+test('застой: 12 ходов подряд без движения кончают партию обычным подсчетом', () => {
+  const s = stallGame({ stallTurns: 12 });
+  passes(s, 11);
+  assert.equal(s.over, false);
+  assert.equal(s.stall, 11);
+  passes(s, 1);
+  assert.equal(s.over, true);
+  assert.equal(s.endReason, 'stall');
+  assert.equal(s.phase, 'over');
+  assert.equal(s.turn, 12, 'ход не переходит дальше');
+  assert.equal(ranking(s).length, 2);
+});
+
+test('застой: тайл из мешка сбрасывает счетчик', () => {
+  const s = stallGame({ stallTurns: 12 });
+  passes(s, 11);
+  play(s, legalMoves(s).find((m) => m.type === 'tile'));
+  play(s, { type: 'pass' });
+  assert.equal(s.stall, 0, 'после добора мешок другой');
+  passes(s, 11);
+  assert.equal(s.over, false);
+  passes(s, 1);
+  assert.equal(s.endReason, 'stall');
+});
+
+test('застой: сокровище, ушедшее с поля, тоже сбрасывает счетчик', () => {
+  const s = stallGame({ stallTurns: 12 });
+  passes(s, 5);
+  const before = treasuresOnBoard(s);
+  const pos = s.treasure.findIndex((v) => v > 0);
+  s.treasure[pos] = 0; // как будто торговец забрал его в этом ходу
+  s.players[s.cur].treasures++;
+  applyMove(s, { type: 'pass' }, rng);
+  assert.equal(treasuresOnBoard(s), before - 1);
+  assert.equal(s.stall, 0);
+});
+
+test('застой: копия позиции помнит счетчик', () => {
+  const s = stallGame({ stallTurns: 12 });
+  passes(s, 5);
+  const c = cloneState(s);
+  passes(c, 6);
+  assert.equal(c.over, false);
+  passes(c, 1);
+  assert.equal(c.endReason, 'stall');
+  assert.equal(s.stall, 5, 'оригинал не тронут');
+});
+
+test('застой: без настройки пасы партию не кончают', () => {
+  const s = stallGame();
+  assert.equal(s.cfg.stallTurns, 0);
+  passes(s, 40);
+  assert.equal(s.over, false);
+  assert.equal(s.stall, 0);
+});
+
+test('застой: случайные партии с правилом доигрываются без нарушений', () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const r = makeRng(seed);
+    const s = createGame({ layout: BOARDS.advanced, numPlayers: 3, cfg: { ...SITE_CFG, stallTurns: 12 } }, r);
+    for (let k = 0; k < 3000 && !s.over; k++) {
+      const legal = legalMoves(s);
+      applyMove(s, legal[Math.floor(r() * legal.length)], r);
+      assert.deepEqual(validate(s), []);
+    }
+    assert.ok(s.over, `партия ${seed} закончилась`);
+  }
 });

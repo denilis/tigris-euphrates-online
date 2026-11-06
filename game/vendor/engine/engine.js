@@ -20,9 +20,13 @@ import {
 /**
  * Пустое состояние без раздачи тайлов.
  * layout: { river: number[] | Uint8Array(N), temples: number[], special?: number[] }
- * cfg: { englishSupport, buildings, wonder, confirmTurn }
+ * cfg: { englishSupport, buildings, wonder, confirmTurn, stallTurns }
  * confirmTurn — после второго действия (или паса) ход ждет подтверждения (фаза confirm) до
  * подсчета монументов и добора: сайт дает в это время отменить действие, не открыв новых тайлов.
+ * stallTurns — правило сайта «застой» (06.11): если столько ходов подряд к концу хода не меняются
+ * ни число тайлов в мешке, ни число сокровищ на поле, партия кончается обычным подсчетом
+ * (endReason 'stall'). Без него боты, которые оба считают себя проигравшими, пасуют бесконечно.
+ * 0 — правила нет (настольная игра, BGA).
  */
 export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_MONUMENTS }) {
   const river = new Uint8Array(N);
@@ -36,6 +40,7 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
       buildings: !!cfg.buildings,
       wonder: !!cfg.wonder,
       confirmTurn: !!cfg.confirmTurn,
+      stallTurns: Math.max(0, Math.floor(Number(cfg.stallTurns) || 0)),
     },
     np: numPlayers,
     river,
@@ -67,6 +72,8 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
     ctx: null,
     over: false,
     endReason: null,
+    stall: 0, // ходов подряд без движения (cfg.stallTurns)
+    stallMark: -1, // мешок и сокровища к концу прошлого хода (stallMark())
     log: null,
   };
   for (const i of layout.temples) {
@@ -81,6 +88,7 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
 export function createGame(opts, rng) {
   const s = createState(opts);
   for (let p = 0; p < s.np; p++) drawTiles(s, p, HAND_SIZE, rng);
+  s.stallMark = stallMark(s); // первый ход сравнивается с позицией после раздачи
   return s;
 }
 
@@ -117,6 +125,8 @@ export function cloneState(s) {
     ctx: s.ctx ? JSON.parse(JSON.stringify(s.ctx)) : null,
     over: s.over,
     endReason: s.endReason,
+    stall: s.stall,
+    stallMark: s.stallMark,
     log: null,
   };
 }
@@ -211,6 +221,11 @@ export function treasuresOnBoard(s) {
 
 function bagTotal(s) {
   return s.bag[0] + s.bag[1] + s.bag[2] + s.bag[3];
+}
+
+/** Отметка для правила «застой»: тайлов в мешке и сокровищ на поле (сокровищ меньше 100). */
+function stallMark(s) {
+  return bagTotal(s) * 100 + treasuresOnBoard(s);
 }
 
 /** Добор n тайлов. Если мешок кончился раньше — игра заканчивается. */
@@ -937,6 +952,16 @@ function nextTurn(s) {
   if (treasuresOnBoard(s) <= 2) {
     endGame(s, 'treasures');
     return;
+  }
+  if (s.cfg.stallTurns) {
+    // тайл или сброс тянут добор из мешка, торговец уносит сокровище: ход «с движением»
+    const mark = stallMark(s);
+    s.stall = mark === s.stallMark ? (s.stall || 0) + 1 : 0;
+    s.stallMark = mark;
+    if (s.stall >= s.cfg.stallTurns) {
+      endGame(s, 'stall');
+      return;
+    }
   }
   s.cur = (s.cur + 1) % s.np;
   s.actionNo = 1;
