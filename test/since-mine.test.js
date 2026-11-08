@@ -68,3 +68,12 @@ test('ход показывается медленнее, бот не думае
   assert.ok(TROPHY_PHASES.LIFT * 3 >= 1.8, 'растворение видно');
   assert.ok(TROPHY_PHASES.LIFT < TROPHY_PHASES.COIN && TROPHY_PHASES.COIN < TROPHY_PHASES.LAND && TROPHY_PHASES.LAND < RUIN_S.trophy);
 });
+
+test('за столом на поле только ход предыдущего игрока (Денис 08.11 вечером)', () => {
+  const src = readFileSync(new URL('../public/js/game.js', import.meta.url), 'utf8');
+  assert.match(src, /const marks = trailMarks\(g\.log, view\.me\);/);
+  assert.doesNotMatch(src, /sinceMine\(/, 'все ходы с моего действия больше не показываются');
+  assert.match(src, /<b>Прошлый ход<\/b>/);
+  // в мой ход: ход игрока передо мной (бот 3), без ходов ботов 1 и 2
+  assert.deepEqual(trailMarks(LOG, 0).map((x) => x.actor), [3, 3]);
+});
