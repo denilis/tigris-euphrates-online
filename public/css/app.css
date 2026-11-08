@@ -307,6 +307,22 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .vol.off .volbtn,.vol.off .volpct{opacity:.45}
 .volpop{display:none}
 @media (pointer:coarse){.volbtn{width:28px;height:28px;font-size:17px}}
+/* меню «какие звуки играть» (Денис 08.11): кнопка «▾» после громкости, меню под ней (место задает game.js) */
+.sfxbtn{font-size:11px}
+.sfxbtn[aria-expanded="true"]{background:var(--gold2);color:#1b1713}
+.sfxmenu{position:fixed;z-index:60;overflow:auto;padding:10px 12px 12px;border:1px solid var(--gold2);border-radius:12px;background:linear-gradient(180deg,#2e2419,#1c1712);color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.6);font-size:13.5px}
+.sfxhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.sfxhead b{color:var(--gold);font-weight:600}
+.sfxclose{background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:0 4px}
+.sfxclose:hover{color:var(--text)}
+.sfxgroup{margin:10px 0 2px;color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.sfxrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sfxrow .sw{font-size:13.5px;padding:5px 2px;white-space:normal;text-align:left}
+.sfxplay{flex:none;width:28px;height:28px;padding:0;border-radius:50%;border:1px solid var(--line);background:none;color:var(--gold);font-size:10px;display:grid;place-items:center;cursor:pointer}
+.sfxplay:hover{border-color:var(--gold2);background:#3a2f22}
+.sfxplay:focus-visible,.sfxclose:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.sfxfoot{display:flex;gap:8px;margin-top:12px}
+.sfxfoot .btn{flex:1;min-height:36px;padding:0 8px;font-size:13px}
 @media (min-width:901px) and (max-width:1400px){
   .vol .volpct{display:none}
   .vol.pop .volpop{display:block;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:3px 9px;border-radius:7px;border:1px solid var(--gold2);background:var(--frame);color:var(--text);font-style:normal;font-weight:600;z-index:40;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.45)}
@@ -523,6 +539,15 @@ html{touch-action:manipulation}
 @container (max-width:1110px){.hrow{gap:12px}.ht{width:46px;height:46px}.hl{width:42px;height:42px}.grp .items{gap:4px}.acts{gap:6px}.acts .btn{padding:0 10px;font-size:13px}}
 @container (max-width:960px){.hrow{gap:8px}.ht{width:38px;height:38px}.hl{width:36px;height:36px}.grp>span{font-size:9.5px}.acts .btn{white-space:normal;line-height:1.15;max-width:96px}}
 @container (max-width:720px){.hrow{overflow-x:auto}}
+/* ряд кнопок внизу (08.11): кнопки хода стоят всегда, поэтому кнопки идут парами столбиком: ход
+   (завершить, отменить), партия (пауза, завершить), рука (сброс, пас). Высота ряда та же на любой
+   ширине, вбок за край ничего не уходит; на тесной панели кнопки мельче */
+.acts{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+.acts .pair{display:flex;flex-direction:column;align-items:stretch;gap:4px}
+.acts .pair .btn{min-height:36px;max-width:none;padding:0 12px;font-size:13px;line-height:1.1;white-space:nowrap}
+@container (max-width:1210px){.acts .pair .btn{min-height:30px;padding:0 10px;font-size:12.5px}}
+@container (max-width:960px){.acts .pair .btn{white-space:normal;max-width:96px}}
+@container (max-width:1210px){@media (pointer:coarse){.acts .pair .btn{min-height:36px}}}
 
 /* ---------- окно конфликта ---------- */
 .app.conflict{--sidew:max(var(--side),var(--dock))}
@@ -715,6 +740,8 @@ html{touch-action:manipulation}
   .app.handside:not(.lesson) .hl{width:48px;height:48px}
   .app.handside:not(.lesson) .acts{margin-left:0;flex-direction:column;align-items:stretch;gap:6px}
   .app.handside:not(.lesson) .acts .btn{white-space:normal;max-width:none;padding:0 12px;font-size:14px}
+  .app.handside:not(.lesson) .acts .pair{flex-direction:column;align-items:stretch;gap:6px}
+  .app.handside:not(.lesson) .acts .pair .btn{max-width:none;min-height:40px;font-size:14px;white-space:normal}
 }
 @media (max-width:1200px){:root{--side:250px;--dock:390px}.badges{display:none}}
 @media (max-width:900px){

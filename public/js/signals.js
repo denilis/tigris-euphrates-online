@@ -28,9 +28,9 @@ export function newEntries(prev, view) {
  * появляется в той же перерисовке, звуки последнего хода с ним не наслаиваются). Чужой бой: удары.
  * result — итог партии из вида (раньше по нему выбирались фанфары или грустный звук).
  */
-export function eventSounds(entries, me, result = null) {
+export function eventSounds(entries, me, result = null, on = () => true) {
   const has = (...evs) => entries.some((e) => evs.includes(e.ev));
-  if (has('gameOver')) return ['gameEnd'];
+  if (has('gameOver')) return on('gameEnd') ? ['gameEnd'] : [];
   const out = [];
   const mine = me == null ? [] : entries.filter((e) => (e.ev === 'war' || e.ev === 'revolt') && [e.att, e.def, e.winner, e.loser].includes(me));
   if (mine.length) {
@@ -45,7 +45,8 @@ export function eventSounds(entries, me, result = null) {
   // выставленный герой и тайл (Денис 08.11), ниже всех по важности
   if (has('leader')) out.push('leader');
   if (has('tile')) out.push('tile');
-  return [...new Set(out)].slice(0, 3);
+  // выключенный в меню звук (Денис 08.11) не занимает место: звучит следующий по важности
+  return [...new Set(out)].filter(on).slice(0, 3);
 }
 
 /** Звуки при переходе от prev к next. При первом взгляде на стол тишина. */
@@ -97,6 +98,49 @@ let master = null;
 export function setVolume(v) {
   try { localStorage.setItem('tigris.volume', String(v)); } catch { /* без памяти */ }
   if (master) master.gain.value = v / 100;
+}
+
+// Меню «какие звуки играть» (Денис 08.11): все звуки сайта по группам; выключенные помнит устройство.
+export const SOUND_LIST = [
+  { id: 'chime', group: 'Ход', label: 'Звон «Ваш ход»' },
+  { id: 'turnEnd', group: 'Ход', label: 'Конец хода' },
+  { id: 'warWin', group: 'Ваши бои', label: 'Победа в битве' },
+  { id: 'warLoss', group: 'Ваши бои', label: 'Поражение в битве' },
+  { id: 'revoltWin', group: 'Ваши бои', label: 'Победа в восстании' },
+  { id: 'revoltLoss', group: 'Ваши бои', label: 'Поражение в восстании' },
+  { id: 'battle', group: 'На поле', label: 'Чужой бой' },
+  { id: 'monument', group: 'На поле', label: 'Монумент или чудо' },
+  { id: 'catastrophe', group: 'На поле', label: 'Катастрофа' },
+  { id: 'treasure', group: 'На поле', label: 'Сокровище' },
+  { id: 'leader', group: 'На поле', label: 'Выставлен герой' },
+  { id: 'tile', group: 'На поле', label: 'Выставлен тайл' },
+  { id: 'gameEnd', group: 'Партия', label: 'Конец партии' },
+  { id: 'arrive', group: 'Партия', label: 'Игрок зашёл за стол (в лобби)' },
+];
+const OFF_KEY = 'tigris.sounds.off';
+
+/** Выключенные звуки из памяти устройства; что-то не то в памяти: все включены. */
+function offSet() {
+  try {
+    const a = JSON.parse(localStorage.getItem(OFF_KEY) || '[]');
+    return new Set(Array.isArray(a) ? a.filter((x) => typeof x === 'string') : []);
+  } catch { return new Set(); }
+}
+
+function saveOff(s) {
+  try { localStorage.setItem(OFF_KEY, JSON.stringify([...s])); } catch { /* без памяти */ }
+}
+
+export const soundEnabled = (id) => !offSet().has(id);
+
+export function setSoundEnabled(id, on) {
+  const s = offSet();
+  if (on) s.delete(id); else s.add(id);
+  saveOff(s);
+}
+
+export function setAllSounds(on) {
+  saveOff(new Set(on ? [] : SOUND_LIST.map((x) => x.id)));
 }
 
 /** Куда подключать звуки: общий узел громкости. */
@@ -227,7 +271,9 @@ function sfxAt(name, at) {
  * после звуков событий (раньше щелчок молчал, если был звук события); «Ваш ход» вместо него.
  */
 export function play({ tick, chime, events = [] }) {
-  if (!(tick || chime || events.length) || !soundOn() || !ac || ac.state !== 'running') return;
+  events = events.filter(soundEnabled); // выключенные в меню молчат
+  const ring = chime && soundEnabled('chime'), click = !chime && tick && soundEnabled('turnEnd');
+  if (!(ring || click || events.length) || !soundOn() || !ac || ac.state !== 'running') return;
   let at = 0;
   for (const name of events) {
     if (SFX[name]) {
@@ -238,25 +284,35 @@ export function play({ tick, chime, events = [] }) {
     fn(at);
     at += dur * 0.8;
   }
-  if (chime) chimeAt(at);
-  else if (tick) sfxAt('turnEnd', at);
+  if (ring) chimeAt(at);
+  else if (click) sfxAt('turnEnd', at);
 }
 
 let previewSrc = null;
 
 /**
- * Пример громкости после «тише» или «громче»: звук монумента (уровень событий, -21, 1,3 с). Прошлый
- * пример обрывается, чтобы частые нажатия не наслаивались. Нажатие и есть жест: звук можно включить.
+ * Прослушать звук id из меню (кнопка «▶»): играет с текущей громкостью, даже если он выключен в меню
+ * или выключен весь звук: нажали сами. Прошлый пример из файла обрывается, чтобы не наслаивались.
  */
-export function previewVolume() {
-  if (!soundOn() || !ac) return;
+export function previewSound(id) {
+  try { ac ??= new AudioContext(); } catch { return; }
   const go = () => {
     if (ac.state !== 'running') return;
     try { previewSrc?.stop(); } catch { /* уже отзвучал */ }
     previewSrc = null;
-    const t0 = ac.currentTime;
-    Promise.resolve(sfx.get('monument') || loadSfx('monument')).then((v) => { previewSrc = startSfx('monument', v, t0); });
+    if (id === 'chime') return chimeAt(0);
+    if (SFX[id]) {
+      const t0 = ac.currentTime;
+      Promise.resolve(sfx.get(id) || loadSfx(id)).then((v) => { previewSrc = startSfx(id, v, t0); });
+      return;
+    }
+    EVENT[id]?.[1](0);
   };
   if (ac.state === 'running') go();
   else ac.resume().then(go, () => { /* без звука */ });
+}
+
+/** Пример громкости после «тише» или «громче»: звук монумента (уровень событий, -21, 1,3 с). */
+export function previewVolume() {
+  if (soundOn()) previewSound('monument');
 }

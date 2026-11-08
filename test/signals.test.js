@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume } from '../public/js/signals.js';
+import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
 
@@ -136,4 +136,41 @@ test('громкость запоминается на устройстве, м�
     withStorage({ 'tigris.volume': bad }, () => assert.equal(volume(), 100, `в памяти «${bad}»`));
   }
   withStorage({ 'tigris.volume': '150' }, () => assert.equal(volume(), 150));
+});
+
+test('меню звуков (Денис 08.11): в перечне все звуки сайта, по группам, с подписями', () => {
+  const ids = SOUND_LIST.map((s) => s.id);
+  assert.equal(new Set(ids).size, ids.length, 'без повторов');
+  assert.deepEqual([...ids].sort(), [...Object.keys(SFX), 'battle', 'treasure', 'chime', 'arrive'].sort());
+  for (const s of SOUND_LIST) assert.ok(s.label && s.group, s.id);
+});
+
+test('выбор звуков запоминается на устройстве; мусор в памяти: все включены', () => {
+  assert.equal(soundEnabled('tile'), true, 'без памяти браузера');
+  withStorage({}, (m) => {
+    assert.ok(SOUND_LIST.every((s) => soundEnabled(s.id)), 'по умолчанию все');
+    setSoundEnabled('tile', false);
+    setSoundEnabled('turnEnd', false);
+    assert.equal(soundEnabled('tile'), false);
+    assert.equal(soundEnabled('leader'), true);
+    assert.deepEqual(JSON.parse(m.get('tigris.sounds.off')).sort(), ['tile', 'turnEnd']);
+    setSoundEnabled('tile', true);
+    assert.deepEqual(JSON.parse(m.get('tigris.sounds.off')), ['turnEnd']);
+    setAllSounds(false);
+    assert.ok(SOUND_LIST.every((s) => !soundEnabled(s.id)), 'выключить все');
+    setAllSounds(true);
+    assert.ok(SOUND_LIST.every((s) => soundEnabled(s.id)), 'включить все');
+  });
+  for (const bad of ['', '{', '7', '"tile"', '{"a":1}']) {
+    withStorage({ 'tigris.sounds.off': bad }, () => assert.equal(soundEnabled('tile'), true, `в памяти «${bad}»`));
+  }
+});
+
+test('выключенный звук не занимает место: вместо него следующий по важности', () => {
+  const many = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 2 }];
+  const off = (...ids) => (id) => !ids.includes(id);
+  assert.deepEqual(eventSounds(many, 0, null, off('monument')), ['battle', 'catastrophe', 'treasure']);
+  assert.deepEqual(eventSounds([{ ev: 'gameOver' }, { ev: 'monument' }], 0, null, off('gameEnd')), [], 'конец партии выключен: тишина');
+  const war = { ev: 'war', att: 0, def: 1, winner: 0, loser: 1 };
+  assert.deepEqual(eventSounds([war, { ev: 'tile' }], 0, null, off('warWin')), ['tile']);
 });

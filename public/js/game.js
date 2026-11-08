@@ -14,7 +14,7 @@ import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen, holdStockOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
-import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, volume, nextVolume, setVolume, previewVolume, VOL } from './signals.js';
+import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, volume, nextVolume, setVolume, previewVolume, VOL, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds, previewSound } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
@@ -74,7 +74,8 @@ const SKELETON = `<div class="app" id="game">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
-    <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button><span class="vol" id="gVol" role="group" aria-label="Громкость звуков"><button class="volbtn" data-vol="-1" title="Тише" aria-label="Тише">&minus;</button><b class="volpct" aria-live="polite"></b><button class="volbtn" data-vol="1" title="Громче" aria-label="Громче">+</button><i class="volpop" aria-hidden="true"></i></span></div>
+    <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button><span class="vol" id="gVol" role="group" aria-label="Громкость звуков"><button class="volbtn" data-vol="-1" title="Тише" aria-label="Тише">&minus;</button><b class="volpct" aria-live="polite"></b><button class="volbtn" data-vol="1" title="Громче" aria-label="Громче">+</button><i class="volpop" aria-hidden="true"></i></span><button class="volbtn sfxbtn" id="gSfxBtn" aria-haspopup="true" aria-expanded="false" aria-controls="gSfxMenu" title="Какие звуки играть">&#9662;</button></div>
+    <div class="sfxmenu" id="gSfxMenu" role="dialog" aria-label="Какие звуки играть" hidden></div>
     <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
     <nav class="nav"><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
   </header>
@@ -149,6 +150,7 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
       root.querySelector('#gSound').setAttribute('aria-checked', 'true');
       drawVolume(root, true);
     });
+    bindSfxMenu(root);
     unlockAudio();
     root.querySelector('#gLook').addEventListener('click', () => {
       ui.look = lookOf(current) === 'relief' ? 'cells' : 'relief';
@@ -174,7 +176,7 @@ function signal(view, entries) {
   ui.snap = snap;
   if (ctl.lesson || ctl.tour) return;
   const s = soundsFor(was, snap);
-  play({ ...s, events: eventSounds(entries, view.me, view.game.result) });
+  play({ ...s, events: eventSounds(entries, view.me, view.game.result, soundEnabled) });
   if (!s.chime) return;
   const app = ctl.root.querySelector('#game');
   app.classList.add('myturn-start'); // три вспышки золотой рамки в начале своего хода
@@ -690,6 +692,63 @@ function waitingText({ g, name }) {
 }
 
 /**
+ * Меню «какие звуки играть» (Денис 08.11): кнопка «▾» после громкости. Все звуки по группам, у каждого
+ * переключатель и «▶» прослушать; «Включить все» и «Выключить все». Закрывается крестиком, нажатием
+ * мимо и Esc. Стоит под кнопкой, на узком экране прижато к краям.
+ */
+function sfxMenuHtml() {
+  let html = '<div class="sfxhead"><b>Какие звуки играть</b><button class="sfxclose" data-sfxclose aria-label="Закрыть">&times;</button></div>';
+  let group = '';
+  for (const s of SOUND_LIST) {
+    if (s.group !== group) {
+      group = s.group;
+      html += `<div class="sfxgroup">${group}</div>`;
+    }
+    html += `<div class="sfxrow"><button class="sw" role="switch" data-sfx="${s.id}" aria-checked="${soundEnabled(s.id)}"><i></i>${s.label}</button><button class="sfxplay" data-sfxplay="${s.id}" title="Прослушать" aria-label="Прослушать: ${s.label}">&#9654;</button></div>`;
+  }
+  return html + '<div class="sfxfoot"><button class="btn" data-sfxall="1">Включить все</button><button class="btn" data-sfxall="0">Выключить все</button></div>';
+}
+
+function bindSfxMenu(root) {
+  const btn = root.querySelector('#gSfxBtn'), menu = root.querySelector('#gSfxMenu');
+  const close = () => {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    removeEventListener('pointerdown', outside, true);
+    removeEventListener('keydown', esc, true);
+  };
+  const outside = (e) => { if (!menu.contains(e.target) && !btn.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); btn.focus(); } };
+  const open = () => {
+    menu.innerHTML = sfxMenuHtml();
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    // под кнопкой, не шире экрана и не за краем
+    const r = btn.getBoundingClientRect(), w = Math.min(340, innerWidth - 24);
+    Object.assign(menu.style, { width: `${w}px`, top: `${r.bottom + 6}px`, left: `${Math.max(12, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 12))}px`, maxHeight: `${innerHeight - r.bottom - 18}px` });
+    addEventListener('pointerdown', outside, true);
+    addEventListener('keydown', esc, true);
+  };
+  btn.addEventListener('click', () => (menu.hidden ? open() : close()));
+  menu.addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.sfxclose != null) return close();
+    if (t.dataset.sfxplay) return previewSound(t.dataset.sfxplay);
+    if (t.dataset.sfx) {
+      const on = !soundEnabled(t.dataset.sfx);
+      setSoundEnabled(t.dataset.sfx, on);
+      t.setAttribute('aria-checked', String(on));
+      return;
+    }
+    if (t.dataset.sfxall != null) {
+      setAllSounds(t.dataset.sfxall === '1');
+      menu.querySelectorAll('[data-sfx]').forEach((b) => b.setAttribute('aria-checked', String(soundEnabled(b.dataset.sfx))));
+    }
+  });
+}
+
+/**
  * Громкость в шапке: процент, края шкалы, тусклая при выключенном звуке. pop: после нажатия на
  * 901-1400 px, где процента не видно, он всплывает под кнопками на 1,5 с.
  */
@@ -845,7 +904,7 @@ function drawHand(d) {
     });
   };
   if (myP < 0) {
-    el.innerHTML = `<div class="hint">Вы смотрите партию со стороны.</div><div class="hrow"><div class="acts">${stop}</div></div>`;
+    el.innerHTML = `<div class="hint">Вы смотрите партию со стороны.</div><div class="hrow"><div class="acts">${stop ? `<div class="pair">${stop}</div>` : ''}</div></div>`;
     bindStop();
     return;
   }
@@ -857,6 +916,11 @@ function drawHand(d) {
     + (ta.undo || always ? `<button class="btn" data-now="undo"${ta.undo ? '' : ` disabled title="${UNDO_WHEN}"`}>Отменить действие</button>` : '');
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
+  // кнопки ряда по парам (08.11): кнопки хода, партия (пауза, завершить), рука (сброс, пас); на тесном экране
+  // пара встает столбиком, иначе ряд вылезал за край панели
+  const handActs = (acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : '')
+    + (acting && ui.discard ? `<button class="btn primary" data-now="discardYes" ${ui.discard.size ? '' : 'disabled'}>${ui.discard.size ? `Сбросить ${ui.discard.size}` : 'Выберите тайлы'}</button><button class="btn" data-now="cancel">Отмена</button>` : '')
+    + (acting && has('pass') ? '<button class="btn" data-hand="pass">Пас</button>' : '');
   const pick = ctl.lesson?.pick; // что взять на этом шаге урока
   const mark = (kind, c) => (pick?.kind === kind && (pick.color == null || pick.color === c) ? ' lessonpick' : '');
   const tiles = handColors(view).map((c, k) => {
@@ -889,11 +953,9 @@ function drawHand(d) {
       <div class="grp"><span>Лидеры</span><div class="items">${leaders}</div></div>
       <div class="grp"><span>Катастрофы</span><div class="items">${cats}</div></div>
       <div class="acts">
-        ${turn}
-        ${stop}
-        ${acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : ''}
-        ${acting && ui.discard ? `<button class="btn primary" data-now="discardYes" ${ui.discard.size ? '' : 'disabled'}>${ui.discard.size ? `Сбросить ${ui.discard.size}` : 'Выберите тайлы'}</button><button class="btn" data-now="cancel">Отмена</button>` : ''}
-        ${acting && has('pass') ? '<button class="btn" data-hand="pass">Пас</button>' : ''}
+        ${turn ? `<div class="pair turnacts">${turn}</div>` : ''}
+        ${stop ? `<div class="pair">${stop}</div>` : ''}
+        ${handActs ? `<div class="pair">${handActs}</div>` : ''}
       </div>
     </div>`;
   bindStop();
