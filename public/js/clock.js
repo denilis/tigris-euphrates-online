@@ -34,3 +34,12 @@ export function clockNow(g, at = Date.now()) {
     over: (seat) => (c.over[seat] || 0) + (seat === g.toMove ? liveOver : 0),
   };
 }
+
+/**
+ * Окно отмены вышло (Денис 08.11): ход вот-вот завершится сам, сервер отмену уже не примет
+ * (game/table.js undo: now >= confirmBy). Кнопка отмены пропадает сразу, не дожидаясь опроса.
+ */
+export function undoExpired(g, at = Date.now()) {
+  const k = clockNow(g, at);
+  return Boolean(k && k.confirmLeft != null && k.confirmLeft <= 0);
+}

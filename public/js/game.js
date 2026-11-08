@@ -7,7 +7,7 @@ import { api } from './api.js';
 import { renderWarDock, warActive } from './war.js';
 import { renderEnd, endReasonText, stopText } from './end.js';
 import { battlesIn, battleCard, seenAfterUndo } from './battle.js';
-import { fmt, fmtTotal, clockNow } from './clock.js';
+import { fmt, fmtTotal, clockNow, undoExpired } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
 import { trailMarks, sinceMine, markLabel, markLine, ageMarks, liveMarks } from './trail.js';
 import { stockItems } from './stock.js';
@@ -678,6 +678,9 @@ function waitingText({ g, name }) {
   }
 }
 
+const CONFIRM_LATE = 'Время на отмену вышло: ход завершается.';
+const HINT_LATE = 'Ход сделан и завершается.';
+
 function drawNow(d) {
   const { view, g, legal, decides, seat } = d;
   const el = ctl.root.querySelector('#gNow');
@@ -739,8 +742,10 @@ function drawNow(d) {
     if (g.canUndo) buttons = btn('undo', 'Отменить действие');
   } else if (g.phase === 'confirm') {
     title = 'Ход сделан';
-    body = `<p>Последнее действие еще можно отменить. Ход завершится сам через <b data-clock="confirm"></b>.</p>`;
-    buttons = btn('confirm', 'Завершить ход', 'primary') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
+    // время на отмену вышло: кнопки отмены нет (Денис 08.11), ход завершится с ближайшим опросом
+    const late = undoExpired(g);
+    body = late ? `<p>${CONFIRM_LATE}</p>` : `<p>Последнее действие еще можно отменить. Ход завершится сам через <b data-clock="confirm"></b>.</p>`;
+    buttons = btn('confirm', 'Завершить ход', 'primary') + (g.canUndo && !late ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'wonderPoint') {
     title = 'Очко за чудо';
     body = '<p>Выберите цвет, в который получите очко.</p>';
@@ -825,7 +830,7 @@ function drawHand(d) {
   else if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
   else if (warActive(view)) hint = 'Идет конфликт: решите в его окне.';
   else if (g.phase === 'action') hint = ui.discard ? 'Сброс: нажмите тайлы в руке, которые сбрасываете, и подтвердите кнопкой рядом.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
-  else if (g.phase === 'confirm') hint = 'Ход сделан: завершите его или отмените действие на панели.';
+  else if (g.phase === 'confirm') hint = undoExpired(g) ? HINT_LATE : 'Ход сделан: завершите его или отмените действие на панели.';
   else hint = 'Решите на панели.';
   if (ctl.lesson) hint = ctl.lesson.hint;
   el.className = 'hand' + (acting ? '' : ' locked');
@@ -904,7 +909,16 @@ function updateClocks() {
       el.classList.toggle('low', k.left > 0 && k.left <= 10000);
       el.classList.toggle('neg', k.left <= 0);
     } else if (kind === 'confirm') {
-      el.textContent = `${Math.max(0, Math.ceil((k.confirmLeft ?? 0) / 1000))} с`;
+      const left = k.confirmLeft;
+      // срока нет (пауза): как раньше; срок вышел между опросами: убрать отмену сразу, как drawNow
+      if (left == null || left > 0) el.textContent = `${Math.max(0, Math.ceil((left ?? 0) / 1000))} с`;
+      else {
+        const p = el.closest('p');
+        if (p) p.textContent = CONFIRM_LATE;
+        ctl.root.querySelector('#gNow [data-act="undo"]')?.remove();
+        const hint = ctl.root.querySelector('#gHand > .hint');
+        if (hint && !ctl.lesson) hint.textContent = HINT_LATE;
+      }
     } else if (kind === 'seat') {
       const seat = +el.dataset.seat, over = k.over(seat);
       el.innerHTML = `время ${fmtTotal(k.used(seat))}${over >= 1000 ? `, <b>сверх ${fmtTotal(over)}</b>` : ''}`;

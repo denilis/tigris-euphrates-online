@@ -7,7 +7,7 @@ import { createGame, legalMoves, applyMove, components, finalVector } from '../g
 import { BOARDS } from '../game/vendor/engine/boards.js';
 import { battlesIn, battleCard } from '../public/js/battle.js';
 import { journalEntries } from '../game/journal.js';
-import { fmt, fmtTotal, clockNow } from '../public/js/clock.js';
+import { fmt, fmtTotal, clockNow, undoExpired } from '../public/js/clock.js';
 import { makeRng } from '../game/vendor/engine/rng.js';
 
 test('склонения: клетки и тайлы', () => {
@@ -208,6 +208,18 @@ test('часы: ходящему время на весь ход, сверх у�
   assert.equal(end.live, false);
   assert.equal(end.used(0), 50000, 'после конца время стоит');
   assert.equal(clockNow({ ...g, clock: null }), null, 'старый сервер без часов');
+});
+
+test('окно отмены вышло (Денис 08.11: кнопка отмены должна пропадать, когда время вышло)', () => {
+  const clock = { at: 1000, turnUsed: 0, used: {}, over: {}, turnMs: 30000, confirmBy: 21000 };
+  const g = { clock, toMove: 0, cur: 0, phase: 'confirm', over: false };
+  assert.equal(undoExpired(g, 20999), false, 'еще миллисекунда');
+  assert.equal(undoExpired(g, 21000), true, 'ровно в срок сервер уже не отменяет');
+  assert.equal(undoExpired(g, 30000), true);
+  assert.equal(undoExpired({ ...g, clock: { ...clock, skew: 2000 } }, 19500), true, 'часы клиента отстают от сервера');
+  assert.equal(undoExpired({ ...g, phase: 'action', clock: { ...clock, confirmBy: null } }, 99000), false, 'не окно подтверждения');
+  assert.equal(undoExpired({ ...g, clock: { ...clock, confirmBy: null } }, 99000), false, 'на паузе срока нет');
+  assert.equal(undoExpired({ ...g, clock: null }), false, 'без часов');
 });
 
 test('часы: партия, завершенная организатором, стоит', () => {
