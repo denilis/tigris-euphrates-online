@@ -1,7 +1,8 @@
 // Сигналы «ваш ход»: когда звучит щелчок и звон, что пишется в заголовке вкладки.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { snapOf, soundsFor, titleFor, newEntries, eventSounds } from '../public/js/signals.js';
+import { readFileSync } from 'node:fs';
+import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
 
@@ -50,22 +51,35 @@ test('звуки событий: только записи, появившиес
 
 test('звуки событий: бой, своя победа, монумент, катастрофа, сокровище, конец', () => {
   assert.deepEqual(eventSounds([{ ev: 'war', winner: 2 }], 1), ['battle']);
-  assert.deepEqual(eventSounds([{ ev: 'revolt', winner: 1 }], 1), ['battle', 'victory']);
+  assert.deepEqual(eventSounds([{ ev: 'revolt', winner: 1 }], 1), ['revoltWin']);
   assert.deepEqual(eventSounds([{ ev: 'monument' }, { ev: 'treasure' }], 0), ['monument', 'treasure']);
   assert.deepEqual(eventSounds([{ ev: 'catastrophe' }], null), ['catastrophe']);
   assert.deepEqual(eventSounds([{ ev: 'tile' }, { ev: 'score' }], 0), []);
   const all = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 0 }, { ev: 'gameOver' }];
-  assert.deepEqual(eventSounds(all, 0), ['gameover', 'battle', 'victory'], 'не больше трех, важное первым');
+  assert.deepEqual(eventSounds(all, 0), ['gameEnd'], 'конец партии: только звук финальной таблицы');
+  const many = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 2 }];
+  assert.deepEqual(eventSounds(many, 0), ['battle', 'monument', 'catastrophe'], 'не больше трех, важное первым');
 });
 
-test('звуки боя и конца партии: фанфары победителю, грустный звук проигравшему (04.11)', () => {
+test('звуки своего боя и конца партии из файлов (Денис 08.11)', () => {
   const war = { ev: 'war', att: 0, def: 1, winner: 0, loser: 1 };
-  assert.deepEqual(eventSounds([war], 0), ['battle', 'victory']);
-  assert.deepEqual(eventSounds([war], 1), ['battle', 'defeat']);
+  assert.deepEqual(eventSounds([war], 0), ['warWin']);
+  assert.deepEqual(eventSounds([war], 1), ['warLoss']);
   assert.deepEqual(eventSounds([war], 2), ['battle'], 'чужой бой: только удары');
+  const revolt = { ev: 'revolt', att: 1, def: 0, winner: 0, loser: 1 };
+  assert.deepEqual(eventSounds([revolt], 0), ['revoltWin']);
+  assert.deepEqual(eventSounds([revolt], 1), ['revoltLoss']);
+  // две войны за ход: одну выиграл, другую проиграл; звучит победа
+  assert.deepEqual(eventSounds([{ ...war, winner: 1, loser: 0 }, { ev: 'war', att: 0, def: 2, winner: 0, loser: 2 }], 0), ['warWin']);
   const result = { seats: [{ seatId: 0, place: 1 }, { seatId: 1, place: 2 }, { seatId: 2, place: 3 }] };
-  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 0, result), ['fanfare']);
-  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 2, result), ['defeat']);
-  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], 1, result), ['gameover']);
-  assert.deepEqual(eventSounds([{ ev: 'gameOver' }], null, result), ['gameover'], 'зритель');
+  for (const me of [0, 1, 2, null]) assert.deepEqual(eventSounds([{ ev: 'gameOver' }], me, result), ['gameEnd'], `место ${me}`);
+});
+
+test('файлы звуков лежат на сайте и это mp3', () => {
+  for (const [name, url] of Object.entries(SFX)) {
+    const buf = readFileSync(new URL(`../public${url}`, import.meta.url));
+    assert.ok(buf.length > 5000 && buf.length < 200000, `${name}: ${buf.length} байт`);
+    assert.ok((buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) || buf.slice(0, 3).toString() === 'ID3', `${name}: не mp3`);
+  }
+  assert.deepEqual(Object.keys(SFX).sort(), ['gameEnd', 'revoltLoss', 'revoltWin', 'warLoss', 'warWin']);
 });

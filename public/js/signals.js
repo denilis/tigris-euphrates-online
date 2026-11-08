@@ -1,6 +1,7 @@
 // Сигналы «ваш ход» (просьба Дениса 03.11): переход хода было не видно. Тихий щелчок, когда
 // закончился любой ход, двойной звон, когда решать вам; заголовок вкладки и мигающая надпись,
-// когда время хода вышло. Звук синтезирует браузер, файлов нет. Выбор «Звук» помнит браузер.
+// когда время хода вышло. Звук синтезирует браузер; свой бой, восстание и конец партии звучат файлами
+// Дениса из public/sfx (08.11). Выбор «Звук» помнит браузер.
 
 /** Снимок партии для сигналов: чей ход, решает ли смотрящий и докуда он видел журнал. */
 export const snapOf = (view) => ({
@@ -21,24 +22,23 @@ export function newEntries(prev, view) {
 }
 
 /**
- * Звуки событий (просьба Дениса 04.11): бой; в своем бою у победителя фанфары, у проигравшего
- * грустный звук; монумент, катастрофа, сокровище; конец партии: первое место фанфары, последнее
- * грустный звук, остальные аккорд. Не больше трех за раз, по важности. result — итог партии из вида.
+ * Звуки событий (просьба Дениса 04.11): бой, монумент, катастрофа, сокровище; не больше трех за раз,
+ * по важности. 08.11 звуки из файлов Дениса (SFX): свой бой (война) и свое восстание, победа и
+ * поражение, вместо глухого удара; конец партии: звук финальной таблицы для всех, один (таблица
+ * появляется в той же перерисовке, звуки последнего хода с ним не наслаиваются). Чужой бой: удары.
+ * result — итог партии из вида (раньше по нему выбирались фанфары или грустный звук).
  */
 export function eventSounds(entries, me, result = null) {
   const has = (...evs) => entries.some((e) => evs.includes(e.ev));
+  if (has('gameOver')) return ['gameEnd'];
   const out = [];
-  if (has('gameOver')) {
-    const mine = me == null ? null : result?.seats?.find((x) => x.seatId === me);
-    const worst = result?.seats?.length ? Math.max(...result.seats.map((x) => x.place)) : null;
-    out.push(!mine ? 'gameover' : mine.place === 1 ? 'fanfare' : mine.place === worst ? 'defeat' : 'gameover');
-  }
-  if (has('war', 'revolt')) out.push('battle');
-  if (me != null) {
-    const mine = entries.filter((e) => (e.ev === 'war' || e.ev === 'revolt') && [e.att, e.def, e.winner, e.loser].includes(me));
-    if (mine.some((e) => e.winner === me)) out.push('victory');
-    else if (mine.length) out.push('defeat');
-  }
+  const mine = me == null ? [] : entries.filter((e) => (e.ev === 'war' || e.ev === 'revolt') && [e.att, e.def, e.winner, e.loser].includes(me));
+  if (mine.length) {
+    // несколько боев за ход: если хоть один выигран, звучит победа (в том бою, что выигран)
+    const won = mine.find((e) => e.winner === me);
+    const e = won || mine[0];
+    out.push(`${e.ev === 'war' ? 'war' : 'revolt'}${won ? 'Win' : 'Loss'}`);
+  } else if (has('war', 'revolt')) out.push('battle');
   if (has('monument', 'wonder')) out.push('monument');
   if (has('catastrophe')) out.push('catastrophe');
   if (has('treasure')) out.push('treasure');
@@ -80,6 +80,7 @@ export function unlockAudio() {
     try {
       ac ??= new AudioContext();
       if (ac.state === 'suspended') ac.resume();
+      preloadSfx(); // файлы звуков (около 260 КБ) качаем, когда звук уже можно играть
     } catch { /* без звука */ }
   };
   addEventListener('pointerdown', go, { once: true, capture: true });
@@ -117,45 +118,14 @@ function rumble(at, dur, gain) {
   src.stop(t + dur + 0.02);
 }
 
-/** Медный тон (фанфары, грустная труба): пила через мягкий фильтр, можно со скольжением и вибрато. */
-function brass(freq, at, dur, gain, to = null, vibrato = 0) {
-  const t = ac.currentTime + at, o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
-  o.type = 'sawtooth';
-  o.frequency.setValueAtTime(freq, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
-  if (vibrato) {
-    const lfo = ac.createOscillator(), depth = ac.createGain();
-    lfo.frequency.value = 5.5;
-    depth.gain.value = vibrato;
-    lfo.connect(depth).connect(o.frequency);
-    lfo.start(t);
-    lfo.stop(t + dur + 0.05);
-  }
-  f.type = 'lowpass';
-  f.frequency.value = 1700;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(gain, t + 0.03);
-  g.gain.setValueAtTime(gain, t + dur * 0.7);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(f).connect(g).connect(ac.destination);
-  o.start(t);
-  o.stop(t + dur + 0.05);
-}
-
 // звуки событий: [длительность, как играть со сдвигом at]
 const EVENT = {
   battle: [0.55, (at) => { tone(130, at, 0.22, 0.26, 'sine', 48); tone(120, at + 0.26, 0.26, 0.24, 'sine', 42); }],
-  // «ту-ту-дун»: фанфары победителю боя
-  victory: [0.85, (at) => { brass(392, at, 0.12, 0.17); brass(392, at + 0.14, 0.12, 0.17); for (const [f, v] of [[523, 0.2], [659, 0.12], [784, 0.1]]) brass(f, at + 0.28, 0.55, v); }],
-  // грустная труба проигравшему: четыре ноты вниз, последняя с дрожью
-  defeat: [1.5, (at) => { brass(311, at, 0.28, 0.16); brass(294, at + 0.3, 0.28, 0.16); brass(277, at + 0.6, 0.28, 0.16); brass(262, at + 0.9, 0.6, 0.17, 247, 6); }],
-  fanfare: [1.6, (at) => { [523, 659, 784].forEach((f, i) => brass(f, at + i * 0.13, 0.14, 0.17)); for (const [f, v] of [[523, 0.16], [659, 0.12], [784, 0.11], [1047, 0.1]]) brass(f, at + 0.42, 1.0, v); }],
   monument: [1.2, (at) => { tone(440, at, 1.2, 0.09); tone(880, at, 0.9, 0.07); tone(1320, at, 0.6, 0.035); }],
   catastrophe: [0.9, (at) => { rumble(at, 0.85, 0.24); tone(62, at, 0.8, 0.16, 'sine', 40); }],
   treasure: [0.35, (at) => { tone(2093, at, 0.12, 0.06); tone(2637, at + 0.07, 0.2, 0.05); }],
   // игрок зашел за стол в лобби: дверной звонок из двух нот
   arrive: [0.45, (at) => { tone(659, at, 0.18, 0.16); tone(880, at + 0.14, 0.3, 0.16); }],
-  gameover: [1.4, (at) => { for (const f of [392, 494, 587]) tone(f, at, 1.4, 0.07); }],
 };
 
 /** «Ваш ход» (Денис 04.11: громче и мажорно, «сходи»): колокольчики вверх до-ми-соль-до. */
@@ -171,11 +141,70 @@ function remindAt(at) {
   tone(1047, at + 0.18, 0.35, 0.22);
 }
 
+// --- звуки из файлов (Денис 08.11): свой бой и восстание, победа и поражение; конец партии
+
+export const SFX = {
+  warWin: '/sfx/war-win.mp3', revoltWin: '/sfx/revolt-win.mp3',
+  warLoss: '/sfx/war-loss.mp3', revoltLoss: '/sfx/revolt-loss.mp3', gameEnd: '/sfx/game-end.mp3',
+};
+// громкость выровнена по замеру 08.11 (RMS от -20 до -24,5 дБ), чтобы ни один не выделялся
+const SFX_GAIN = { warWin: 0.62, revoltWin: 0.78, warLoss: 0.78, revoltLoss: 0.5, gameEnd: 0.55 };
+// длительность слышимой части по тому же замеру: пока файл не загружен, по ней идет очередь звуков
+const SFX_SEC = { warWin: 2.1, revoltWin: 2.3, warLoss: 3.4, revoltLoss: 4.8, gameEnd: 6.5 };
+const sfx = new Map(); // имя -> { buf, from, to } или обещание загрузки
+
+function loadSfx(name) {
+  if (!ac || sfx.has(name)) return sfx.get(name);
+  const p = fetch(SFX[name]).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).then((buf) => {
+    // тишину в начале и в конце файла не играем (в «проигрыше в битве» 0,36 с тишины)
+    const ch = buf.getChannelData(0);
+    let a = 0, z = ch.length - 1;
+    while (a < ch.length && Math.abs(ch[a]) < 0.01) a++;
+    while (z > a && Math.abs(ch[z]) < 0.01) z--;
+    const v = { buf, from: a / buf.sampleRate, to: Math.min(buf.duration, z / buf.sampleRate + 0.25) };
+    sfx.set(name, v);
+    return v;
+  }).catch(() => {
+    sfx.delete(name); // сеть подвела: попробуем в следующий раз
+    return null;
+  });
+  sfx.set(name, p);
+  return p;
+}
+
+function preloadSfx() {
+  for (const name of Object.keys(SFX)) loadSfx(name);
+}
+
+/** Сыграть файл через at секунд; возвращает, сколько он звучит. Не загружен: сыграет, как загрузится. */
+function sfxAt(name, at) {
+  const t0 = ac.currentTime + at;
+  const start = (v) => {
+    if (!v?.buf) return;
+    const src = ac.createBufferSource(), g = ac.createGain();
+    src.buffer = v.buf;
+    g.gain.value = SFX_GAIN[name] ?? 0.6;
+    src.connect(g).connect(ac.destination);
+    src.start(Math.max(ac.currentTime, t0), v.from, v.to - v.from);
+  };
+  const v = sfx.get(name);
+  if (v?.buf) {
+    start(v);
+    return v.to - v.from;
+  }
+  Promise.resolve(v || loadSfx(name)).then(start);
+  return SFX_SEC[name];
+}
+
 /** Сыграть звуки из soundsFor и eventSounds, если звук включен и браузер его разрешил. */
 export function play({ tick, chime, remind, events = [] }) {
   if (!(tick || chime || remind || events.length) || !soundOn() || !ac || ac.state !== 'running') return;
   let at = 0;
   for (const name of events) {
+    if (SFX[name]) {
+      at += sfxAt(name, at) * 0.8;
+      continue;
+    }
     const [dur, fn] = EVENT[name] || [0, () => {}];
     fn(at);
     at += dur * 0.8;
