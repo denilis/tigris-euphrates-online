@@ -17,7 +17,10 @@ import { legalMoves, applyMove, cloneState, monumentOptions, components } from '
 import { N, NB, RED } from '../engine/constants.js';
 import { determinize, probAtLeast } from './belief.js';
 import { evaluate, positionRecord, recordValue } from './evaluate.js';
-import { settle } from './policy.js';
+import { settle, treasureExposure } from './policy.js';
+
+// цена открытого храма при выборе сокровища: только порядок выбора, позиции после взятия равны
+const TREASURE_EXPOSE = 0.3;
 import { styleParams } from './styles.js';
 import { describeMove, COLOR_NAME, COLOR_ADJ } from './explain.js';
 import { catastropheRule, defenseCatastrophes, CAT_MARGIN, CAT_MARGIN_LAST, CAT_FOLLOW } from './catastrophe.js';
@@ -753,7 +756,10 @@ function* decideByEval(view, P, rng, clock) {
   const monument = s.phase === 'monument';
   let best = null;
   for (const m of moves) {
-    const bonus = monument && m.type !== 'pass' ? (P.weights.bMonument || 0) : 0;
+    let bonus = monument && m.type !== 'pass' ? (P.weights.bMonument || 0) : 0;
+    // сокровище (Денис 08.11): позиции после взятия равны, а храм без сокровища открыт для катастрофы;
+    // берем с того, что меньше прикрывает своих лидеров (bot/policy.js treasureExposure)
+    if (m.type === 'treasure') bonus -= TREASURE_EXPOSE * treasureExposure(s, m.pos, me);
     const value = (d) => (monument ? valueAtTurnEnd(d, m, me, rng, P) : valueAfter(d, [m], me, rng, P));
     const v = aggregate(dets.map(value), P.rho) + bonus + P.noise * 0.3 * gauss(rng);
     if (!best || v > best.v) best = { m, v };
