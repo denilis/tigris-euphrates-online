@@ -54,7 +54,7 @@ test('звуки событий: бой, своя победа, монумент
   assert.deepEqual(eventSounds([{ ev: 'revolt', winner: 1 }], 1), ['revoltWin']);
   assert.deepEqual(eventSounds([{ ev: 'monument' }, { ev: 'treasure' }], 0), ['monument', 'treasure']);
   assert.deepEqual(eventSounds([{ ev: 'catastrophe' }], null), ['catastrophe']);
-  assert.deepEqual(eventSounds([{ ev: 'tile' }, { ev: 'score' }], 0), []);
+  assert.deepEqual(eventSounds([{ ev: 'score' }, { ev: 'unite' }], 0), []);
   const all = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 0 }, { ev: 'gameOver' }];
   assert.deepEqual(eventSounds(all, 0), ['gameEnd'], 'конец партии: только звук финальной таблицы');
   const many = [{ ev: 'treasure' }, { ev: 'catastrophe' }, { ev: 'monument' }, { ev: 'war', winner: 2 }];
@@ -75,11 +75,24 @@ test('звуки своего боя и конца партии из файло�
   for (const me of [0, 1, 2, null]) assert.deepEqual(eventSounds([{ ev: 'gameOver' }], me, result), ['gameEnd'], `место ${me}`);
 });
 
-test('файлы звуков лежат на сайте и это mp3', () => {
+test('файлы звуков лежат на сайте: mp3 или wav, не тяжелые', () => {
   for (const [name, url] of Object.entries(SFX)) {
     const buf = readFileSync(new URL(`../public${url}`, import.meta.url));
-    assert.ok(buf.length > 5000 && buf.length < 200000, `${name}: ${buf.length} байт`);
-    assert.ok((buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) || buf.slice(0, 3).toString() === 'ID3', `${name}: не mp3`);
+    assert.ok(buf.length > 5000 && buf.length < (name === 'clock' ? 400000 : 250000), `${name}: ${buf.length} байт`);
+    const mp3 = (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) || buf.slice(0, 3).toString() === 'ID3';
+    const wav = buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WAVE';
+    assert.ok(url.endsWith('.wav') ? wav : mp3, `${name}: формат не тот`);
   }
-  assert.deepEqual(Object.keys(SFX).sort(), ['gameEnd', 'revoltLoss', 'revoltWin', 'warLoss', 'warWin']);
+  assert.deepEqual(Object.keys(SFX).sort(), ['catastrophe', 'clock', 'gameEnd', 'leader', 'monument', 'revoltLoss', 'revoltWin', 'tile', 'turnEnd', 'warLoss', 'warWin']);
+});
+
+test('звуки хода (Денис 08.11): тайл, герой, монумент или чудо, катастрофа', () => {
+  assert.deepEqual(eventSounds([{ ev: 'tile', c: 0 }], 0), ['tile']);
+  assert.deepEqual(eventSounds([{ ev: 'leader', c: 3 }], 1), ['leader']);
+  assert.deepEqual(eventSounds([{ ev: 'tile' }, { ev: 'monument' }], 0), ['monument', 'tile']);
+  assert.deepEqual(eventSounds([{ ev: 'wonder' }], 0), ['monument'], 'чудо звучит как монумент');
+  assert.deepEqual(eventSounds([{ ev: 'catastrophe' }, { ev: 'leaderReturned' }], 2), ['catastrophe']);
+  // своя битва важнее тайла, который ее начал; больше трех не звучит
+  const war = { ev: 'war', att: 0, def: 1, winner: 0, loser: 1 };
+  assert.deepEqual(eventSounds([{ ev: 'tile' }, war, { ev: 'treasure' }, { ev: 'leader' }], 0), ['warWin', 'treasure', 'leader']);
 });
