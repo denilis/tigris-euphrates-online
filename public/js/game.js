@@ -276,10 +276,28 @@ function D() {
   return { view, g, me, myP, seat, name, legal, decides: Boolean(g.legal), heroOf: (p) => seat(g.order[p])?.hero };
 }
 
-async function move(index) {
+// Ход в пути (08.11, планшет: «много раз нажимаешь, не срабатывает»): пока сервер не ответил, второе
+// нажатие не шлет тот же ход еще раз (иначе «Стол уже изменился»), а клетка хода светится сразу.
+async function move(index, cell = null) {
   const { view } = D();
-  if (index < 0) return;
-  await ctl.act({ action: 'move', version: view.version, index });
+  if (index < 0 || ui.sending) return;
+  ui.sending = true;
+  const app = ctl.root.querySelector('#game');
+  app?.classList.add('sending');
+  if (cell != null) {
+    ui.flash = cell;
+    draw();
+  }
+  try {
+    await ctl.act({ action: 'move', version: view.version, index });
+  } finally {
+    ui.sending = false;
+    app?.classList.remove('sending');
+    if (cell != null && ui.flash === cell) {
+      ui.flash = null;
+      if (current) draw();
+    }
+  }
 }
 
 /** Отмена уходит одним запросом: второй щелчок дал бы ложное «Стол уже изменился». */
@@ -306,7 +324,7 @@ function pickLeader(c) {
 
 function onCell(i) {
   const { g, legal, decides } = D();
-  if (!decides || warActive(current)) return;
+  if (!decides || warActive(current) || ui.sending) return;
   const c = leaderAt(i);
   if (c != null) return pickLeader(c);
   let idx = -1;
@@ -328,7 +346,7 @@ function onCell(i) {
     if (g.phase === 'action' && (ui.sel?.kind === 'tile' || ui.sel?.kind === 'cat') && animOn()) {
       fly(ui.sel.kind === 'tile' ? tileImg(ui.sel.color) : catImg, boxOf(ctl.root.querySelector('#gHand .ht.sel')), cellScreen(ctl.root.querySelector('#board'), i));
     }
-    move(idx);
+    move(idx, i);
   } else ctl.lesson?.miss(g.phase === 'action' ? ui.sel : undefined, i);
 }
 

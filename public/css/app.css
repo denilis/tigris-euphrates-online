@@ -310,6 +310,11 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .nav{display:flex;gap:6px}
 .navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
+/* планшет (08.11, «много раз нажимаешь, не срабатывает»): два быстрых касания браузер принимал за
+   двойное касание для увеличения и съедал оба; manipulation оставляет прокрутку и щипок, без задержки */
+html{touch-action:manipulation}
+/* ход ушел на сервер: клетка хода светится (ui.flash), повторные нажатия не шлют его второй раз */
+.app.sending .boardwrap,.app.sending .hand{cursor:progress}
 /* полный экран (08.11): подпись меняется по :fullscreen, а не скриптом; разные правила, иначе
    неизвестный браузеру псевдокласс выключит весь список */
 .fsbtn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
