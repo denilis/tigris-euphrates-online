@@ -2,7 +2,7 @@
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
 import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, getTileStyle, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
-import { TRAIL_FRESH_MS, landing } from './trail.js';
+import { TRAIL_FRESH_MS, TRAIL_ARROW_MS, landing } from './trail.js';
 import { ALL_ON } from './layers.js';
 import { riverLayer } from './river.js';
 
@@ -134,9 +134,11 @@ export function trailSVG(marks, numbers = true) {
   for (const m of marks) {
     const x = cx(m.pos), y = cy(m.pos), side = m.size * C;
     const delay = ` style="animation-delay:-${m.age}ms"`;
-    if (m.from != null) {
+    // стрелка переноса гаснет через TRAIL_ARROW_MS (CSS .trail-move, задержка по возрасту хода); в
+    // просмотре партии (m.still) стоит
+    if (m.from != null && (m.still || m.age < TRAIL_ARROW_MS)) {
       const d = arrowPath(m.from, m.pos);
-      s += `<path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${cx(m.from) + C / 2}" cy="${cy(m.from) + C / 2}" r="6"/>`;
+      s += `<g${m.still ? '' : ` class="trail-move" style="animation-delay:-${m.age}ms"`}><path class="trail-back" d="${d}"/><path class="trail-arrow" d="${d}" marker-end="url(#trailArrow)"/><circle class="trail-from" cx="${cx(m.from) + C / 2}" cy="${cy(m.from) + C / 2}" r="6"/></g>`;
     }
     s += `<rect class="trail-back" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"/>`;
     s += `<rect class="trail${m.age < TRAIL_FRESH_MS ? ' fresh' : ''}" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"${delay}/>`;

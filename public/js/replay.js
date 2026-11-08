@@ -153,7 +153,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
       monuments: data.monDefs.map((m, j) => ({ ...m, pos: b.mons[j] })), order: data.order,
     };
     // след действия: рамки и номер на клетках, как у хода соперника, без вспышки
-    const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, hero: seat(m.actor)?.hero })) : [];
+    const trail = f ? trailMarks(f.entries, -1).map((m) => ({ ...m, age: TRAIL_FRESH_MS, still: true, hero: seat(m.actor)?.hero })) : [];
     setTileStyle(data.options.tiles || 'plate');
     fx = ageFx(fx, [], Date.now());
     renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building, fx }, data.options.look || 'relief');

@@ -1,7 +1,8 @@
 // След хода: куда сходил соперник. Денис: тайлы появляются, и не всегда понятно, в какое место он встал.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { trailMarks, ageMarks, liveMarks, landing, TRAIL_FRESH_MS, TRAIL_LAND_MS } from '../public/js/trail.js';
+import { trailMarks, ageMarks, liveMarks, landing, TRAIL_FRESH_MS, TRAIL_LAND_MS, TRAIL_ARROW_MS } from '../public/js/trail.js';
+import { readFileSync } from 'node:fs';
 import { pointsText } from '../public/js/util.js';
 import { createTable, sit, setHero, setSeatCount, start, submit, undo } from '../game/table.js';
 import { viewFor } from '../game/view.js';
@@ -174,4 +175,21 @@ test('на настоящем столе: след виден сопернику
   undo(t, who, { version: t.version }, { now });
   const after = viewFor(t, other);
   assert.deepEqual(trailMarks(after.game.log, after.me), []);
+});
+
+test('стрелка переноса лидера гаснет через 15 с, рамка хода остается (Денис 08.11)', () => {
+  assert.equal(TRAIL_ARROW_MS, 15000);
+  const mark = (age, extra = {}) => ({ pos: 40, from: 20, size: 1, n: 1, action: 1, age, ...extra });
+  const young = trailSVG([mark(1000)]);
+  assert.match(young, /class="trail-arrow"/);
+  assert.match(young, /<g class="trail-move" style="animation-delay:-1000ms">/, 'гаснет по CSS с поправкой на возраст');
+  const old = trailSVG([mark(15000)]);
+  assert.doesNotMatch(old, /trail-arrow|trail-from/, 'после 15 с стрелки нет');
+  assert.match(old, /class="trail"/, 'рамка хода остается');
+  const still = trailSVG([mark(99000, { still: true })]);
+  assert.match(still, /class="trail-arrow"/, 'просмотр партии: стрелка стоит');
+  assert.doesNotMatch(still, /trail-move/);
+  // CSS гасит стрелку за то же время
+  const css = readFileSync(new URL('../public/css/app.css', import.meta.url), 'utf8');
+  assert.match(css, new RegExp(`\.trail-move\{animation:trailMoveGone ${TRAIL_ARROW_MS / 1000}s`));
 });
