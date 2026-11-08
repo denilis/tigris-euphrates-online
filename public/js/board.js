@@ -441,6 +441,12 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
     }
   }
   for (const i of opts.squares || []) s += `<rect class="target sq" x="${cx(i) + 4}" y="${cy(i) + 4}" width="${2 * C - 8}" height="${2 * C - 8}" rx="8"/>`;
+  // выбранный монумент полупрозрачно на своем квадрате (08.11): видно, как встанет, до «Поставить»
+  if (opts.preview) {
+    const p = opts.preview;
+    const art = mon ? `<use href="#mon${p.c1}${p.c2}" x="${cx(p.tl) + 3}" y="${cy(p.tl) + 3}"/>` : sealSVG(p.c1, p.c2, cx(p.tl), cy(p.tl), 'b');
+    s += `<g class="mon-preview">${art}</g>`;
+  }
   for (const i of opts.crosses || []) s += `<rect class="target" x="${cx(i) + 5}" y="${cy(i) + 5}" width="${C - 10}" height="${C - 10}" rx="22"/>`;
   for (const i of opts.lesson || []) s += `<rect class="lessoncell" x="${cx(i) + 2}" y="${cy(i) + 2}" width="${C - 4}" height="${C - 4}" rx="6"/>`;
   if (opts.flash != null) s += `<rect class="flash" x="${cx(opts.flash)}" y="${cy(opts.flash)}" width="${C}" height="${C}" rx="4"/>`;

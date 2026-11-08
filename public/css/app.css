@@ -251,7 +251,6 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .seg.monseg svg{flex:none}
 .opts .olbl{min-width:118px}
 .stock .mons .monimg{width:100%;max-width:80px;height:auto;display:block}
-.monopt .monimg{display:block}
 .heroes{display:flex;gap:10px;flex-wrap:wrap}
 .hero{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;padding:0;font-size:11.5px;color:var(--muted)}
 .hero i{width:46px;height:46px;border-radius:50%;background-size:cover;border:3px solid transparent;box-shadow:0 2px 5px rgba(0,0,0,.6)}
@@ -307,6 +306,8 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .meta b.low{color:#ff6b5a}
 @media (min-width:901px) and (max-width:1599px){.meta .trl{display:none}.meta .tri{display:inline-block}}
 @media (min-width:901px) and (max-width:1400px){.top{gap:10px}.layers{gap:6px}.meta{gap:10px}.code .cw{display:none}}
+/* 08.11: на 901-1400 px кнопка полного экрана одним значком (подсказка в title), иначе шапка уходит за край */
+@media (min-width:901px) and (max-width:1400px){.nav .fsbtn span{display:none}.nav .fsbtn{padding:7px 9px}}
 .nav{display:flex;gap:6px}
 .navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
@@ -464,9 +465,6 @@ html{touch-action:manipulation}
 .wait i{display:inline-block;width:5px;height:5px;margin-left:3px;border-radius:50%;background:var(--gold);animation:blink 1.2s infinite}
 .wait i:nth-child(2){animation-delay:.2s}.wait i:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
-.monopts{display:flex;gap:6px;flex-wrap:wrap}
-.monopt{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card);border:1px solid transparent;border-radius:8px;padding:4px 6px;font-size:11px;color:var(--muted)}
-.monopt.on{border-color:var(--gold);color:var(--gold)}
 .wonderico{width:44px;height:44px;background:url(/img/wonder/wonder.webp) center/contain no-repeat;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .log{flex:1;min-height:140px;overflow:auto}
 .log ol{list-style:none;margin:0;padding:0;font-size:12.5px}
@@ -857,9 +855,14 @@ html{touch-action:manipulation}
 .stock .sit.blink{border-radius:10px;animation:sitBlink .9s ease-in-out infinite}
 @keyframes sitBlink{0%,100%{box-shadow:0 0 0 2px rgba(255,224,138,.3)}50%{box-shadow:0 0 0 4px #ffe08a,0 0 18px 5px rgba(255,224,138,.75)}}
 .stock .sit.dim{opacity:.35;filter:grayscale(.6)}
-.monopts{gap:8px}
-.monopt{padding:6px 8px;font-size:12px}
-.monopt .monimg,.monopt svg{width:84px;height:84px}
+/* выбор монумента в «Запасе» (08.11): яркие монументы и чудо нажимаются, выбранный в золотой рамке */
+.stock button.sit{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;border-radius:10px}
+.stock .sit.sel{animation:none;box-shadow:0 0 0 3px var(--gold),0 0 14px rgba(224,182,90,.55)}
+.mon-preview{opacity:.55;pointer-events:none}
+.monbar .monimg,.monbar svg{width:34px;height:34px;flex:none}
+.monbar .wonderico{flex:none}
+@media (max-width:640px){.monbar{white-space:normal;flex-wrap:wrap;justify-content:center;border-radius:18px;width:calc(100vw - 24px);text-align:center}}
+.app.lesson.monpick [data-block="stock"]{display:block} /* в уроке «Запас» нужен, чтобы выбрать монумент */
 @media (prefers-reduced-motion:reduce){.target.blink,.cube-blink,.stock .sit.blink{animation:none}.stock .sit.blink{box-shadow:0 0 0 3px #ffe08a}.cube-blink{opacity:1}}
 
 /* «Начать игру» (04.11) */

@@ -11,7 +11,7 @@ import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
 import { trailMarks, sinceMine, markLabel, markLine, ageMarks, liveMarks } from './trail.js';
 import { stockItems } from './stock.js';
-import { initPanels, holdNowOpen } from './panels.js';
+import { initPanels, holdNowOpen, holdStockOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
 import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds } from './signals.js';
@@ -19,7 +19,7 @@ import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
-  unitePos, toast, momentKey, TREASURE_END, treasuresOn, treasureLow,
+  unitePos, toast, momentKey, TREASURE_END, treasuresOn, treasureLow, cellName,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -92,6 +92,7 @@ const SKELETON = `<div class="app" id="game">
   <div class="pausebox" id="gPause" hidden></div>
   <div class="nudge" id="gNudge" role="status" hidden><b>Ваш ход!</b><span>Сделайте ход</span><i data-clock="over"></i></div>
   <div class="modal" id="gDock" hidden></div>
+  <div class="modal pill monbar" id="gMonBar" role="dialog" aria-label="Подтвердить монумент" hidden></div>
   <div class="battle" id="gBattle" hidden></div>
   <div class="endwrap" id="gEnd" hidden></div>
 </div>`;
@@ -109,6 +110,11 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
     root.querySelector('#board').addEventListener('click', (e) => {
       const r = e.target.closest('.cell-hit');
       if (r) onCell(+r.dataset.i);
+    });
+    // монумент и чудо выбирают в «Запасе» (08.11)
+    root.querySelector('#gStock').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pick]');
+      if (b) pickMon(b.dataset.pick === 'wonder' ? 'wonder' : +b.dataset.pick);
     });
     root.querySelector('#gLog').addEventListener('click', (e) => {
       const bb = e.target.closest('[data-battle]');
@@ -372,7 +378,17 @@ function boardOpts() {
     o.blink = 'treasure';
   }
   else if (g.phase === 'monument' && ui.monSel === 'wonder') o.crosses = legal.filter((m) => m.type === 'wonder').map((m) => m.center);
-  else if (g.phase === 'monument' && ui.monSel != null) o.squares = legal.filter((m) => m.type === 'monument' && m.id === ui.monSel).map((m) => m.tl);
+  else if (g.phase === 'monument' && ui.monSel != null) {
+    o.squares = legal.filter((m) => m.type === 'monument' && m.id === ui.monSel).map((m) => m.tl);
+    // место одно: на квадрате виден будущий монумент (08.11), ставит плашка «Поставить»
+    const mon = g.monuments.find((m) => m.id === ui.monSel);
+    if (o.squares.length === 1 && mon) o.preview = { c1: mon.c1, c2: mon.c2, tl: o.squares[0] };
+  } else if (g.phase === 'monument') {
+    // монумент еще не выбран: квадрат уже подсвечен, но нажатие на него ничего не делает
+    o.squares = [...new Set(legal.filter((m) => m.type === 'monument').map((m) => m.tl))];
+    o.hit = hitCells({ ...o, squares: [] }, []);
+    return o;
+  }
   o.hit = hitCells(o, g.players[myP].leaders.filter((i) => leaderAt(i) != null));
   return o;
 }
@@ -398,17 +414,82 @@ function drawStock({ view, g, legal, decides }) {
   // что сейчас строится (просьба Дениса 04.11): здание своего цвета мигает, из монументов подсвечены
   // только те, что можно поставить, остальные притушены
   const monNow = decides && g.phase === 'monument' ? new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id)) : null;
+  const wonderNow = Boolean(monNow) && legal.some((m) => m.type === 'wonder');
   const bldNow = decides && g.phase === 'build' ? g.ctx?.color ?? null : null;
-  const key = JSON.stringify(s) + monOf(view) + bldOf(view) + [...(monNow || [])] + ':' + bldNow + ':' + Boolean(monNow);
+  const sel = monNow ? ui.monSel : null;
+  const key = JSON.stringify(s) + monOf(view) + bldOf(view) + [...(monNow || [])] + ':' + bldNow + ':' + Boolean(monNow) + ':' + wonderNow + ':' + sel;
   if (key === ui.stockKey && el.firstChild) return;
   ui.stockKey = key;
-  // крупно (просьба Дениса 03.11): монументы по три в ряд, чтобы читались цвета
-  const item = (x, icon, hot = false, dim = false) => `<span class="sit${x.built ? ' built' : ''}${hot ? ' blink' : ''}${dim ? ' dim' : ''}" title="${esc(x.title)}">${icon}</span>`;
-  el.innerHTML = `<div class="slbl">Монументы</div><div class="mons">${s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 80, monOf(view)), monNow?.has(m.id), monNow && !m.built && !monNow.has(m.id))).join('')}</div>`
+  // крупно (просьба Дениса 03.11): монументы по три в ряд, чтобы читались цвета.
+  // 08.11 монумент выбирают прямо здесь: яркие нажимаются (data-pick), выбранный в золотой рамке,
+  // остальные притушены; второй панели с монументами в «Сейчас» больше нет
+  const item = (x, icon, hot = false, dim = false, pick = null) => {
+    const cls = `sit${x.built ? ' built' : ''}${hot && pick !== sel ? ' blink' : ''}${dim ? ' dim' : ''}${pick != null ? ' pick' : ''}${pick != null && pick === sel ? ' sel' : ''}`;
+    return pick != null
+      ? `<button type="button" class="${cls}" data-pick="${pick}" title="${esc(x.title)}. Нажмите, чтобы поставить" aria-pressed="${pick === sel}">${icon}</button>`
+      : `<span class="${cls}" title="${esc(x.title)}">${icon}</span>`;
+  };
+  el.innerHTML = `<div class="slbl">Монументы</div><div class="mons">${s.monuments.map((m) => item(m, sealIcon(m.c1, m.c2, 80, monOf(view)), monNow?.has(m.id), monNow && !m.built && !monNow.has(m.id), monNow?.has(m.id) ? m.id : null)).join('')}</div>`
     + (s.buildings || s.wonder ? `<div class="slbl">Здания</div><div class="blds">${[
       ...(s.buildings || []).map((b) => item(b, buildingIcon(b.c, 44, bldOf(view)), bldNow === b.c)),
-      s.wonder ? item(s.wonder, '<span class="wonderico"></span>') : '',
+      s.wonder ? item(s.wonder, '<span class="wonderico"></span>', wonderNow, false, wonderNow ? 'wonder' : null) : '',
     ].join('')}</div>` : '');
+}
+
+// --- монумент и чудо (08.11, схема одобрена Денисом): выбор в «Запасе», подтверждение плашкой
+
+/** Куда может встать выбранное: ходы монумента id или чуда. */
+const monChoices = (legal, id) => (id === 'wonder' ? legal.filter((m) => m.type === 'wonder') : legal.filter((m) => m.type === 'monument' && m.id === id));
+const MON_DOUBLE_MS = 450; // второе нажатие на тот же монумент за это время ставит его сразу
+
+function pickMon(id) {
+  const { g, legal, decides } = D();
+  if (!decides || g.phase !== 'monument' || ui.sending || !monChoices(legal, id).length) return;
+  const at = Date.now();
+  const again = ui.monSel === id && at - (ui.monTapAt || 0) < MON_DOUBLE_MS;
+  ui.monSel = id;
+  ui.monTapAt = at;
+  if (again && monChoices(legal, id).length === 1) return placeMon();
+  draw();
+}
+
+/** Поставить выбранное, если место одно; иначе место выбирают нажатием на поле. */
+function placeMon() {
+  const { legal } = D();
+  const opts = monChoices(legal, ui.monSel);
+  if (opts.length !== 1) return;
+  move(legal.indexOf(opts[0]), opts[0].type === 'wonder' ? opts[0].center : opts[0].tl);
+}
+
+/** Плашка над рукой: что выбрано и «Поставить»; при двух местах просит нажать место на поле. */
+function drawMonBar({ view, g, legal, decides }) {
+  const bar = ctl.root.querySelector('#gMonBar');
+  const opts = decides && g.phase === 'monument' && ui.monSel != null ? monChoices(legal, ui.monSel) : [];
+  bar.hidden = !opts.length;
+  if (bar.hidden) return;
+  const mon = ui.monSel === 'wonder' ? null : g.monuments.find((m) => m.id === ui.monSel);
+  const what = mon ? `Монумент «${COLNAME[mon.c1]} и ${COLNAME[mon.c2]}»` : 'Чудо';
+  const where = opts.length === 1 ? ` на ${cellName(opts[0].type === 'wonder' ? opts[0].center : opts[0].tl)}` : '';
+  bar.innerHTML = opts.length === 1
+    ? `${mon ? sealIcon(mon.c1, mon.c2, 34, monOf(view)) : '<span class="wonderico"></span>'}<b>${what}${where}</b><button class="btn primary" data-mb="place">Поставить</button><button class="btn" data-mb="cancel">Отмена</button>`
+    : `<b>${what}</b><span>нажмите одно из подсвеченных мест на поле</span><button class="btn" data-mb="cancel">Отмена</button>`;
+  bar.querySelector('[data-mb="place"]')?.addEventListener('click', placeMon);
+  bar.querySelector('[data-mb="cancel"]').addEventListener('click', () => {
+    ui.monSel = null;
+    draw();
+  });
+}
+
+/** Начало выбора монумента: «Запас» раскрыт и виден (на планшете он под полем). */
+function showStock({ g, decides }) {
+  const on = Boolean(decides && g.phase === 'monument');
+  ctl.root.querySelector('#game').classList.toggle('monpick', on);
+  holdStockOpen(on);
+  if (!on || ui.monShown === ui.key) return;
+  ui.monShown = ui.key;
+  const sec = ctl.root.querySelector('[data-block="stock"]');
+  const r = sec?.getBoundingClientRect();
+  if (r && (r.top < 0 || r.bottom > innerHeight)) sec.scrollIntoView({ block: 'nearest', behavior: still() ? 'auto' : 'smooth' });
 }
 
 function draw() {
@@ -440,6 +521,8 @@ function draw() {
   renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts(), look);
   drawPlayers(d);
   drawStock(d);
+  showStock(d);
+  drawMonBar(d);
   drawNow(d);
   drawLog(d);
   drawHand(d);
@@ -642,14 +725,13 @@ function drawNow(d) {
     buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'monument') {
     title = 'Монумент';
-    const ids = [...new Set(legal.filter((m) => m.type === 'monument').map((m) => m.id))];
-    const opts = ids.map((id) => {
-      const mon = g.monuments.find((x) => x.id === id);
-      // крупнее (просьба Дениса 04.11): по мелкой плитке цвета не различить
-      return `<button class="monopt${ui.monSel === id ? ' on' : ''}" data-mon="${id}">${sealIcon(mon.c1, mon.c2, 84, monOf(view))}<span>${COLNAME[mon.c1]} и ${COLNAME[mon.c2]}</span></button>`;
-    }).join('');
-    const wonder = legal.some((m) => m.type === 'wonder') ? `<button class="monopt${ui.monSel === 'wonder' ? ' on' : ''}" data-mon="wonder"><span class="wonderico"></span><span>чудо</span></button>` : '';
-    body = `<p>${ui.monSel == null ? 'Выберите монумент, потом место на поле.' : 'Нажмите подсвеченное место на поле.'}</p><div class="monopts">${opts}${wonder}</div>`;
+    // 08.11 (Денис): вторая панель с монументами здесь была лишней, выбор теперь в «Запасе»
+    const wonder = legal.some((m) => m.type === 'wonder');
+    const mons = legal.some((m) => m.type === 'monument');
+    const what = mons && wonder ? 'яркий монумент или чудо' : wonder ? 'чудо' : 'яркий монумент';
+    body = ui.monSel == null
+      ? `<p>Можно построить: нажмите ${what} в «Запасе». Встанет на подсвеченное место; двойное нажатие ставит сразу.</p>`
+      : `<p>Подтвердите «Поставить» внизу или выберите в «Запасе» другой.</p>`;
     buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
   } else if (g.phase === 'treasure') {
     title = 'Сокровище';
@@ -674,10 +756,6 @@ function drawNow(d) {
   el.innerHTML = `${body}${buttons ? `<div class="nowbtns">${buttons}</div>` : ''}`;
   holdNowOpen(Boolean(decides || g.canUndo));
   el.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => onNow(b.dataset.act)));
-  el.querySelectorAll('[data-mon]').forEach((b) => b.addEventListener('click', () => {
-    ui.monSel = b.dataset.mon === 'wonder' ? 'wonder' : +b.dataset.mon;
-    draw();
-  }));
   el.querySelectorAll('[data-idx]').forEach((b) => b.addEventListener('click', () => move(+b.dataset.idx)));
 }
 

@@ -7,7 +7,7 @@ const KEY = 'tigris.layout.';
 const UNSAVED = 'tigris.layout.unsaved'; // сервер еще не получил последнюю правку
 const SAVE_MS = 600;
 
-let cur = cleanLayout(null), root = null, uid = null, timer = null, nowOpen = false, touched = false, synced = false;
+let cur = cleanLayout(null), root = null, uid = null, timer = null, nowOpen = false, stockOpen = false, touched = false, synced = false;
 
 const block = (id) => root.querySelector(`[data-block="${id}"]`);
 
@@ -42,8 +42,9 @@ function apply() {
   BLOCKS.forEach((id) => {
     const el = block(id);
     el.style.order = cur.order.indexOf(id);
-    // блок решений раскрывается сам: свернутый он спрятал бы кнопки хода
-    el.classList.toggle('shut', cur.shut.includes(id) && !(id === 'now' && nowOpen));
+    // блок решений раскрывается сам: свернутый он спрятал бы кнопки хода; «Запас» на время выбора
+    // монумента (08.11): монумент выбирают в нем
+    el.classList.toggle('shut', cur.shut.includes(id) && !(id === 'now' && nowOpen) && !(id === 'stock' && stockOpen));
   });
   root.querySelector('#gSideMove').textContent = cur.left ? 'Панель справа' : 'Панель слева';
   root.querySelector('#gHandMove').textContent = cur.handSide ? 'Рука под картой' : 'Рука сбоку';
@@ -154,6 +155,13 @@ export function initPanels(el) {
     remember();
     apply();
   }).catch(() => {});
+}
+
+/** «Запас» раскрыт, пока игрок выбирает монумент (08.11). */
+export function holdStockOpen(open) {
+  if (open === stockOpen) return;
+  stockOpen = open;
+  apply();
 }
 
 /** Блок решений раскрыт, пока игрок должен что-то решить. */
