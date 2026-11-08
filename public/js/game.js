@@ -91,7 +91,6 @@ const SKELETON = `<div class="app" id="game">
   <footer class="hand" id="gHand"></footer>
   <div id="gLessonSlot"></div>
   <div class="pausebox" id="gPause" hidden></div>
-  <div class="nudge" id="gNudge" role="status" hidden><b>Ваш ход!</b><span>Сделайте ход</span><i data-clock="over"></i></div>
   <div class="modal" id="gDock" hidden></div>
   <div class="modal pill monbar" id="gMonBar" role="dialog" aria-label="Подтвердить монумент" hidden></div>
   <div class="battle" id="gBattle" hidden></div>
@@ -947,11 +946,13 @@ function drawHand(d) {
   else hint = 'Решите на панели.';
   if (ctl.lesson) hint = ctl.lesson.hint;
   el.className = 'hand' + (acting ? '' : ' locked');
-  el.innerHTML = `<div class="hint">${hint}</div>
+  // время хода вышло (Денис 08.11): плашка сразу за катастрофами; нет места в ряду: строкой подсказки
+  el.innerHTML = `<div class="hint"><span class="hinttext">${hint}</span><span class="latehint" aria-hidden="true"><b>Ваш ход!</b> Сделайте ход <i data-clock="over"></i></span></div>
     <div class="hrow">
       <div class="grp"><span>Рука</span><div class="items">${tiles}</div></div>
       <div class="grp"><span>Лидеры</span><div class="items">${leaders}</div></div>
       <div class="grp"><span>Катастрофы</span><div class="items">${cats}</div></div>
+      <div class="nudge" id="gNudge" role="status" hidden><b>Ваш ход!</b><i data-clock="over"></i></div>
       <div class="acts">
         ${turn ? `<div class="pair turnacts">${turn}</div>` : ''}
         ${stop ? `<div class="pair">${stop}</div>` : ''}
@@ -959,6 +960,7 @@ function drawHand(d) {
       </div>
     </div>`;
   bindStop();
+  updateClocks(); // перерисовка не прячет плашку и не оставляет пустые часы до следующего тика
   el.querySelectorAll('[data-tile]').forEach((b) => b.addEventListener('click', () => {
     if (!acting) return;
     const k = +b.dataset.tile, c = +b.dataset.c;
@@ -991,25 +993,45 @@ function drawHand(d) {
 // --- время (просьбы Дениса 29.10): у решающего таймер хода, сверх него минус и красный,
 // у каждого игрока копится время за партию. Цифры обновляются 4 раза в секунду без перерисовки.
 
-function updateClocks() {
-  // заголовок вкладки и мигающая надпись (просьба Дениса 03.11): видно и из другой вкладки
+// ширина плашки «Ваш ход!» в ряду руки с отступом (CSS .hand .nudge 116 px)
+const NUDGE_ROOM = 136;
+
+/**
+ * Плашка «Ваш ход!» после выхода времени (Денис 08.11: загораживала шапку, перенести к катастрофам):
+ * сразу за катастрофами, если до кнопок справа есть место; иначе (ноутбук, планшет, телефон, рука
+ * сбоку) той же надписью в строке подсказки над рукой. Место мерится без плашки, поэтому не мигает.
+ */
+function placeNudge(overdue) {
+  const nudge = ctl.root.querySelector('#gNudge'), hint = ctl.root.querySelector('#gHand > .hint');
+  if (!nudge) return;
+  let place = '';
+  if (overdue) {
+    nudge.hidden = true;
+    const cats = nudge.previousElementSibling, acts = nudge.nextElementSibling;
+    const a = acts?.getBoundingClientRect(), c = cats?.getBoundingClientRect();
+    const free = a && c && a.top < c.bottom ? a.left - c.right : -1; // кнопки на другой строке: места нет
+    place = free >= NUDGE_ROOM ? 'row' : 'hint';
+  }
+  nudge.hidden = place !== 'row';
+  hint?.classList.toggle('late', place === 'hint');
+}
+
+/** Решать вам, и время хода ушло в минус (не в окне подтверждения, не в уроке и не в туре). */
+function overdueNow() {
   const onGame = Boolean(current?.game && ctl?.root.querySelector('#game'));
   const g = onGame ? current.game : null, k = g ? clockNow(g) : null;
   const mine = onGame && !ctl.lesson && !ctl.tour && snapOf(current).mine && g.phase !== 'confirm';
-  const overdue = mine && Boolean(k?.live) && k.left <= 0;
+  return { onGame, g, k, mine, overdue: mine && Boolean(k?.live) && k.left <= 0 };
+}
+
+function updateClocks() {
+  // заголовок вкладки и мигающая надпись (просьба Дениса 03.11): видно и из другой вкладки
+  const { onGame, g, k, mine, overdue } = overdueNow();
   // время хода вышло: надпись «Ваш ход!» и заголовок вкладки; звук часов Денис попросил убрать 08.11
   const title = titleFor(document.title, mine, overdue, Date.now());
   if (title !== document.title) document.title = title;
   if (!onGame) return;
-  const nudge = ctl.root.querySelector('#gNudge');
-  if (nudge.hidden === overdue) nudge.hidden = !overdue;
-  if (overdue) {
-    // в свободном поле сбоку от карты; если оно уже надписи, надпись встает полосой в шапку, а не на клетки
-    const b = ctl.root.querySelector('.boardwrap').getBoundingClientRect(), app = ctl.root.querySelector('#game');
-    // рука сбоку занимает свободное поле: тогда надпись всегда в шапке
-    const room = app.classList.contains('handside') ? 0 : app.classList.contains('sideleft') ? innerWidth - b.right : b.left;
-    nudge.classList.toggle('slim', room < 220);
-  }
+  placeNudge(overdue);
   if (!k) return;
   for (const el of ctl.root.querySelectorAll('[data-clock]')) {
     const kind = el.dataset.clock;
@@ -1029,7 +1051,7 @@ function updateClocks() {
         if (p) p.textContent = CONFIRM_LATE;
         const undo = ctl.root.querySelector('#gHand [data-now="undo"]');
         if (undo) Object.assign(undo, { disabled: true, title: UNDO_WHEN });
-        const hint = ctl.root.querySelector('#gHand > .hint');
+        const hint = ctl.root.querySelector('#gHand .hinttext');
         if (hint && !ctl.lesson) hint.textContent = HINT_LATE;
       }
     } else if (kind === 'seat') {

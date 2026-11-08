@@ -362,17 +362,19 @@ html{touch-action:manipulation}
 .app.myturn .boardwrap{box-shadow:inset 0 0 0 3px var(--gold)}
 .app.myturn-start .boardwrap{animation:turnGlow .8s ease-in-out 3}
 @keyframes turnGlow{50%{box-shadow:inset 0 0 0 7px #ffe08a,inset 0 0 44px rgba(255,224,138,.35)}}
-.nudge{position:fixed;left:16px;top:calc(var(--top) + 16px);z-index:45;width:200px;padding:14px 16px;border-radius:12px;border:2px solid #ffd23f;background:#2a1a0e;color:#ffe08a;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.6);pointer-events:none;animation:nudge 1s steps(1) infinite}
-.nudge[hidden]{display:none}
-.nudge b{display:block;font:700 24px/1.1 Cinzel,Georgia,serif}
-.nudge span{display:block;font-size:15px;margin-top:4px}
-.nudge i{display:block;font:700 19px/1.2 Cinzel,Georgia,serif;margin-top:6px;color:#ff8a7a;font-variant-numeric:tabular-nums}
+/* «Ваш ход!» после выхода времени (08.11: загораживала шапку): плашка сразу за катастрофами; нет места
+   в ряду: той же надписью в строке подсказки над рукой (game.js placeNudge) */
+.hand .nudge{flex:none;align-self:flex-end;width:116px;box-sizing:border-box;padding:5px 6px;border-radius:10px;border:2px solid #ffd23f;background:#2a1a0e;color:#ffe08a;text-align:center;animation:nudge 1s steps(1) infinite}
+.hand .nudge[hidden]{display:none}
+.hand .nudge b{display:block;font:700 16px/1.1 Cinzel,Georgia,serif;white-space:nowrap}
+.hand .nudge i{display:block;margin-top:2px;font:700 19px/1.2 Cinzel,Georgia,serif;color:#ff8a7a;font-style:normal;font-variant-numeric:tabular-nums}
 @keyframes nudge{50%{background:#b8432f;color:#fff3cf;border-color:#fff3cf}}
-.sideleft .nudge{left:auto;right:16px}
-.nudge.slim,.sideleft .nudge.slim{top:7px;left:50%;right:auto;transform:translateX(-50%);width:auto;padding:5px 18px;display:flex;align-items:baseline;gap:12px;white-space:nowrap}
-.nudge.slim b{font-size:18px}
-.nudge.slim span,.nudge.slim i{margin-top:0}
-@media (prefers-reduced-motion:reduce){.nudge,.app.myturn-start .boardwrap{animation:none}}
+.hint .latehint{display:none}
+.hint.late .hinttext{display:none}
+.hint.late .latehint{display:inline-flex;align-items:baseline;gap:8px;padding:1px 10px;border-radius:7px;border:1px solid #ffd23f;background:#2a1a0e;color:#ffe08a;font-weight:600;animation:nudge 1s steps(1) infinite}
+.hint.late .latehint b{font:700 14px/1.2 Cinzel,Georgia,serif}
+.hint.late .latehint i{color:#ff8a7a;font-style:normal;font-weight:700;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.hand .nudge,.hint.late .latehint,.app.myturn-start .boardwrap{animation:none}}
 .boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
 #board{width:100%;height:100%;display:block}
 .cell-hit{fill:transparent}
