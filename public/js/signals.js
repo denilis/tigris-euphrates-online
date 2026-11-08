@@ -119,24 +119,23 @@ function chimeAt(at) {
   tone(2094, at + 0.33, 0.4, 0.05, 'triangle');
 }
 
-// --- звуки из файлов Дениса (08.11): свой бой и восстание, конец партии; конец хода, часы просрочки,
-// монумент или чудо, тайл, герой, катастрофа. Монумент и катастрофа были синтезированы, теперь файлы.
+// --- звуки из файлов Дениса (08.11): свой бой и восстание, конец партии; конец хода, монумент или чудо,
+// тайл, герой, катастрофа. Монумент и катастрофа были синтезированы, теперь файлы. Часы просрочки
+// Денис попросил убрать 08.11 (громко).
 
 export const SFX = {
   warWin: '/sfx/war-win.mp3', revoltWin: '/sfx/revolt-win.mp3',
   warLoss: '/sfx/war-loss.mp3', revoltLoss: '/sfx/revolt-loss.mp3', gameEnd: '/sfx/game-end.mp3',
-  turnEnd: '/sfx/turn-end.mp3', clock: '/sfx/clock.mp3', monument: '/sfx/monument.wav',
+  turnEnd: '/sfx/turn-end.mp3', monument: '/sfx/monument.wav',
   tile: '/sfx/tile.mp3', leader: '/sfx/leader.mp3', catastrophe: '/sfx/catastrophe.wav',
 };
 // громкость выровнена по замеру 08.11: громкие (конец хода, катастрофа) тише, тихие (тайл, герой) громче
 const SFX_GAIN = {
   warWin: 0.62, revoltWin: 0.78, warLoss: 0.78, revoltLoss: 0.5, gameEnd: 0.55,
-  turnEnd: 0.32, clock: 0.9, monument: 0.6, tile: 3, leader: 1.6, catastrophe: 0.42,
+  turnEnd: 0.32, monument: 0.6, tile: 3, leader: 1.6, catastrophe: 0.42,
 };
 // длительность слышимой части по тому же замеру: пока файл не загружен, по ней идет очередь звуков
 const SFX_SEC = { warWin: 2.1, revoltWin: 2.3, warLoss: 3.4, revoltLoss: 4.8, gameEnd: 6.5, turnEnd: 1.9, monument: 1.3, tile: 0.3, leader: 0.8, catastrophe: 4.9 };
-// часы качаются только при первой просрочке: файл тяжелый (313 КБ, минута тиканья)
-const LAZY = new Set(['clock']);
 const sfx = new Map(); // имя -> { buf, from, to } или обещание загрузки
 
 function loadSfx(name) {
@@ -159,7 +158,7 @@ function loadSfx(name) {
 }
 
 function preloadSfx() {
-  for (const name of Object.keys(SFX)) if (!LAZY.has(name)) loadSfx(name);
+  for (const name of Object.keys(SFX)) loadSfx(name);
 }
 
 /** Сыграть файл через at секунд; возвращает, сколько он звучит. Не загружен: сыграет, как загрузится. */
@@ -201,36 +200,4 @@ export function play({ tick, chime, events = [] }) {
   }
   if (chime) chimeAt(at);
   else if (tick) sfxAt('turnEnd', at);
-}
-
-let clockSrc = null;
-
-/**
- * Часы (Денис 08.11): пока ваше время хода в минусе, тикают по кругу; смолкают, когда ход сделан, время
- * не в минусе, звук выключен или ушли со стола. Вызывается часто (каждые 250 мс), лишнего не делает.
- */
-export function clockLoop(on) {
-  const want = on && soundOn() && ac && ac.state === 'running';
-  if (!want) {
-    if (clockSrc) {
-      try { clockSrc.stop(); } catch { /* уже остановлен */ }
-      clockSrc = null;
-    }
-    return;
-  }
-  if (clockSrc) return;
-  const v = sfx.get('clock');
-  if (!v?.buf) {
-    loadSfx('clock'); // загрузится, со следующим вызовом зазвучит
-    return;
-  }
-  const src = ac.createBufferSource(), g = ac.createGain();
-  src.buffer = v.buf;
-  src.loop = true;
-  src.loopStart = v.from;
-  src.loopEnd = v.to;
-  g.gain.value = SFX_GAIN.clock;
-  src.connect(g).connect(ac.destination);
-  src.start(0, v.from);
-  clockSrc = src;
 }

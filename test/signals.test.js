@@ -78,12 +78,12 @@ test('звуки своего боя и конца партии из файло�
 test('файлы звуков лежат на сайте: mp3 или wav, не тяжелые', () => {
   for (const [name, url] of Object.entries(SFX)) {
     const buf = readFileSync(new URL(`../public${url}`, import.meta.url));
-    assert.ok(buf.length > 5000 && buf.length < (name === 'clock' ? 400000 : 250000), `${name}: ${buf.length} байт`);
+    assert.ok(buf.length > 5000 && buf.length < 250000, `${name}: ${buf.length} байт`);
     const mp3 = (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) || buf.slice(0, 3).toString() === 'ID3';
     const wav = buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WAVE';
     assert.ok(url.endsWith('.wav') ? wav : mp3, `${name}: формат не тот`);
   }
-  assert.deepEqual(Object.keys(SFX).sort(), ['catastrophe', 'clock', 'gameEnd', 'leader', 'monument', 'revoltLoss', 'revoltWin', 'tile', 'turnEnd', 'warLoss', 'warWin']);
+  assert.deepEqual(Object.keys(SFX).sort(), ['catastrophe', 'gameEnd', 'leader', 'monument', 'revoltLoss', 'revoltWin', 'tile', 'turnEnd', 'warLoss', 'warWin']);
 });
 
 test('звуки хода (Денис 08.11): тайл, герой, монумент или чудо, катастрофа', () => {

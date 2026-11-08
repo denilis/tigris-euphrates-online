@@ -14,7 +14,7 @@ import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen, holdStockOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
-import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, clockLoop } from './signals.js';
+import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
@@ -880,9 +880,7 @@ function updateClocks() {
   const g = onGame ? current.game : null, k = g ? clockNow(g) : null;
   const mine = onGame && !ctl.lesson && !ctl.tour && snapOf(current).mine && g.phase !== 'confirm';
   const overdue = mine && Boolean(k?.live) && k.left <= 0;
-  // время хода вышло (Денис 04.11: «не слышно, что я должен ходить»): 08.11 вместо двух «динь» тикают
-  // часы, пока ход не сделан; ушли со стола или ход сделан: смолкают
-  clockLoop(overdue);
+  // время хода вышло: надпись «Ваш ход!» и заголовок вкладки; звук часов Денис попросил убрать 08.11
   const title = titleFor(document.title, mine, overdue, Date.now());
   if (title !== document.title) document.title = title;
   if (!onGame) return;
