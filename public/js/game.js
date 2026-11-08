@@ -730,7 +730,6 @@ function drawNow(d) {
   } else if (!decides) {
     const bot = seat(g.toMove)?.kind === 'bot';
     body = `<p>${waitingText(d)}</p>${bot ? '<p class="wait">Бот думает<i></i><i></i><i></i></p>' : ''}`;
-    if (g.canUndo) buttons = btn('undo', 'Отменить действие'); // тайл ходящего столкнул других игроков
   } else if (warActive(view)) {
     title = 'Решаете вы';
     body = '<p>Открыто окно конфликта, партия ждет вашего решения.</p>';
@@ -751,12 +750,11 @@ function drawNow(d) {
       buttons += btn('cancel', 'Отмена');
     } else {
       body = `<p>Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.</p>`;
-      if (g.canUndo) buttons = btn('undo', 'Отменить действие');
     }
   } else if (g.phase === 'build') {
     title = 'Здание';
     body = `<p>Можно построить здание «${TILE[g.ctx.color]}». Нажмите подсвеченную клетку.</p>`;
-    buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
+    buttons = btn('skip', 'Не строить');
   } else if (g.phase === 'monument') {
     title = 'Монумент';
     // 08.11 (Денис): вторая панель с монументами здесь была лишней, выбор теперь в «Запасе»
@@ -766,17 +764,14 @@ function drawNow(d) {
     body = ui.monSel == null
       ? `<p>Можно построить: нажмите ${what} в «Запасе». Встанет на подсвеченное место; двойное нажатие ставит сразу.</p>`
       : `<p>Подтвердите «Поставить» внизу или выберите в «Запасе» другой.</p>`;
-    buttons = btn('skip', 'Не строить') + (g.canUndo ? btn('undo', 'Отменить действие') : '');
+    buttons = btn('skip', 'Не строить');
   } else if (g.phase === 'treasure') {
     title = 'Сокровище';
     body = '<p>Возьмите сокровище: нажмите подсвеченное на поле.</p>';
-    if (g.canUndo) buttons = btn('undo', 'Отменить действие');
   } else if (g.phase === 'confirm') {
     title = 'Ход сделан';
     // время на отмену вышло: кнопки отмены нет (Денис 08.11), ход завершится с ближайшим опросом
-    const late = undoExpired(g);
-    body = late ? `<p>${CONFIRM_LATE}</p>` : `<p>Последнее действие еще можно отменить. Ход завершится сам через <b data-clock="confirm"></b>.</p>`;
-    buttons = btn('confirm', 'Завершить ход', 'primary') + (g.canUndo && !late ? btn('undo', 'Отменить действие') : '');
+    body = undoExpired(g) ? `<p>${CONFIRM_LATE}</p>` : `<p>Последнее действие еще можно отменить кнопкой внизу. Ход завершится сам через <b data-clock="confirm"></b>.</p>`;
   } else if (g.phase === 'wonderPoint') {
     title = 'Очко за чудо';
     body = '<p>Выберите цвет, в который получите очко.</p>';
@@ -813,6 +808,21 @@ function onNow(a) {
 
 const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
 
+/**
+ * Кнопки хода внизу, рядом с «Пауза» (Денис 06.11 и 08.11; раньше были на панели «Сейчас»):
+ * «Завершить ход» в окне подтверждения и «Отменить действие» там, где отмена возможна. В конфликте
+ * отмену нападения дает его окно; пока в руке выбран тайл или идет сброс, рядом своя «Отмена».
+ */
+function turnActs({ view, g, decides }) {
+  if (g.stopped || g.over || g.paused) return { end: false, undo: false };
+  if (!decides) return { end: false, undo: Boolean(g.canUndo) }; // тайл ходящего столкнул других игроков
+  if (warActive(view)) return { end: false, undo: false };
+  if (g.phase === 'confirm') return { end: true, undo: Boolean(g.canUndo) && !undoExpired(g) };
+  if (g.phase === 'action') return { end: false, undo: Boolean(g.canUndo) && !ui.sel && !ui.discard && !ui.confirmPass };
+  if (['build', 'monument', 'treasure'].includes(g.phase)) return { end: false, undo: Boolean(g.canUndo) };
+  return { end: false, undo: false };
+}
+
 function drawHand(d) {
   const { view, g, myP, legal, decides } = d;
   const el = ctl.root.querySelector('#gHand');
@@ -837,6 +847,9 @@ function drawHand(d) {
     return;
   }
   const acting = decides && g.phase === 'action' && !ui.confirmPass;
+  const ta = turnActs(d);
+  const turn = (ta.end ? '<button class="btn primary" data-now="confirm">Завершить ход</button>' : '')
+    + (ta.undo ? '<button class="btn" data-now="undo">Отменить действие</button>' : '');
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
   const pick = ctl.lesson?.pick; // что взять на этом шаге урока
@@ -861,7 +874,7 @@ function drawHand(d) {
   else if (!decides) hint = 'Ход другого игрока. Рука видна, но не нажимается.';
   else if (warActive(view)) hint = 'Идет конфликт: решите в его окне.';
   else if (g.phase === 'action') hint = ui.discard ? 'Сброс: нажмите тайлы в руке, которые сбрасываете, и подтвердите кнопкой рядом.' : ui.sel ? 'Нажмите подсвеченную клетку на поле. Повторный клик по выбранному снимает выбор.' : `Действие ${g.actionNo} из 2. Выберите тайл, лидера (внизу или на поле) или катастрофу.`;
-  else if (g.phase === 'confirm') hint = undoExpired(g) ? HINT_LATE : 'Ход сделан: завершите его или отмените действие на панели.';
+  else if (g.phase === 'confirm') hint = undoExpired(g) ? HINT_LATE : 'Ход сделан: завершите его или отмените действие кнопками внизу.';
   else hint = 'Решите на панели.';
   if (ctl.lesson) hint = ctl.lesson.hint;
   el.className = 'hand' + (acting ? '' : ' locked');
@@ -871,6 +884,7 @@ function drawHand(d) {
       <div class="grp"><span>Лидеры</span><div class="items">${leaders}</div></div>
       <div class="grp"><span>Катастрофы</span><div class="items">${cats}</div></div>
       <div class="acts">
+        ${turn}
         ${stop}
         ${acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : ''}
         ${acting && ui.discard ? `<button class="btn primary" data-now="discardYes" ${ui.discard.size ? '' : 'disabled'}>${ui.discard.size ? `Сбросить ${ui.discard.size}` : 'Выберите тайлы'}</button><button class="btn" data-now="cancel">Отмена</button>` : ''}
@@ -946,7 +960,7 @@ function updateClocks() {
       else {
         const p = el.closest('p');
         if (p) p.textContent = CONFIRM_LATE;
-        ctl.root.querySelector('#gNow [data-act="undo"]')?.remove();
+        ctl.root.querySelector('#gHand [data-now="undo"]')?.remove();
         const hint = ctl.root.querySelector('#gHand > .hint');
         if (hint && !ctl.lesson) hint.textContent = HINT_LATE;
       }
