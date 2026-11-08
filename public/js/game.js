@@ -14,7 +14,7 @@ import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen, holdStockOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
-import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds } from './signals.js';
+import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, volume, nextVolume, setVolume, previewVolume, VOL } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
@@ -74,7 +74,7 @@ const SKELETON = `<div class="app" id="game">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
-    <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button></div>
+    <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button><span class="vol" id="gVol" role="group" aria-label="Громкость звуков"><button class="volbtn" data-vol="-1" title="Тише" aria-label="Тише">&minus;</button><b class="volpct" aria-live="polite"></b><button class="volbtn" data-vol="1" title="Громче" aria-label="Громче">+</button><i class="volpop" aria-hidden="true"></i></span></div>
     <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
     <nav class="nav"><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
   </header>
@@ -138,6 +138,16 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
     root.querySelector('#gSound').addEventListener('click', () => {
       setSound(!soundOn());
       draw();
+    });
+    // громче и тише (Денис 08.11): шаг 10%, пример звука; при выключенном звуке нажатие его включает
+    root.querySelector('#gVol').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-vol]');
+      if (!b) return;
+      setVolume(nextVolume(volume(), +b.dataset.vol));
+      if (!soundOn()) setSound(true);
+      previewVolume();
+      root.querySelector('#gSound').setAttribute('aria-checked', 'true');
+      drawVolume(root, true);
     });
     unlockAudio();
     root.querySelector('#gLook').addEventListener('click', () => {
@@ -515,6 +525,7 @@ function draw() {
   root.querySelector('#gTrBox').title = `Партия кончается, когда на поле остается ${TREASURE_END} сокровища`;
   root.querySelectorAll('#gLayers [data-layer]').forEach((b) => b.setAttribute('aria-checked', String(ui.layers[b.dataset.layer])));
   root.querySelector('#gSound').setAttribute('aria-checked', String(soundOn()));
+  drawVolume(root);
   root.querySelector('#game').classList.toggle('myturn', !ctl.lesson && snapOf(view).mine); // золотая рамка поля, пока решать вам
   const look = lookOf(view);
   root.querySelector('#gLook').textContent = look === 'relief' ? 'Поле: рельеф' : 'Поле: клетки';
@@ -675,6 +686,26 @@ function waitingText({ g, name }) {
     case 'wonderPoint': return `${n} выбирает цвет очка за чудо.`;
     case 'confirm': return `${n} завершает ход: пока идет окно, действие можно отменить.`;
     default: return '';
+  }
+}
+
+/**
+ * Громкость в шапке: процент, края шкалы, тусклая при выключенном звуке. pop: после нажатия на
+ * 901-1400 px, где процента не видно, он всплывает под кнопками на 1,5 с.
+ */
+let volPopTimer = 0;
+function drawVolume(root, pop = false) {
+  const box = root.querySelector('#gVol'), v = volume();
+  box.querySelector('.volpct').textContent = `${v}%`;
+  box.querySelector('.volpop').textContent = `Громкость ${v}%`;
+  box.querySelector('[data-vol="-1"]').disabled = v <= VOL.min;
+  box.querySelector('[data-vol="1"]').disabled = v >= VOL.max;
+  box.classList.toggle('off', !soundOn());
+  box.title = `Громкость звуков ${v}%`;
+  if (pop) {
+    box.classList.add('pop');
+    clearTimeout(volPopTimer);
+    volPopTimer = setTimeout(() => box.classList.remove('pop'), 1500);
   }
 }
 

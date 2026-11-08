@@ -77,6 +77,38 @@ export function setSound(on) {
   try { localStorage.setItem('tigris.sound', on ? 'on' : 'off'); } catch { /* без памяти */ }
 }
 
+// Общая громкость (Денис 08.11: «панель громче, тише»): шаг 10%, от 10 до 150%, 100% = выровненный
+// уровень (SFX_GAIN). Все звуки идут через один узел master; выключает звук переключатель «Звук».
+export const VOL = { min: 10, max: 150, step: 10, def: 100 };
+
+/** Громкость в процентах из памяти устройства; чего-то не того там нет: 100. */
+export function volume() {
+  try {
+    const v = Number(localStorage.getItem('tigris.volume'));
+    return Number.isInteger(v) && v >= VOL.min && v <= VOL.max && v % VOL.step === 0 ? v : VOL.def;
+  } catch { return VOL.def; }
+}
+
+/** Следующая громкость: dir 1 громче, -1 тише, в пределах VOL. */
+export const nextVolume = (v, dir) => Math.min(VOL.max, Math.max(VOL.min, v + Math.sign(dir) * VOL.step));
+
+let master = null;
+
+export function setVolume(v) {
+  try { localStorage.setItem('tigris.volume', String(v)); } catch { /* без памяти */ }
+  if (master) master.gain.value = v / 100;
+}
+
+/** Куда подключать звуки: общий узел громкости. */
+function out() {
+  if (!master) {
+    master = ac.createGain();
+    master.gain.value = volume() / 100;
+    master.connect(ac.destination);
+  }
+  return master;
+}
+
 /** Браузер дает звук только после жеста пользователя: готовим его на первом нажатии. */
 export function unlockAudio() {
   const go = () => {
@@ -99,7 +131,7 @@ function tone(freq, at, dur, gain, type = 'sine', to = null) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(ac.destination);
+  o.connect(g).connect(out());
   o.start(t);
   o.stop(t + dur + 0.02);
 }
@@ -165,17 +197,21 @@ function preloadSfx() {
   for (const name of Object.keys(SFX)) loadSfx(name);
 }
 
+/** Запустить загруженный файл v в момент t0 (время AudioContext); возвращает источник. */
+function startSfx(name, v, t0) {
+  if (!v?.buf) return null;
+  const src = ac.createBufferSource(), g = ac.createGain();
+  src.buffer = v.buf;
+  g.gain.value = SFX_GAIN[name] ?? 0.6;
+  src.connect(g).connect(out());
+  src.start(Math.max(ac.currentTime, t0), v.from, v.to - v.from);
+  return src;
+}
+
 /** Сыграть файл через at секунд; возвращает, сколько он звучит. Не загружен: сыграет, как загрузится. */
 function sfxAt(name, at) {
   const t0 = ac.currentTime + at;
-  const start = (v) => {
-    if (!v?.buf) return;
-    const src = ac.createBufferSource(), g = ac.createGain();
-    src.buffer = v.buf;
-    g.gain.value = SFX_GAIN[name] ?? 0.6;
-    src.connect(g).connect(ac.destination);
-    src.start(Math.max(ac.currentTime, t0), v.from, v.to - v.from);
-  };
+  const start = (v) => startSfx(name, v, t0);
   const v = sfx.get(name);
   if (v?.buf) {
     start(v);
@@ -204,4 +240,23 @@ export function play({ tick, chime, events = [] }) {
   }
   if (chime) chimeAt(at);
   else if (tick) sfxAt('turnEnd', at);
+}
+
+let previewSrc = null;
+
+/**
+ * Пример громкости после «тише» или «громче»: звук монумента (уровень событий, -21, 1,3 с). Прошлый
+ * пример обрывается, чтобы частые нажатия не наслаивались. Нажатие и есть жест: звук можно включить.
+ */
+export function previewVolume() {
+  if (!soundOn() || !ac) return;
+  const go = () => {
+    if (ac.state !== 'running') return;
+    try { previewSrc?.stop(); } catch { /* уже отзвучал */ }
+    previewSrc = null;
+    const t0 = ac.currentTime;
+    Promise.resolve(sfx.get('monument') || loadSfx('monument')).then((v) => { previewSrc = startSfx('monument', v, t0); });
+  };
+  if (ac.state === 'running') go();
+  else ac.resume().then(go, () => { /* без звука */ });
 }

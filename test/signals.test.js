@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN } from '../public/js/signals.js';
+import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
 
@@ -103,4 +103,37 @@ test('у каждого звука свое усиление, частые ти�
   // замер tools/sfx-loudness.browser.js: самое громкое место проигрыша в битве было на 7 дБ выше победы
   assert.ok(SFX_GAIN.warLoss < SFX_GAIN.warWin && SFX_GAIN.revoltLoss < SFX_GAIN.revoltWin);
   assert.ok(SFX_GAIN.turnEnd < 0.2, 'конец хода звучит каждый ход: тихо');
+});
+
+/** Память браузера на время теста. */
+function withStorage(init, fn) {
+  const m = new Map(Object.entries(init));
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) } });
+  try { return fn(m); } finally {
+    if (had) Object.defineProperty(globalThis, 'localStorage', had);
+    else delete globalThis.localStorage;
+  }
+}
+
+test('громкость (Денис 08.11: «громче, тише»): шаг 10%, от 10 до 150, по умолчанию 100', () => {
+  assert.deepEqual(VOL, { min: 10, max: 150, step: 10, def: 100 });
+  assert.equal(nextVolume(100, 1), 110);
+  assert.equal(nextVolume(100, -1), 90);
+  assert.equal(nextVolume(150, 1), 150, 'выше 150 нет');
+  assert.equal(nextVolume(10, -1), 10, 'тише 10 нет: выключает звук переключатель «Звук»');
+});
+
+test('громкость запоминается на устройстве, мусор в памяти дает 100', () => {
+  assert.equal(volume(), 100, 'без памяти браузера');
+  withStorage({}, (m) => {
+    assert.equal(volume(), 100);
+    setVolume(70);
+    assert.equal(m.get('tigris.volume'), '70');
+    assert.equal(volume(), 70);
+  });
+  for (const bad of ['', 'abc', '0', '5', '75', '160', '-10', '1e2x']) {
+    withStorage({ 'tigris.volume': bad }, () => assert.equal(volume(), 100, `в памяти «${bad}»`));
+  }
+  withStorage({ 'tigris.volume': '150' }, () => assert.equal(volume(), 150));
 });

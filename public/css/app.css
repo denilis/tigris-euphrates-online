@@ -297,6 +297,20 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .sw[aria-checked="true"] i::after{transform:translateX(11px);background:#fff3cf}
 .sw:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
 .app.lesson .layers{display:none}
+/* громкость (Денис 08.11): «− 100% +» рядом со «Звук»; на 901-1400 px процент всплывает после нажатия */
+.vol{position:relative;display:inline-flex;align-items:center;gap:4px;font-size:12.5px;white-space:nowrap}
+.volbtn{width:20px;height:20px;padding:0;border-radius:50%;border:1px solid var(--gold2);background:none;color:var(--text);font:inherit;font-size:14px;line-height:1;display:inline-grid;place-items:center;cursor:pointer}
+.volbtn:hover:not(:disabled){background:var(--gold2);color:#1b1713}
+.volbtn:disabled{opacity:.35;cursor:default}
+.volbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.volpct{min-width:2.9em;text-align:center;color:var(--text);font-weight:600}
+.vol.off .volbtn,.vol.off .volpct{opacity:.45}
+.volpop{display:none}
+@media (pointer:coarse){.volbtn{width:28px;height:28px;font-size:17px}}
+@media (min-width:901px) and (max-width:1400px){
+  .vol .volpct{display:none}
+  .vol.pop .volpop{display:block;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:3px 9px;border-radius:7px;border:1px solid var(--gold2);background:var(--frame);color:var(--text);font-style:normal;font-weight:600;z-index:40;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+}
 .meta{margin-left:auto;display:flex;gap:14px;white-space:nowrap;color:var(--muted)}
 .meta b{color:var(--text)}
 /* сокровища на поле (06.11): на широком экране словами, на ноутбуке кубиком (шапка в одну строку
