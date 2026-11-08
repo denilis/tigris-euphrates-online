@@ -1024,6 +1024,18 @@ html{touch-action:manipulation}
 .lcard.clay .wlink:hover{border-color:rgba(80,45,15,.6);background:rgba(105,62,26,.2);box-shadow:inset 0 2px 5px rgba(45,22,6,.4),inset 0 -1px 0 var(--lip)}
 .lcard.clay .wlink b{color:#4a2c13;font-size:16px;text-shadow:0 1px 0 var(--lip)}
 .lcard.clay .wlink span{color:var(--ink2);font-size:13.5px;font-weight:500}
+/* «Что нового за неделю» под шестью разделами (Денис 08.11): дни раскрываются, последний открыт */
+.lcard.clay .news{margin-top:20px}
+.lcard.clay .news h2{margin:0 0 6px;font:600 17px/1.2 Cinzel,Georgia,serif;letter-spacing:.06em;text-transform:uppercase}
+.lcard.clay .nday{border-bottom:1.5px solid var(--cut);box-shadow:0 1px 0 var(--lip)}
+.lcard.clay .nday summary{cursor:pointer;padding:8px 2px;list-style:none;display:flex;align-items:center;gap:8px;color:#4a2c13;font-weight:700;font-size:15px;text-shadow:0 1px 0 var(--lip)}
+.lcard.clay .nday summary::-webkit-details-marker{display:none}
+.lcard.clay .nday summary::before{content:"▸";font-size:12px;color:var(--ink2);transition:transform .15s}
+.lcard.clay .nday[open] summary::before{transform:rotate(90deg)}
+.lcard.clay .nday summary:focus-visible{outline:2px solid #6b3f17;outline-offset:2px;border-radius:4px}
+.lcard.clay .nday ul{margin:0 0 10px;padding:0 0 0 22px;display:grid;gap:5px}
+.lcard.clay .nday li{color:var(--ink);font-size:14.5px;line-height:1.5;font-weight:500}
+.lcard.clay .nday li b{color:#4a2c13}
 .wturn{font-style:normal;font-size:12px;font-weight:700;color:#fff6dc;background:#2c6e31;border-radius:999px;padding:1px 8px;margin-left:6px;text-shadow:none;white-space:nowrap}
 
 /* вкладки статистики и «Личная» (04.11) */

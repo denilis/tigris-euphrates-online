@@ -8,6 +8,7 @@ import { renderStats } from './stats.js';
 import { renderPersonal } from './personal-view.js';
 import { renderReplay } from './replay.js';
 import { welcomeHTML } from './welcome.js';
+import { recentNews, newsHTML } from './news.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { openTour } from './tour.js';
@@ -232,6 +233,7 @@ async function renderStart() {
   app.innerHTML = `<div class="page">${topbar('')}<div class="lobby"><div class="lcard clay start">
     <div class="band top" aria-hidden="true"></div>
     ${welcomeHTML(session.get()?.user)}
+    ${newsHTML(recentNews())}
     <div class="band bot" aria-hidden="true"></div>
   </div></div></div>`;
   bindTopbar();
