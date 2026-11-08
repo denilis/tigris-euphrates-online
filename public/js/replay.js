@@ -6,7 +6,7 @@ import { api } from './api.js';
 import { renderBoard } from './board.js';
 import { trailMarks, TRAIL_FRESH_MS } from './trail.js';
 import { logLines, lineHTML } from './logview.js';
-import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle, tileImg } from './util.js';
+import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, setTileStyle, tileImg, ANALYSIS_SHOWN } from './util.js';
 import { framesBoards, timelineMarks } from './replay-core.js';
 import { mountStats } from './replay-stats.js';
 import { boardChanges, ageFx, still } from './fx.js';
@@ -157,7 +157,7 @@ export async function renderReplay(app, code, top, bindTop, start = 0) {
     setTileStyle(data.options.tiles || 'plate');
     fx = ageFx(fx, [], Date.now());
     renderBoard(svg, g, heroOf, { trail, monument: data.options.monument, building: data.options.building, fx }, data.options.look || 'relief');
-    drawHint(svg, $('rHint'), hintsAt(data.analysis, k), name);
+    drawHint(svg, $('rHint'), ANALYSIS_SHOWN ? hintsAt(data.analysis, k) : [], name);
     $('rRange').value = k;
     $('rPos').textContent = `${k} / ${N}`;
     $('rTitle').innerHTML = f

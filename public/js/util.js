@@ -33,6 +33,10 @@ export const catImg = '/img/tiles/catastrophe.jpg';
 export const uniteImg = '/img/tiles/unification.jpg';
 export const tokenImg = (hero, c) => `/img/tokens/${hero || 'pot'}_${COLKEY[c]}.png`;
 
+// Разбор партии ботом скрыт (решение Дениса 08.11): советы смотрели на одно действие вперед и
+// без причин. Вернуть после усиления бота в новом виде; сервер и сохраненные разборы не тронуты.
+export const ANALYSIS_SHOWN = false;
+
 // Сокровища на поле: партия кончается, когда их остается столько или меньше (движок, конец хода).
 export const TREASURE_END = 2;
 export const treasuresOn = (g) => g.board.treasure.reduce((a, b) => a + b, 0);

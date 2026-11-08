@@ -1,7 +1,7 @@
 // Итог партии: места, очки по цветам и сокровища, «Еще партию» (реванш: тот же состав,
 // первым ходит последнее место) и возврат к столам. Партия, завершенная организатором
 // досрочно, итога не имеет: только сообщение и те же выходы.
-import { HEX, HERONAME, COLNAME, SCORE_ORDER, faceBg, esc } from './util.js';
+import { HEX, HERONAME, COLNAME, SCORE_ORDER, faceBg, esc, ANALYSIS_SHOWN } from './util.js';
 import { matchStats, turnsOf, STAT_ROWS } from './matchstats.js';
 import { fmtTotal } from './clock.js';
 
@@ -81,7 +81,7 @@ export function renderEnd(box, view, { act, go }) {
     <p class="msub">${endReasonText(g.endReason)} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
     ${statsTable(view, list, seat)}
-    ${g.replay ? '<div class="ana" id="eAna"></div>' : ''}
+    ${g.replay && ANALYSIS_SHOWN ? '<div class="ana" id="eAna"></div>' : ''}
     <div class="mfoot">
       <button class="btn" id="eClose">Посмотреть поле</button>
       ${g.replay ? '<button class="btn" id="eReplay">Просмотр по ходам</button>' : ''}
