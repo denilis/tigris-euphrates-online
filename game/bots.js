@@ -45,7 +45,7 @@ export async function botStep(t, { rng = cryptoRng(), botRng = Math.random, now 
   if (pace) {
     // Бот «думает» (просьба Дениса 06.11: за ходом бота можно проследить): ход решается сразу,
     // а показывается через pace.min..pace.max мс от момента, когда очередь дошла до бота
-    // (t.updatedAt). Первое действие не позже 5 с, второе не позже 10 с от начала хода.
+    // (t.updatedAt). Сколько ждать, задает api/index.js (08.11: 1,5-1,8 с, чтобы досмотреть ход).
     const key = `${t.game.log.length}:${seatId}`;
     const plan = t.game.botPlan;
     if (plan?.key === key) {

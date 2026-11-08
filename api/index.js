@@ -55,9 +55,10 @@ export function makeHandler(env, store) {
   const app = createApp({
     store: store || (exec ? redisStore({ exec, prefix: `${env.VERCEL_ENV || 'local'}:` }) : memoryStore()),
     env,
-    // бот «думает» 2-4 с перед каждым решением (Денис 06.11: первое действие до 5 с, второе
-    // до 10 с; еще до 1,2 с добавляет опрос браузера); BOT_PACE=off — ходит сразу
-    botPace: env.BOT_PACE === 'off' ? null : { min: 2000, max: 4000 },
+    // промежуток между действиями бота (06.11 было 2-4 с «на раздумья»; 08.11 Денис: не замедлять
+    // бота, а показывать ход): 1,5-1,8 с, ровно чтобы досмотреть, как садится тайл (TRAIL_LAND_MS
+    // 1500); расчет от паузы не зависит; BOT_PACE=off — ходит сразу
+    botPace: env.BOT_PACE === 'off' ? null : { min: 1500, max: 1800 },
   });
   return async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');

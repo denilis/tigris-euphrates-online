@@ -1,16 +1,55 @@
 // След хода: что отметить на поле после хода соперника. Чистые функции над журналом стола.
 import { squareCells } from './pick.js';
+import { TILE, LEADER, HERONAME, cellName } from './util.js';
 
-export const TRAIL_FRESH_MS = 3000; // столько рамка пульсирует
+const WHAT = { catastrophe: 'катастрофа', building: 'здание', monument: 'монумент', wonder: 'чудо' };
+
+/** Подпись хода на поле: «Лук: храм» (герой игрока и что он поставил). */
+export function markLabel(m, hero) {
+  const who = HERONAME[hero] ? HERONAME[hero][0].toUpperCase() + HERONAME[hero].slice(1) : 'Соперник';
+  const what = m.ev === 'tile' ? TILE[m.c] : m.ev === 'leader' ? LEADER[m.c] : WHAT[m.ev];
+  return `${who}: ${what || 'ход'}`;
+}
+
+/** Строка списка «С вашего хода»: «Лук: храм на G5». */
+export const markLine = (m) => `${m.label} на ${cellName(m.pos)}`;
+
+// 08.11 (Денис: с тремя ботами не уследить, куда пошли): рамка пульсирует дольше, тайл садится медленнее
+export const TRAIL_FRESH_MS = 4500; // столько рамка пульсирует и видна подпись «Лук: храм»
 // столько тайл или лидер соперника плавно появляется на клетке (04.11: раньше 450 мс садилась
-// копия поверх уже нарисованного тайла, и казалось, что тайл возникает сразу)
-export const TRAIL_LAND_MS = 900;
+// копия поверх уже нарисованного тайла, и казалось, что тайл возникает сразу; 08.11: 900 -> 1500)
+export const TRAIL_LAND_MS = 1500;
 
 // в каком поле записи журнала лежит клетка действия
 const CELL = { tile: 'pos', leader: 'pos', catastrophe: 'pos', building: 'pos', wonder: 'center', monument: 'tl' };
 
 /**
- * Отметки последнего хода другого игрока: [{ key, ev, pos, size, action, actor, c, from? }].
+ * Отметки по записям журнала: [{ key, ev, pos, size, action, actor, turn, c, n, from? }]. На клетке
+ * остается последнее действие (лидер проиграл восстание, на его место лег тайл). n — номер на поле:
+ * у seq по порядку действий (1, 2, 3...), иначе номер действия в ходе (1 или 2).
+ */
+function marksOf(entries, seq) {
+  const byCell = new Map();
+  const nums = new Map(); // ход:игрок:действие -> номер по порядку
+  for (const e of entries) {
+    const field = CELL[e.ev];
+    if (!field) continue;
+    const act = `${e.turn}:${e.actor}:${e.action}`;
+    if (!nums.has(act)) nums.set(act, nums.size + 1);
+    const monument = e.ev === 'monument';
+    const was = byCell.get(e[field]);
+    if (!monument && was && `${was.turn}:${was.actor}:${was.action}` === act) continue; // тайл и здание одним действием
+    const m = { key: `${act}:${e[field]}`, ev: e.ev, pos: e[field], size: monument ? 2 : 1, action: e.action, actor: e.actor, turn: e.turn, c: e.c, n: seq ? nums.get(act) : e.action };
+    if (e.ev === 'leader' && e.from >= 0) m.from = e.from;
+    // монумент закрывает тайлы под собой
+    for (const c of monument ? squareCells(m.pos) : [m.pos]) byCell.delete(c);
+    byCell.set(m.pos, m);
+  }
+  return [...byCell.values()].sort((a, b) => a.n - b.n);
+}
+
+/**
+ * Отметки последнего хода другого игрока (просмотр партии и зритель).
  * Свой ход следа не дает, поэтому след гаснет с первым действием следующего игрока.
  */
 export function trailMarks(log, me) {
@@ -18,19 +57,25 @@ export function trailMarks(log, me) {
   if (!last || last.actor === me) return [];
   let i = log.length;
   while (i > 0 && log[i - 1].turn === last.turn && log[i - 1].actor === last.actor) i--;
-  const byCell = new Map(); // на клетке остается последнее действие: лидер проиграл восстание, на его место лег тайл
-  for (const e of log.slice(i)) {
-    const field = CELL[e.ev];
-    if (!field) continue;
-    const monument = e.ev === 'monument';
-    if (!monument && byCell.get(e[field])?.action === e.action) continue; // тайл и здание одним действием
-    const m = { key: `${e.turn}:${e.actor}:${e.action}:${e[field]}`, ev: e.ev, pos: e[field], size: monument ? 2 : 1, action: e.action, actor: e.actor, c: e.c };
-    if (e.ev === 'leader' && e.from >= 0) m.from = e.from;
-    // монумент закрывает тайлы под собой
-    for (const c of monument ? squareCells(m.pos) : [m.pos]) byCell.delete(c);
-    byCell.set(m.pos, m);
+  return marksOf(log.slice(i), false);
+}
+
+/**
+ * Все ходы соперников с моего прошлого действия (08.11, игра против трех ботов): номера по порядку,
+ * след стоит до моего первого действия. Пас в журнал не пишется, поэтому окно не длиннее круга:
+ * np - 1 чужих ходов.
+ */
+export function sinceMine(log, me, np) {
+  let i = log.length;
+  const turns = new Set();
+  while (i > 0) {
+    const e = log[i - 1];
+    if (e.actor === me) break;
+    if (!turns.has(e.turn) && turns.size >= Math.max(1, np - 1)) break;
+    turns.add(e.turn);
+    i--;
   }
-  return [...byCell.values()];
+  return marksOf(log.slice(i), true);
 }
 
 /** Клетки, где тайл или лидер соперника еще появляется: Map(клетка, возраст отметки в мс). */

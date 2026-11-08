@@ -7,7 +7,7 @@
 // Холст закреплен над host (position: fixed); каждый кадр место клетки берется заново, до своей
 // очереди в волне тайл стоит целым.
 
-export const RUIN_S = { sand: 2.2, shards: 1.9, flood: 1.9, trophy: 1.7 };
+export const RUIN_S = { sand: 2.2, shards: 1.9, flood: 1.9, trophy: 1.95 }; // трофей 08.11: LAND 1,45 + искры
 
 const rnd = Math.random;
 const clamp = (v) => Math.max(0, Math.min(1, v));
@@ -268,23 +268,32 @@ function flood(ctx, e, dt, r) {
 }
 
 // --- трофей: тайл вспыхивает золотом, сворачивается в монету и летит к очкам победителя
-const LIFT = 0.22, COIN = 0.5, LAND = 1.2;
+// 08.11 (Денис: растворение не видно, слишком быстро): тайл растворяется втрое дольше прежнего (0,22 -> 0,62,
+// с замедлением трофея в 3 раза около 1,9 с): светится золотом, края осыпаются искрами, тайл тает
+const LIFT = 0.62, COIN = 0.88, LAND = 1.45;
+export const TROPHY_PHASES = { LIFT, COIN, LAND };
 function trophy(ctx, e, dt, r) {
   const s = e.s, cx = r.x + r.w / 2, cy = r.y + r.h / 2, G = soft().gold;
   if (!s.sparks) s.sparks = [];
   const tgt = e.target?.() || { x: cx, y: cy - 2 * r.h };
-  let x = cx, y = cy, rad;
+  let x = cx, y = cy, rad = null;
   if (e.t < LIFT) {
-    const k = e.t / LIFT, sc = 1 + 0.1 * k;
-    tileAt(ctx, e.img, cx - (r.w * sc) / 2, cy - (r.h * sc) / 2, r.w * sc, r.h * sc);
+    const k = e.t / LIFT, sc = 1 + 0.08 * ease(k), w = r.w * sc, h = r.h * sc;
+    ctx.globalAlpha = k < 0.45 ? 1 : 1 - (0.6 * (k - 0.45)) / 0.55; // тает до 0,4, дальше монета
+    tileAt(ctx, e.img, cx - w / 2, cy - h / 2, w, h);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.55 * k;
+    ctx.globalAlpha = 0.6 * ease(k);
     ctx.drawImage(G, cx - r.w, cy - r.h, 2 * r.w, 2 * r.h);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    return;
-  }
-  if (e.t < COIN) rad = r.w * (0.78 - 0.5 * ease((e.t - LIFT) / (COIN - LIFT)));
+    // края осыпаются: искры с границы тайла плывут вверх, к концу растворения чаще
+    if (rnd() < 0.25 + 0.5 * k) {
+      const p = rnd() * 4, side = p | 0, f = p - side;
+      const ex = cx - w / 2 + (side === 0 ? f * w : side === 1 ? w : side === 2 ? (1 - f) * w : 0);
+      const ey = cy - h / 2 + (side === 0 ? 0 : side === 1 ? f * h : side === 2 ? h : (1 - f) * h);
+      s.sparks.push({ x: ex, y: ey, vx: (rnd() - 0.5) * 24, vy: -(30 + rnd() * 40), age: 0, life: 0.45 + rnd() * 0.35, sz: 0.07 + rnd() * 0.06 });
+    }
+  } else if (e.t < COIN) rad = r.w * (0.78 - 0.5 * ease((e.t - LIFT) / (COIN - LIFT)));
   else if (e.t < LAND) {
     const k = ease((e.t - COIN) / (LAND - COIN));
     const mx = (cx + tgt.x) / 2, my = Math.min(cy, tgt.y) - 1.2 * r.h; // дуга через верх

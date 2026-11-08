@@ -354,13 +354,22 @@ html{touch-action:manipulation}
 .trail,.trail-back,.trail-arrow,.trail-from,.trail-no{pointer-events:none}
 .trail-back{fill:none;stroke:#1b1309;stroke-opacity:.8;stroke-width:4.5}
 .trail{fill:none;stroke:#ffe08a;stroke-width:2.2}
-.trail.fresh{animation:trailPulse 1s ease-in-out 3}
+.trail.fresh{animation:trailPulse 1.5s ease-in-out 3}
+/* подпись над свежим ходом соперника (08.11): видна, пока пульсирует рамка, потом гаснет */
+.trail-cap{pointer-events:none;animation:capFade 4.5s linear both}
+.trail-cap rect{fill:#1b1309;fill-opacity:.92;stroke:#ffe08a;stroke-width:1.4}
+.trail-cap text{fill:#ffe08a;font-size:13px;font-weight:700}
+@keyframes capFade{0%{opacity:0}6%{opacity:1}85%{opacity:1}100%{opacity:0}}
+.since{margin-top:8px;font-size:13px;color:var(--muted)}
+.since b{color:var(--text);font-weight:600}
+.since ol{margin:4px 0 0;padding-left:22px}
+.since li{margin:1px 0}
 .trail-arrow{fill:none;stroke:#ffe08a;stroke-width:2.6;stroke-dasharray:7 5}
 .trail-from{fill:#ffe08a;stroke:#1b1309;stroke-width:1.5}
 .trail-no circle{fill:#ffd23f;stroke:#1b1309;stroke-width:1.6}
 .trail-no text{fill:#1b1309;font-size:14px;font-weight:800}
 /* тайл или лидер соперника проявляется, опускается на клетку и чуть пружинит (04.11) */
-.arrive{transform-box:fill-box;transform-origin:center;animation:arrive .9s cubic-bezier(.2,.75,.3,1) both}
+.arrive{transform-box:fill-box;transform-origin:center;animation:arrive 1.5s cubic-bezier(.2,.75,.3,1) both}
 @keyframes trailPulse{50%{stroke-width:7;stroke-opacity:.6}}
 @keyframes arrive{0%{opacity:0;transform:translateY(-14px) scale(1.3)}55%{opacity:1;transform:translateY(0) scale(.96)}78%{transform:scale(1.02)}100%{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.trail.fresh{animation:none}.arrive{animation:none}}

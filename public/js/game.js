@@ -9,7 +9,7 @@ import { renderEnd, endReasonText, stopText } from './end.js';
 import { battlesIn, battleCard, seenAfterUndo } from './battle.js';
 import { fmt, fmtTotal, clockNow } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
-import { trailMarks, ageMarks, liveMarks } from './trail.js';
+import { trailMarks, sinceMine, markLabel, markLine, ageMarks, liveMarks } from './trail.js';
 import { stockItems } from './stock.js';
 import { initPanels, holdNowOpen } from './panels.js';
 import { stopLabel } from './layout-core.js';
@@ -383,7 +383,12 @@ function boardOpts() {
 function updateTrail({ view, g, seat }) {
   const first = ui.trailCode !== view.code;
   ui.trailCode = view.code;
-  ui.trail = ageMarks(liveMarks(trailMarks(g.log, view.me), g.board), ui.trailSeen, Date.now(), first).map((m) => ({ ...m, hero: seat(m.actor)?.hero }));
+  // за столом все ходы соперников с вашего прошлого действия (08.11), у зрителя последний ход
+  const marks = view.me == null ? trailMarks(g.log, view.me) : sinceMine(g.log, view.me, g.players.length);
+  ui.trail = ageMarks(liveMarks(marks, g.board), ui.trailSeen, Date.now(), first).map((m) => {
+    const hero = seat(m.actor)?.hero;
+    return { ...m, hero, label: markLabel(m, hero) };
+  });
 }
 
 /** Запас: что еще можно построить. Перерисовывается, только когда что-то построили. */
@@ -658,6 +663,11 @@ function drawNow(d) {
     title = 'Очко за чудо';
     body = '<p>Выберите цвет, в который получите очко.</p>';
     buttons = legal.map((m, i) => `<button class="btn colorbtn" data-idx="${i}" style="border-color:${RING[m.color]}"><i style="background:${HEX[m.color]}"></i>${COLNAME[m.color]}</button>`).join('');
+  }
+  // ходы соперников с вашего прошлого действия списком (08.11): те же номера, что на поле
+  const calm = !decides || (g.phase === 'action' && !ui.sel && !ui.discard && !ui.confirmPass);
+  if (view.me != null && !ctl.lesson && !g.over && !g.stopped && calm && ui.trail.length) {
+    body += `<div class="since"><b>С вашего хода</b><ol>${ui.trail.map((m) => `<li value="${m.n}">${esc(markLine(m))}</li>`).join('')}</ol></div>`;
   }
   const clk = g.clock && !g.over && !g.stopped ? '<span class="clk" data-clock="turn" title="Время на ход; сверх него идет в минус"></span>' : '';
   ctl.root.querySelector('#gNowHead').innerHTML = title + clk;

@@ -140,8 +140,17 @@ export function trailSVG(marks, numbers = true) {
     }
     s += `<rect class="trail-back" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"/>`;
     s += `<rect class="trail${m.age < TRAIL_FRESH_MS ? ' fresh' : ''}" x="${x + 1.5}" y="${y + 1.5}" width="${side - 3}" height="${side - 3}" rx="6"${delay}/>`;
-    // номер желтым кругом (просьба Дениса 03.11): темный круг путался с поддержкой лидера
-    if (numbers) s += `<g class="trail-no" transform="translate(${x + side - 13},${y + side - 13})"><circle r="11"/><text y="5" text-anchor="middle">${m.action}</text></g>`;
+    // номер желтым кругом (просьба Дениса 03.11): темный круг путался с поддержкой лидера; 08.11 номер
+    // по порядку всех ходов соперников с вашего прошлого хода (m.n), в просмотре номер действия
+    if (numbers) s += `<g class="trail-no" transform="translate(${x + side - 13},${y + side - 13})"><circle r="11"/><text y="5" text-anchor="middle">${m.n ?? m.action}</text></g>`;
+  }
+  // подпись над свежим ходом «Лук: храм» (08.11): кто и что поставил, гаснет вместе с пульсом рамки
+  for (const m of marks) {
+    if (!numbers || !m.label || m.age >= TRAIL_FRESH_MS) continue;
+    const w = Math.round(m.label.length * 7.4 + 16), side = m.size * C;
+    const lx = Math.min(Math.max(cx(m.pos) + side / 2 - w / 2, G), G + W * C - w);
+    const ly = cy(m.pos) - 26 >= G ? cy(m.pos) - 26 : cy(m.pos) + side + 4;
+    s += `<g class="trail-cap" style="animation-delay:-${m.age}ms"><rect x="${f1(lx)}" y="${ly}" width="${w}" height="22" rx="7"/><text x="${f1(lx + w / 2)}" y="${ly + 15.5}" text-anchor="middle">${m.label}</text></g>`;
   }
   return s;
 }
