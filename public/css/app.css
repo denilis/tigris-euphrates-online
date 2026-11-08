@@ -310,6 +310,17 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .nav{display:flex;gap:6px}
 .navbtn{border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--text);text-decoration:none;font-size:13px;white-space:nowrap}
 .navbtn:hover{border-color:var(--gold2)}
+/* полный экран (08.11): подпись меняется по :fullscreen, а не скриптом; разные правила, иначе
+   неизвестный браузеру псевдокласс выключит весь список */
+.fsbtn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font:inherit}
+.fsbtn .fs-out{display:none}
+:root:fullscreen .fsbtn .fs-in{display:none}
+:root:fullscreen .fsbtn .fs-out{display:inline}
+:root:-webkit-full-screen .fsbtn .fs-in{display:none}
+:root:-webkit-full-screen .fsbtn .fs-out{display:inline}
+.navbtn.fsbtn{background:none;font-size:13px}
+.bar .barfs{background:none;border:0;padding:0;color:var(--muted);font-size:inherit}
+.bar .barfs:hover{color:var(--gold)}
 /* сигналы «ваш ход» (просьба Дениса 03.11): золотая рамка поля, три вспышки в начале хода,
    после выхода времени мигает надпись в свободном поле слева (при панели слева справа) */
 .app.myturn .boardwrap{box-shadow:inset 0 0 0 3px var(--gold)}

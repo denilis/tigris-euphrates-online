@@ -1,0 +1,17 @@
+{
+  "name": "Тигр и Евфрат",
+  "short_name": "Тигрис",
+  "description": "Стол «Тигр и Евфрат» для своей компании",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#1b1713",
+  "theme_color": "#1b1713",
+  "icons": [
+    { "src": "/img/app/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/img/app/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/app/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

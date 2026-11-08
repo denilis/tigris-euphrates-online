@@ -22,6 +22,7 @@ import { openBotGuide } from './bots-info.js';
 import { renderJoin } from './join.js';
 import { JOIN_ROUTE, joinUrl, linkNote, linkLine } from './join-link.js';
 import { DEFAULT_FILTER, cleanFilter, filterTables, whoNames, PEOPLE_WORD } from './tables-filter.js';
+import { fsButton, bindFullscreen } from './fullscreen.js';
 
 const app = document.getElementById('app');
 const backdrop = document.getElementById('backdrop');
@@ -85,6 +86,7 @@ function topbar(active) {
       ${u ? `<a href="#/admin" class="${active === 'admin' ? 'on' : ''}">Коды игроков</a>` : ''}
       <a class="me" href="#/me" title="Мой профиль">${u?.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i>` : ''}${esc(u?.name || '')}</a>
       <button class="linkbtn" id="logout">Выйти</button>
+      ${fsButton('barfs')}
     </nav>
   </header>`;
 }
@@ -646,5 +648,6 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+bindFullscreen();
 window.addEventListener('tigris:logout', () => route());
 route();
