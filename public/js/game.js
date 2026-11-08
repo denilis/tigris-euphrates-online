@@ -813,6 +813,9 @@ const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
  * «Завершить ход» в окне подтверждения и «Отменить действие» там, где отмена возможна. В конфликте
  * отмену нападения дает его окно; пока в руке выбран тайл или идет сброс, рядом своя «Отмена».
  */
+const END_WHEN = 'Заработает после второго действия: ход можно завершить, не дожидаясь конца окна отмены';
+const UNDO_WHEN = 'Работает в ваш ход после действия, пока не вышло время на отмену';
+
 function turnActs({ view, g, decides }) {
   if (g.stopped || g.over || g.paused) return { end: false, undo: false };
   if (!decides) return { end: false, undo: Boolean(g.canUndo) }; // тайл ходящего столкнул других игроков
@@ -847,9 +850,11 @@ function drawHand(d) {
     return;
   }
   const acting = decides && g.phase === 'action' && !ui.confirmPass;
-  const ta = turnActs(d);
-  const turn = (ta.end ? '<button class="btn primary" data-now="confirm">Завершить ход</button>' : '')
-    + (ta.undo ? '<button class="btn" data-now="undo">Отменить действие</button>' : '');
+  // кнопки хода стоят всегда, тусклые, когда нажать нельзя (Денис 08.11: «не вижу кнопок» в чужой ход);
+  // в уроке и после конца партии только когда нужны
+  const ta = turnActs(d), always = !ctl.lesson && !g.over && !g.stopped;
+  const turn = (ta.end || always ? `<button class="btn${ta.end ? ' primary' : ''}" data-now="confirm"${ta.end ? '' : ` disabled title="${END_WHEN}"`}>Завершить ход</button>` : '')
+    + (ta.undo || always ? `<button class="btn" data-now="undo"${ta.undo ? '' : ` disabled title="${UNDO_WHEN}"`}>Отменить действие</button>` : '');
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
   const pick = ctl.lesson?.pick; // что взять на этом шаге урока
@@ -960,7 +965,8 @@ function updateClocks() {
       else {
         const p = el.closest('p');
         if (p) p.textContent = CONFIRM_LATE;
-        ctl.root.querySelector('#gHand [data-now="undo"]')?.remove();
+        const undo = ctl.root.querySelector('#gHand [data-now="undo"]');
+        if (undo) Object.assign(undo, { disabled: true, title: UNDO_WHEN });
         const hint = ctl.root.querySelector('#gHand > .hint');
         if (hint && !ctl.lesson) hint.textContent = HINT_LATE;
       }
