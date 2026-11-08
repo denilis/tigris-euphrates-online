@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX } from '../public/js/signals.js';
+import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
 
@@ -95,4 +95,12 @@ test('звуки хода (Денис 08.11): тайл, герой, монуме
   // своя битва важнее тайла, который ее начал; больше трех не звучит
   const war = { ev: 'war', att: 0, def: 1, winner: 0, loser: 1 };
   assert.deepEqual(eventSounds([{ ev: 'tile' }, war, { ev: 'treasure' }, { ev: 'leader' }], 0), ['warWin', 'treasure', 'leader']);
+});
+
+test('у каждого звука свое усиление, частые тише событий (Денис 08.11: «слишком громкие»)', () => {
+  assert.deepEqual(Object.keys(SFX_GAIN).sort(), Object.keys(SFX).sort());
+  for (const [name, g] of Object.entries(SFX_GAIN)) assert.ok(g > 0.05 && g < 4, `${name}: ${g}`);
+  // замер tools/sfx-loudness.browser.js: самое громкое место проигрыша в битве было на 7 дБ выше победы
+  assert.ok(SFX_GAIN.warLoss < SFX_GAIN.warWin && SFX_GAIN.revoltLoss < SFX_GAIN.revoltWin);
+  assert.ok(SFX_GAIN.turnEnd < 0.2, 'конец хода звучит каждый ход: тихо');
 });
