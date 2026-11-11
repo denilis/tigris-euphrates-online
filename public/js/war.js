@@ -3,7 +3,7 @@
 // варианта считает сервер (view.game.preview). Восстание и выбор цвета войны — здесь же.
 import {
   HEX, COLNAME, SCORE_ORDER, COLGEN, COLDAT, TILE, TILEPL, TILEDAT, TILEACCPL, LEADER, LEADERACC, tileImg, tokenImg, cellName, esc, plural, finalScore,
-  TREASURE_END, treasuresOn,
+  treasureEnd, treasuresOn,
 } from './util.js';
 
 const PHASES = ['warSupport', 'revoltSupport', 'warChoose'];
@@ -161,7 +161,7 @@ export function renderWarDock(box, view, ui, { move, redraw, undo }) {
     </div>
     <div class="facts">
       <div><span>Мешок</span><b>${g.bagPct}%</b><small>тайлов осталось</small></div>
-      <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при ${TREASURE_END}</small></div>
+      <div><span>Сокровищ на поле</span><b>${treasuresLeft}</b><small>конец партии при ${treasureEnd(g)}</small></div>
       <div><span>Ваши очки</span><div class="sc2">${chips}<em title="сокровища">+${pl.treasures}</em></div><small>итог по слабейшему: ${myFinal}</small></div>
     </div>
     <div class="mfoot">

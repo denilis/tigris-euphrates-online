@@ -3,7 +3,7 @@
 // сторона играет «разумно»: выкладывает поддержку, только если она решает исход.
 
 import { legalMoves, applyMove, components, cloneState, templeCount } from '../engine/engine.js';
-import { NB, RED } from '../engine/constants.js';
+import { geom, RED } from '../engine/constants.js';
 
 export function autoMove(s) {
   const moves = legalMoves(s);
@@ -116,6 +116,7 @@ function bestMonument(s, moves) {
  * слабее); чужие лидеры наоборот и вдвое легче. Здание на клетке защищает храм и без сокровища.
  */
 export function treasureExposure(s, pos, p) {
+  const { NB } = geom(s);
   if (s.tile[pos] !== RED || (s.building && s.building[pos] >= 0)) return 0;
   let v = 0;
   for (const j of NB[pos]) {

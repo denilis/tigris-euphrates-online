@@ -1,13 +1,13 @@
 // Поле SVG по настоящей карте (река и храмы из движка), как в одобренном макете:
 // песок с фактурой, река с плавными берегами, тайлы и жетоны героев картинками,
 // монумент «Печать», контуры царств, подсветка допустимых клеток и сторон конфликта.
-import { W, H, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, getTileStyle, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
+import { W, H, useBoard, HEX, RING, COLKEY, HEROES, FACEDOWN, CATASTROPHE, tileImg, getTileStyle, catImg, uniteImg, tokenImg, cellName, groups, tileOwners, kingdomLeaders, leaderSupport } from './util.js';
 import { TRAIL_FRESH_MS, TRAIL_ARROW_MS, landing } from './trail.js';
 import { ALL_ON } from './layers.js';
 import { riverLayer } from './river.js';
 
 const C = 60, G = 24, PAD = 6;
-const VW = G + W * C + PAD, VH = G + H * C + PAD;
+const vw = () => G + W * C + PAD, vh = () => G + H * C + PAD; // размер полотна по полю стола
 const cx = (i) => G + (i % W) * C, cy = (i) => G + (i / W | 0) * C;
 
 // --- монумент «Печать» (решение Дениса 28.10): плитка в золотой раме, два цвета по диагонали
@@ -248,10 +248,10 @@ function staticLayer(river, look = 'relief', monStyle = null) {
     <image id="tlun" width="${C - 6}" height="${C - 6}" href="${uniteImg}" preserveAspectRatio="xMidYMid slice"/>
     ${HEROES.flatMap((h) => [0, 1, 2, 3].map((c) => `<image id="tk_${h}_${c}" width="44" height="44" href="${tokenImg(h, c)}"/>`)).join('')}
     ${isMonImg(monStyle) ? [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]].map(([a, b]) => `<image id="mon${a}${b}" width="${2 * C - 6}" height="${2 * C - 6}" href="${monImg(monStyle, a, b)}"/>`).join('') : ''}
-    <mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo)">${rects}</g></mask>
-    <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><g filter="url(#goo2)">${rects}</g></mask>
+    <mask id="riverM" maskUnits="userSpaceOnUse" x="0" y="0" width="${vw()}" height="${vh()}"><g filter="url(#goo)">${rects}</g></mask>
+    <mask id="bankM" maskUnits="userSpaceOnUse" x="0" y="0" width="${vw()}" height="${vh()}"><g filter="url(#goo2)">${rects}</g></mask>
   </defs>`;
-  s += `<rect x="1" y="1" width="${VW - 2}" height="${VH - 2}" rx="8" fill="#14110e" stroke="#4a3b2b"/>`;
+  s += `<rect x="1" y="1" width="${vw() - 2}" height="${vh() - 2}" rx="8" fill="#14110e" stroke="#4a3b2b"/>`;
   for (let x = 0; x < W; x++) s += `<text x="${G + x * C + C / 2}" y="${G - 7}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${String.fromCharCode(65 + x)}</text>`;
   for (let y = 0; y < H; y++) s += `<text x="${G / 2}" y="${G + y * C + C / 2 + 5}" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="13" fill="#a8987c">${y + 1}</text>`;
   const R = `x="${G}" y="${G}" width="${W * C}" height="${H * C}"`;
@@ -303,13 +303,14 @@ function uniteMark(x, y) {
  */
 export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   const b = g.board;
+  useBoard(b.tile.length);
   const L = { ...ALL_ON, ...opts.layers };
   const mon = isMonImg(opts.monument) ? opts.monument : null;
   // статичный слой (песок, река, картинки в defs) ставится один раз на карту: картинки не
   // создаются заново при каждой перерисовке и не мигают
   const key = `${look}:${mon}:${getTileStyle()}:${g.river.join(',')}`; // вид тайлов в картинках defs
   if (svg.dataset.key !== key) {
-    svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+    svg.setAttribute('viewBox', `0 0 ${vw()} ${vh()}`);
     svg.innerHTML = `<g>${staticLayer(g.river, look, mon)}</g><g class="dyn"></g>`;
     svg.dataset.key = key;
   }

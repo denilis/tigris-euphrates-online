@@ -19,7 +19,7 @@ import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
-  unitePos, toast, momentKey, TREASURE_END, treasuresOn, treasureLow, cellName,
+  unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -158,6 +158,7 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
     });
   }
   current = view;
+  if (view.game) useBoard(view.game.board.tile.length); // имена клеток в журнале считаются до отрисовки поля
   ctl = { act, go, root, lesson, tour };
   resetFor(view);
   const entries = newEntries(ui.snap, view); // до signal: он запомнит новый снимок
@@ -511,7 +512,7 @@ function draw() {
   root.querySelector('#gCode').innerHTML = `<span class="cw">стол </span><b>${esc(view.title || view.code)}</b>`;
   const o = view.options;
   root.querySelector('#gBadges').innerHTML = [
-    o.board === 'advanced' ? 'Продвинутое поле' : 'Обычное поле',
+    o.board === 'big' ? 'Большое поле' : o.board === 'advanced' ? 'Продвинутое поле' : 'Обычное поле',
     o.englishSupport && 'Английская поддержка', o.buildings && 'Здания', o.wonder && 'Чудо',
     o.openScore ? 'Открытый счет' : 'Закрытый счет',
   ].filter(Boolean).map((b) => `<span class="badge">${b}</span>`).join('');
@@ -522,8 +523,8 @@ function draw() {
   // сокровища на поле (просьба Дениса 06.11): за одно взятие до конца партии число красное
   const tr = treasuresOn(g), trB = root.querySelector('#gTr');
   trB.textContent = tr;
-  trB.classList.toggle('low', treasureLow(tr));
-  root.querySelector('#gTrBox').title = `Партия кончается, когда на поле остается ${TREASURE_END} сокровища`;
+  trB.classList.toggle('low', treasureLow(tr, treasureEnd(g)));
+  root.querySelector('#gTrBox').title = `Партия кончается, когда на поле остается ${treasureEnd(g)} сокровища`;
   root.querySelectorAll('#gLayers [data-layer]').forEach((b) => b.setAttribute('aria-checked', String(ui.layers[b.dataset.layer])));
   root.querySelector('#gSound').setAttribute('aria-checked', String(soundOn()));
   drawVolume(root);

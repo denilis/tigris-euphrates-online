@@ -1,5 +1,5 @@
 // Человеческие описания ходов для журнала решений бота.
-import { cellName } from '../engine/constants.js';
+import { cellNameOn } from '../engine/constants.js';
 
 export const TILE_NAME = ['храм', 'ферму', 'рынок', 'поселение'];
 export const LEADER_NAME = ['жреца', 'фермера', 'торговца', 'царя'];
@@ -9,17 +9,17 @@ export const COLOR_ADJ = ['красной', 'синей', 'зелёной', 'ч�
 export function describeMove(m, s) {
   switch (m.type) {
     case 'tile':
-      return `ставлю ${TILE_NAME[m.color]} на ${cellName(m.pos)}`;
+      return `ставлю ${TILE_NAME[m.color]} на ${cellNameOn(s, m.pos)}`;
     case 'leader': {
       const from = s ? s.players[s.toMove].leaders[m.color] : -1;
       return from >= 0
-        ? `переставляю ${LEADER_NAME[m.color]} с ${cellName(from)} на ${cellName(m.pos)}`
-        : `ставлю ${LEADER_NAME[m.color]} на ${cellName(m.pos)}`;
+        ? `переставляю ${LEADER_NAME[m.color]} с ${cellNameOn(s, from)} на ${cellNameOn(s, m.pos)}`
+        : `ставлю ${LEADER_NAME[m.color]} на ${cellNameOn(s, m.pos)}`;
     }
     case 'withdraw':
       return `убираю ${LEADER_NAME[m.color]} с поля`;
     case 'catastrophe':
-      return `катастрофа на ${cellName(m.pos)}`;
+      return `катастрофа на ${cellNameOn(s, m.pos)}`;
     case 'discard':
       return `сбрасываю ${m.counts.reduce((a, b) => a + b, 0)} тайл.`;
     case 'pass':
@@ -29,13 +29,13 @@ export function describeMove(m, s) {
     case 'warColor':
       return `сначала война ${COLOR_ADJ[m.color]} масти`;
     case 'build':
-      return `здание на ${cellName(m.pos)}`;
+      return `здание на ${cellNameOn(s, m.pos)}`;
     case 'monument':
-      return `монумент на ${cellName(m.tl)}`;
+      return `монумент на ${cellNameOn(s, m.tl)}`;
     case 'wonder':
-      return `чудо с центром ${cellName(m.center)}`;
+      return `чудо с центром ${cellNameOn(s, m.center)}`;
     case 'treasure':
-      return `беру сокровище с ${cellName(m.pos)}`;
+      return `беру сокровище с ${cellNameOn(s, m.pos)}`;
     case 'wonderPoint':
       return `очко от чуда: ${COLOR_NAME[m.color]}`;
     default:

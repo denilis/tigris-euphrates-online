@@ -11,7 +11,7 @@
 // перебирает веса, а бот в игре проходит тот же путь.
 
 import { components, finalVector, templeCount } from '../engine/engine.js';
-import { N, NB, W, H, RED, BLUE, GREEN, BLACK, EMPTY, HAND_SIZE } from '../engine/constants.js';
+import { geom, RED, BLUE, GREEN, BLACK, EMPTY, HAND_SIZE } from '../engine/constants.js';
 
 export const DEFAULT_WEIGHTS = {
   lowest: [1.0, 0.45, 0.2, 0.1], // вес отсортированных очков, от слабейшего цвета
@@ -74,6 +74,7 @@ export function projectedVector(score, future, wild) {
 }
 
 function kingdomInfo(s, comps) {
+  const { N } = geom(s);
   const info = Array.from({ length: comps.n }, () => ({
     tiles: [0, 0, 0, 0], size: 0, treasures: 0, monuments: [], leaders: [], wonder: false,
   }));
@@ -98,6 +99,7 @@ function kingdomInfo(s, comps) {
 
 /** Примерно сколько своих ходов осталось каждому игроку. */
 export function turnsLeft(s) {
+  const { N } = geom(s);
   const bag = s.bag[0] + s.bag[1] + s.bag[2] + s.bag[3];
   let treasures = 0;
   for (let i = 0; i < N; i++) treasures += s.treasure[i];
@@ -127,6 +129,7 @@ const SIZE_CAP = 2.5; // множитель роста царства: 1 на 9 
 
 /** Квадраты 2x2 с тремя тайлами одного цвета и пустой четвёртой клеткой, куда этот цвет можно положить. */
 function monumentPreps(s, comps) {
+  const { W, H } = geom(s);
   const free = [];
   for (const m of s.monuments) if (m.pos < 0) free.push(m);
   if (!free.length) return [];
@@ -163,6 +166,7 @@ function monumentPreps(s, comps) {
 
 /** Пустые клетки суши у двух и более храмов и королевства, к которым они примыкают. */
 function revoltHoles(s, comps) {
+  const { N, NB } = geom(s);
   const out = [];
   for (let e = 0; e < N; e++) {
     if (s.tile[e] !== -1 || s.leader[e] >= 0 || s.river[e]) continue;
@@ -181,6 +185,7 @@ function revoltHoles(s, comps) {
 
 /** Для каждой группы — группы, до которых одна пустая клетка. */
 function nearGroups(s, comps) {
+  const { N, NB } = geom(s);
   const near = Array.from({ length: comps.n }, () => new Set());
   for (let e = 0; e < N; e++) {
     if (s.tile[e] !== -1 || s.leader[e] >= 0) continue;

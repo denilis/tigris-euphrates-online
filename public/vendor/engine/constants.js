@@ -21,6 +21,7 @@ export const CATASTROPHE = 6;
 export const TOTAL_TILES = [57, 36, 30, 30];
 export const HAND_SIZE = 6;
 export const CATASTROPHES_PER_PLAYER = 2;
+export const TREASURE_END = 2; // партия кончается, когда на поле осталось столько сокровищ
 
 // Монументы стандартного набора: id совпадают с BGA только условно,
 // адаптер BGA передаёт свой список.
@@ -37,15 +38,34 @@ export const idx = (x, y) => y * W + x;
 export const xOf = (i) => i % W;
 export const yOf = (i) => (i / W) | 0;
 
-// Соседи по стороне для каждой клетки.
-export const NB = Array.from({ length: N }, (_, i) => {
-  const x = xOf(i), y = yOf(i), out = [];
-  if (x > 0) out.push(i - 1);
-  if (x < W - 1) out.push(i + 1);
-  if (y > 0) out.push(i - W);
-  if (y < H - 1) out.push(i + W);
-  return out;
-});
+// Геометрия поля заданного размера: { W, H, N, NB }, NB — соседи по стороне для каждой клетки.
+// Поле 16x11 (BGA) — размер по умолчанию; большее поле сайта задает размер в раскладке (layout.w, layout.h).
+const GEOMS = new Map();
+export function geometry(w = W, h = H) {
+  const key = w * 100 + h;
+  let g = GEOMS.get(key);
+  if (!g) {
+    const NB = Array.from({ length: w * h }, (_, i) => {
+      const x = i % w, y = (i / w) | 0, out = [];
+      if (x > 0) out.push(i - 1);
+      if (x < w - 1) out.push(i + 1);
+      if (y > 0) out.push(i - w);
+      if (y < h - 1) out.push(i + w);
+      return out;
+    });
+    GEOMS.set(key, g = { W: w, H: h, N: w * h, NB });
+  }
+  return g;
+}
+const G0 = geometry();
+/** Геометрия партии: у состояний без размера (все партии до большого поля) — 16x11. */
+export const geom = (s) => (s.w ? geometry(s.w, s.h) : G0);
+/** Состав коробки тайлов партии и порог конца по сокровищам. */
+export const boxOf = (s) => s.tiles || TOTAL_TILES;
+export const treasureEndOf = (s) => s.endAt ?? TREASURE_END;
+export const NB = G0.NB;
 
 // Координаты в нотации BGA: столбец A..P, ряд 1..11.
-export const cellName = (i) => String.fromCharCode(65 + xOf(i)) + (yOf(i) + 1);
+export const cellName = (i) => String.fromCharCode(65 + (i % W)) + (((i / W) | 0) + 1);
+/** То же для партии s: ширину берет из состояния (большое поле шире 16). */
+export const cellNameOn = (s, i) => { const w = (s && s.w) || W; return String.fromCharCode(65 + (i % w)) + (((i / w) | 0) + 1); };

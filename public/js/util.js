@@ -1,5 +1,12 @@
 // Общие названия, склонения и мелкие помощники интерфейса.
-export const W = 16, H = 11;
+// Размер поля текущего стола: 16x11, у большого поля 19x13. Меняется через useBoard, модули
+// берут W и H живой привязкой импорта.
+export let W = 16, H = 11;
+const SIZES = { 176: [16, 11], 247: [19, 13] };
+/** Поле стола по числу клеток (длина board.tile): выставляет W и H для отрисовки и имен клеток. */
+export function useBoard(cells) {
+  [W, H] = SIZES[cells] || SIZES[176];
+}
 export const HEX = ['#b8432f', '#2d6a93', '#3d7a46', '#1f1f1f'];
 export const RING = ['#b8432f', '#2d6a93', '#3d7a46', '#cfc6b4']; // для темных панелей: у черного светлая обводка, на поле кольцо цвета HEX
 export const COLKEY = ['red', 'blue', 'green', 'black'];
@@ -39,9 +46,11 @@ export const ANALYSIS_SHOWN = false;
 
 // Сокровища на поле: партия кончается, когда их остается столько или меньше (движок, конец хода).
 export const TREASURE_END = 2;
+/** Порог стола: у большого поля свой (сервер кладет его в game.treasureEnd). */
+export const treasureEnd = (g) => g?.treasureEnd ?? TREASURE_END;
 export const treasuresOn = (g) => g.board.treasure.reduce((a, b) => a + b, 0);
 /** До конца партии одно взятие сокровища: число в верхней строке красное (Денис 06.11). */
-export const treasureLow = (n) => n <= TREASURE_END + 1;
+export const treasureLow = (n, end = TREASURE_END) => n <= end + 1;
 /**
  * Лицо игрока для background-image: фото, а под ним жетон героя. Жетон виден, если фото нет
  * или его уже сменили, а за старым столом остался прежний адрес.

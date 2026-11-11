@@ -3,10 +3,9 @@
 // проходит через каждую речную клетку и не выходит на сушу, это проверяют тесты. Речные клетки
 // чуть зеленее песка: видно, куда класть синие тайлы. Для незнакомой карты (клетки реки не те)
 // русла нет, и поле рисует прежнюю заливку клеток.
-import { W, H } from './util.js';
-
 // Точки русла: [x, y, ширина?] в клетках, центр клетки B3 = [1.5, 2.5]. Концы за краем поля.
 // join: река впадает в другую, к месту впадения ее извилины гаснут.
+// У поля не 16x11 размер записан в самом списке русел (w, h): модуль не зависит от текущего стола.
 export const ROUTES = {
   advanced: [
     // в два ряда клеток (C1-D3) река идет двумя рукавами с островом между ними
@@ -20,7 +19,23 @@ export const ROUTES = {
     // приток с правого края между P4 и P5 впадает в Тигр в O5
     { id: 'tributary', w: 10, join: true, pts: [[16.8, 4], [15.5, 4], [14.5, 4.5]] },
   ],
+  // большое поле 19x13 (Денис 10.11): короткий Евфрат в северо-западном углу и длинный Тигр через все поле
+  big: Object.assign([
+    { id: 'arm', w: 9, join: true, pts: [[7.5, -0.8], [7.5, 0.5], [7.45, 1.5], [6.6, 2.4]] },
+    { id: 'euphrates', w: 13, pts: [[6.5, -0.8], [6.5, 0.5], [6.5, 1.5], [6.5, 2.5], [5.5, 2.5], [4.5, 2.5], [3.5, 2.5], [3.5, 3.5], [3.5, 4.5], [2.5, 4.5], [1.5, 4.5], [0.5, 4.5], [-0.8, 4.5]] },
+    // рукав B4-C4 с островом
+    { id: 'isle', w: 9, join: true, pts: [[3.4, 3.5], [2.5, 3.5], [1.5, 3.5], [1.5, 4.4]] },
+    { id: 'tigris', w: 13, pts: [[14.5, -0.8], [14.5, 0.5], [14.5, 1.5], [14.5, 2.5], [15.5, 2.5], [15.5, 3.5], [15.5, 4.5], [15.5, 5.5], [15.5, 6.5], [15.5, 7.5], [14.5, 7.5], [14.5, 8.5], [14.5, 9.5], [14.5, 10.5], [13.5, 10.5], [12.5, 10.5], [11.5, 10.5], [10.5, 10.5], [9.5, 10.5], [8.5, 10.5], [8.5, 9.5], [8.5, 8.5], [7.5, 8.5], [6.5, 8.5], [5.5, 8.5], [4.5, 8.5], [4.5, 7.5], [3.5, 7.5], [2.5, 7.5], [1.5, 7.5], [0.5, 7.5], [-0.8, 7.5]] },
+    // два притока с правого края: по ряду 5 в Тигр, по ряду 4 в первый приток
+    { id: 'east', w: 10, join: true, pts: [[19.8, 4.5], [18.5, 4.5], [17.5, 4.5], [16.5, 4.5], [15.6, 4.5]] },
+    { id: 'north', w: 9, join: true, pts: [[19.8, 3.5], [18.5, 3.5], [17.5, 3.5], [17.5, 4.4]] },
+    // рукав по ряду 10 с островом между ним и Тигром
+    { id: 'braid', w: 9, join: true, pts: [[14.4, 9.5], [13.5, 9.5], [12.5, 9.5], [11.5, 9.5], [10.5, 9.5], [9.5, 9.5], [8.6, 9.5]] },
+    // рукав уходит за левый край по ряду 9
+    { id: 'west', w: 9, pts: [[1.5, 7.6], [1.5, 8.5], [0.5, 8.5], [-0.8, 8.5]] },
+  ], { w: 19, h: 13 }),
 };
+const sizeOf = (routes) => [routes.w ?? 16, routes.h ?? 11];
 
 const f1 = (v) => Math.round(v * 10) / 10;
 
@@ -88,20 +103,20 @@ function channels(routes, C, G) {
   return routes.map((r) => ({ route: r, ch: channel(r, mouths.filter((m) => m.r !== r), C, G) }));
 }
 
-const cellAt = (x, y, C, G) => {
+const cellAt = (x, y, C, G, W, H) => {
   const gx = Math.floor((x - G) / C), gy = Math.floor((y - G) / C);
   return gx < 0 || gy < 0 || gx >= W || gy >= H ? -1 : gy * W + gx;
 };
-const name = (i) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
+const name = (i, W) => String.fromCharCode(65 + (i % W)) + ((i / W | 0) + 1);
 
 /** Клетки суши, на которые заходит вода русла (должно быть пусто). */
 export function landCells(routes, river, C, G) {
-  const set = new Set(river), bad = new Set();
+  const set = new Set(river), bad = new Set(), [W, H] = sizeOf(routes);
   for (const { ch } of channels(routes, C, G)) {
     for (const p of ch) {
       for (const side of [1, -1]) {
-        const i = cellAt(p.x + side * p.nx * p.w / 2, p.y + side * p.ny * p.w / 2, C, G);
-        if (i >= 0 && !set.has(i)) bad.add(name(i));
+        const i = cellAt(p.x + side * p.nx * p.w / 2, p.y + side * p.ny * p.w / 2, C, G, W, H);
+        if (i >= 0 && !set.has(i)) bad.add(name(i, W));
       }
     }
   }
@@ -110,9 +125,9 @@ export function landCells(routes, river, C, G) {
 
 /** Речные клетки, через которые русло не прошло (должно быть пусто). */
 export function missedCells(routes, river, C, G) {
-  const hit = new Set();
-  for (const { ch } of channels(routes, C, G)) for (const p of ch) hit.add(cellAt(p.x, p.y, C, G));
-  return river.filter((i) => !hit.has(i)).map(name);
+  const hit = new Set(), [W, H] = sizeOf(routes);
+  for (const { ch } of channels(routes, C, G)) for (const p of ch) hit.add(cellAt(p.x, p.y, C, G, W, H));
+  return river.filter((i) => !hit.has(i)).map((i) => name(i, W));
 }
 
 const known = new Map();
@@ -148,6 +163,7 @@ const GLINT = ['22 14 7 19', '17 12 9 21', '19 11 8 16'];
 export function riverLayer(river, relief, C, G) {
   const r = riverFor(river, C, G);
   if (!r) return null;
+  const [W, H] = sizeOf(ROUTES[r.key]);
   const R = `x="${G}" y="${G}" width="${W * C}" height="${H * C}"`;
   const water = r.chs.map(({ ch }) => outline(ch));
   let s = `<g class="stream"><defs>

@@ -2,13 +2,12 @@
 // число тайлов в руке, мешок процентом, чужой счёт только при открытом счёте или в конце.
 // Список ходов и исход войны — только тому, кто решает.
 import { legalMoves } from './vendor/engine/engine.js';
-import { TOTAL_TILES } from './vendor/engine/constants.js';
+import { boxOf, treasureEndOf } from './vendor/engine/constants.js';
 import { stateFromJSON } from './serialize.js';
 import { conflictPreview } from './preview.js';
 import { canUndo, timing } from './table.js';
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
-const TILES = sum(TOTAL_TILES);
 
 function publicConflict(k, order) {
   if (!k) return null;
@@ -122,11 +121,12 @@ export function viewFor(table, userId, { logFrom = 0, now = null } = {}) {
     })),
     hand: myP >= 0 ? [...s.players[myP].hand] : null,
     discarded: myP >= 0 ? [...s.players[myP].discarded] : null,
-    bagPct: Math.round((100 * sum(s.bag)) / (TILES - s.startTemples)),
+    bagPct: Math.round((100 * sum(s.bag)) / (sum(boxOf(s)) - s.startTemples)),
     // сколько тайлов в мешке и сколько было после выкладки храмов (просьба Дениса 03.11): процент сам
     // по себе не начинался со 100, игроки сразу добирают по 6
     bagLeft: sum(s.bag),
-    bagStart: TILES - s.startTemples,
+    ...(s.endAt != null ? { treasureEnd: treasureEndOf(s) } : {}), // только у большого поля: обычные кадры не меняются
+    bagStart: sum(boxOf(s)) - s.startTemples,
     ctx: publicCtx(s.ctx, order),
     legal,
     preview: decides ? seatPreview(conflictPreview(s, legal), order) : null,

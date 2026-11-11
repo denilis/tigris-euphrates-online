@@ -18,7 +18,7 @@
 //    проверяет bot.js после перебора: catastropheWorthIt).
 
 import { applyMove, cloneState, components } from '../engine/engine.js';
-import { N, NB, W, H, BLUE, EMPTY, TOTAL_TILES, HAND_SIZE } from '../engine/constants.js';
+import { geom, boxOf, BLUE, EMPTY, HAND_SIZE } from '../engine/constants.js';
 
 export const CAT_MIDGAME = 0.45; // доля партии, раньше которой — только защита
 export const CAT_ENDGAME = 0.85; // с этой доли последнюю катастрофу можно и атакой
@@ -33,13 +33,14 @@ export const CAT_FOLLOW = !OFF.has('nofollow');
 /** Доля сыгранной партии по мешку (0 — начало, 1 — мешок пуст). */
 export function gameProgress(view) {
   const s = view.state;
-  const initial = TOTAL_TILES.reduce((a, b) => a + b, 0) - (s.startTemples || 10) - HAND_SIZE * s.np;
+  const initial = boxOf(s).reduce((a, b) => a + b, 0) - (s.startTemples || 10) - HAND_SIZE * s.np;
   const bag = view.bagTotal ?? (s.bag[0] + s.bag[1] + s.bag[2] + s.bag[3]);
   return Math.max(0, Math.min(1, 1 - bag / Math.max(1, initial)));
 }
 
 /** Сколько лидеров катастрофа на pos снимет с поля: у соперников и у себя. */
 export function catastropheEvicts(s, me, pos) {
+  const { N } = geom(s);
   const x = cloneState(s);
   const before = x.players.map((pl) => pl.leaders.filter((v) => v >= 0).length);
   try {
@@ -58,7 +59,7 @@ export function catastropheEvicts(s, me, pos) {
 
 const tilesOf = (s, comps, lab, c) => {
   let n = 0;
-  for (let i = 0; i < N; i++) if (comps.lab[i] === lab && s.tile[i] === c) n++;
+  for (let i = 0; i < s.tile.length; i++) if (comps.lab[i] === lab && s.tile[i] === c) n++;
   return n;
 };
 
@@ -69,6 +70,7 @@ const tilesOf = (s, comps, lab, c) => {
  * выгоднее сопернику, чем боту. Иначе null.
  */
 export function catastropheDefense(s, me, pos, comps = components(s)) {
+  const { NB, W, H } = geom(s);
   if (s.tile[pos] !== EMPTY || s.leader[pos] >= 0) return null;
   // царства вокруг клетки и их лидеры
   const labs = [];
@@ -137,6 +139,7 @@ export function catastropheDefense(s, me, pos, comps = components(s)) {
  * candidateActions (там катастрофы только на тайлы рядом с лидерами).
  */
 export function defenseCatastrophes(s, me) {
+  const { N, NB } = geom(s);
   if (s.players[me].cats <= 0) return [];
   const comps = components(s);
   const out = [];

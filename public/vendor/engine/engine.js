@@ -8,10 +8,10 @@
 // до следующего решения.
 
 import {
-  N, NB, W, H, RED, BLUE, GREEN, BLACK,
+  RED, BLUE, GREEN, BLACK,
   EMPTY, FACEDOWN, WONDER, CATASTROPHE,
   TOTAL_TILES, HAND_SIZE, CATASTROPHES_PER_PLAYER, DEFAULT_MONUMENTS,
-  xOf, yOf,
+  geom, geometry, boxOf, treasureEndOf,
 } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -19,7 +19,9 @@ import {
 
 /**
  * Пустое состояние без раздачи тайлов.
- * layout: { river: number[] | Uint8Array(N), temples: number[], special?: number[] }
+ * layout: { river: number[], temples: number[], special?: number[], w?, h?, tiles?, treasureEnd? }
+ * w, h — размер поля (по умолчанию 16x11), tiles — состав коробки, treasureEnd — порог конца по
+ * сокровищам. Задаются только у нестандартного поля: состояние обычной партии остается прежним.
  * cfg: { englishSupport, buildings, wonder, confirmTurn, stallTurns }
  * confirmTurn — после второго действия (или паса) ход ждет подтверждения (фаза confirm) до
  * подсчета монументов и добора: сайт дает в это время отменить действие, не открыв новых тайлов.
@@ -29,6 +31,7 @@ import {
  * 0 — правила нет (настольная игра, BGA).
  */
 export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_MONUMENTS }) {
+  const { N } = geometry(layout.w, layout.h);
   const river = new Uint8Array(N);
   for (const i of layout.river) river[i] = 1;
   const special = new Uint8Array(N);
@@ -58,7 +61,7 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
       treasures: 0,
       discarded: [0, 0, 0, 0], // сброшенные тайлы: цвет знает только сам игрок
     })),
-    bag: TOTAL_TILES.slice(),
+    bag: (layout.tiles || TOTAL_TILES).slice(),
     removed: [0, 0, 0, 0],
     startTemples: layout.temples.length,
     monuments: monuments.map((m) => ({ id: m.id, c1: m.c1, c2: m.c2, pos: -1, color: -1 })),
@@ -76,6 +79,9 @@ export function createState({ layout, numPlayers, cfg = {}, monuments = DEFAULT_
     stallMark: -1, // мешок и сокровища к концу прошлого хода (stallMark())
     log: null,
   };
+  if (layout.w) Object.assign(s, { w: layout.w, h: layout.h });
+  if (layout.tiles) s.tiles = layout.tiles.slice();
+  if (layout.treasureEnd != null) s.endAt = layout.treasureEnd;
   for (const i of layout.temples) {
     s.tile[i] = RED;
     s.treasure[i] = 1;
@@ -93,7 +99,7 @@ export function createGame(opts, rng) {
 }
 
 export function cloneState(s) {
-  return {
+  const c = {
     cfg: s.cfg,
     np: s.np,
     river: s.river,
@@ -129,6 +135,10 @@ export function cloneState(s) {
     stallMark: s.stallMark,
     log: null,
   };
+  if (s.w) { c.w = s.w; c.h = s.h; }
+  if (s.tiles) c.tiles = s.tiles;
+  if (s.endAt != null) c.endAt = s.endAt;
+  return c;
 }
 
 function emit(s, ev) {
@@ -145,6 +155,7 @@ export function occupied(s, i) {
 
 /** Метки связных групп занятых клеток. blocked — клетка, которую считаем пустой. */
 export function components(s, blocked = -1) {
+  const { N, NB } = geom(s);
   const lab = new Int16Array(N).fill(-1);
   const stack = [];
   let n = 0;
@@ -183,11 +194,13 @@ function labelsWithLeaders(s, lab) {
 }
 
 export function hasTemple(s, i) {
+  const { NB } = geom(s);
   for (const j of NB[i]) if (s.tile[j] === RED) return true;
   return false;
 }
 
 export function templeCount(s, i) {
+  const { NB } = geom(s);
   let n = 0;
   for (const j of NB[i]) if (s.tile[j] === RED) n++;
   return n;
@@ -211,6 +224,7 @@ function withdrawUnsupported(s) {
 }
 
 export function treasuresOnBoard(s) {
+  const { N } = geom(s);
   let n = 0;
   for (let i = 0; i < N; i++) n += s.treasure[i];
   return n;
@@ -263,7 +277,7 @@ function endGame(s, reason) {
 // Проверки размещения
 
 /** Подсчёт королевств вокруг клетки (метки групп с лидерами). */
-function adjacentKingdoms(lab, hasLeader, i) {
+function adjacentKingdoms(NB, lab, hasLeader, i) {
   const out = [];
   for (const j of NB[i]) {
     const l = lab[j];
@@ -277,18 +291,20 @@ function isEmptyCell(s, i) {
 }
 
 export function tileTargets(s, color, comps = components(s)) {
+  const { NB, N } = geom(s);
   const has = labelsWithLeaders(s, comps.lab);
   const out = [];
   for (let i = 0; i < N; i++) {
     if (!isEmptyCell(s, i)) continue;
     if ((color === BLUE) !== (s.river[i] === 1)) continue;
-    if (adjacentKingdoms(comps.lab, has, i).length > 2) continue;
+    if (adjacentKingdoms(NB, comps.lab, has, i).length > 2) continue;
     out.push(i);
   }
   return out;
 }
 
 export function leaderTargets(s, p, c) {
+  const { NB, N } = geom(s);
   const from = s.players[p].leaders[c];
   if (from >= 0) s.leader[from] = -1;
   const comps = components(s);
@@ -299,13 +315,14 @@ export function leaderTargets(s, p, c) {
     if (i === from || s.river[i]) continue;
     if (!(s.tile[i] === EMPTY && (s.leader[i] < 0))) continue;
     if (!hasTemple(s, i)) continue;
-    if (adjacentKingdoms(comps.lab, has, i).length > 1) continue;
+    if (adjacentKingdoms(NB, comps.lab, has, i).length > 1) continue;
     out.push(i);
   }
   return out;
 }
 
 export function catastropheTargets(s) {
+  const { N } = geom(s);
   const out = [];
   for (let i = 0; i < N; i++) {
     if (s.leader[i] >= 0) continue;
@@ -451,13 +468,14 @@ function setSupport(conflict, n) {
 }
 
 function applyAction(s, m, rng) {
+  const { NB } = geom(s);
   const p = s.cur;
   const pl = s.players[p];
   switch (m.type) {
     case 'tile': {
       const comps = components(s);
       const has = labelsWithLeaders(s, comps.lab);
-      const kingdoms = adjacentKingdoms(comps.lab, has, m.pos);
+      const kingdoms = adjacentKingdoms(NB, comps.lab, has, m.pos);
       s.tile[m.pos] = m.color;
       pl.hand[m.color]--;
       const unite = kingdoms.length === 2;
@@ -531,6 +549,7 @@ function applyAction(s, m, rng) {
 
 /** Очки за тайл, положенный в одно королевство (без объединения). */
 function scoreTilePlacement(s, comps, kingdomLabel, pos, color) {
+  const { NB } = geom(s);
   let owner = -1;
   let king = -1;
   for (const l of boardLeaders(s)) {
@@ -606,6 +625,7 @@ function stepRevolt(s) {
 }
 
 function resolveConflict(s, k, color, kind) {
+  const { N, NB } = geom(s);
   const att = s.players[k.att];
   const def = s.players[k.def];
   att.hand[color] -= k.attN;
@@ -705,6 +725,7 @@ function stepWars(s) {
 }
 
 function startWar(s, color) {
+  const { N } = geom(s);
   const ctx = s.ctx;
   const u = ctx.pos;
   const comps = components(s);
@@ -735,19 +756,22 @@ function startWar(s, color) {
 // --- Здания цивилизации
 
 function lineCells(s, pos, color, dx) {
+  const { N, W } = geom(s);
   // dx = 1 — горизонталь, dx = W — вертикаль
   const out = [pos];
-  for (let i = pos - dx; i >= 0 && s.tile[i] === color && (dx !== 1 || yOf(i) === yOf(pos)); i -= dx) out.push(i);
-  for (let i = pos + dx; i < N && s.tile[i] === color && (dx !== 1 || yOf(i) === yOf(pos)); i += dx) out.push(i);
+  for (let i = pos - dx; i >= 0 && s.tile[i] === color && (dx !== 1 || ((i / W) | 0) === ((pos / W) | 0)); i -= dx) out.push(i);
+  for (let i = pos + dx; i < N && s.tile[i] === color && (dx !== 1 || ((i / W) | 0) === ((pos / W) | 0)); i += dx) out.push(i);
   return out;
 }
 
 function maxLineLen(s, pos, color) {
+  const { W } = geom(s);
   if (s.tile[pos] !== color) return 0;
   return Math.max(lineCells(s, pos, color, 1).length, lineCells(s, pos, color, W).length);
 }
 
 export function buildingOptions(s, pos, color) {
+  const { W } = geom(s);
   if (s.tile[pos] !== color) return [];
   const lines = [lineCells(s, pos, color, 1), lineCells(s, pos, color, W)].filter((l) => l.length >= 3);
   if (!lines.length) return [];
@@ -794,9 +818,10 @@ function dropBuildingAt(s, i) {
 // --- Монументы и чудо
 
 export function monumentOptions(s, pos, color) {
+  const { NB, W, H } = geom(s);
   if (s.tile[pos] !== color) return [];
   const out = [];
-  const x = xOf(pos), y = yOf(pos);
+  const x = (pos % W), y = ((pos / W) | 0);
   for (let dy = -1; dy <= 0; dy++) {
     for (let dx = -1; dx <= 0; dx++) {
       const tx = x + dx, ty = y + dy;
@@ -811,7 +836,7 @@ export function monumentOptions(s, pos, color) {
   }
   if (s.cfg.wonder && s.wonderPos < 0) {
     for (const ctr of [pos, ...NB[pos]]) {
-      const cx = xOf(ctr), cy = yOf(ctr);
+      const cx = (ctr % W), cy = ((ctr / W) | 0);
       if (cx < 1 || cy < 1 || cx > W - 2 || cy > H - 2) continue;
       if ([ctr, ...NB[ctr]].every((i) => s.tile[i] === color)) out.push({ type: 'wonder', center: ctr });
     }
@@ -834,6 +859,7 @@ function stepMonument(s) {
 }
 
 function buildMonument(s, id, tl) {
+  const { W } = geom(s);
   const m = s.monuments.find((x) => x.id === id);
   m.color = s.tile[tl];
   for (const i of [tl, tl + 1, tl + W, tl + W + 1]) {
@@ -847,6 +873,7 @@ function buildMonument(s, id, tl) {
 }
 
 function buildWonder(s, center) {
+  const { NB } = geom(s);
   const color = s.tile[center];
   for (const i of [center, ...NB[center]]) {
     dropBuildingAt(s, i);
@@ -861,6 +888,7 @@ function buildWonder(s, center) {
 // --- Сокровища
 
 function stepTreasure(s) {
+  const { N } = geom(s);
   const ctx = s.ctx;
   if (ctx.treasure) {
     s.phase = 'treasure';
@@ -949,7 +977,7 @@ function refillAll(s, rng) {
 }
 
 function nextTurn(s) {
-  if (treasuresOnBoard(s) <= 2) {
+  if (treasuresOnBoard(s) <= treasureEndOf(s)) {
     endGame(s, 'treasures');
     return;
   }
@@ -1001,6 +1029,7 @@ export function ranking(s) {
 // Проверка целостности (для тестов и отладки)
 
 export function validate(s) {
+  const { N, W } = geom(s);
   const errs = [];
   const total = [0, 0, 0, 0];
   for (let i = 0; i < N; i++) {
@@ -1021,7 +1050,7 @@ export function validate(s) {
   // Перевёрнутые тайлы под монументами считаем без цвета.
   const facedown = Array.from(s.tile).filter((t) => t === FACEDOWN).length;
   const sumTotal = total.reduce((a, b) => a + b, 0) + facedown;
-  const expect = TOTAL_TILES.reduce((a, b) => a + b, 0);
+  const expect = boxOf(s).reduce((a, b) => a + b, 0);
   if (sumTotal !== expect) errs.push(`tile count ${sumTotal} != ${expect}`);
   for (let p = 0; p < s.np; p++) {
     for (let c = 0; c < 4; c++) {
@@ -1045,4 +1074,5 @@ export function validate(s) {
   return errs;
 }
 
-export { W, H, N, RED, BLUE, GREEN, BLACK };
+export { RED, BLUE, GREEN, BLACK };
+export { W, H, N } from './constants.js'; // поле по умолчанию; размер партии дает geom(s)

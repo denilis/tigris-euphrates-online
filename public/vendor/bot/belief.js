@@ -9,12 +9,13 @@
 //   exact  — «точно»: полный учёт вышедших тайлов.
 
 import { cloneState } from '../engine/engine.js';
-import { N, TOTAL_TILES } from '../engine/constants.js';
+import { geom, boxOf } from '../engine/constants.js';
 
 const handTotal = (h) => h[0] + h[1] + h[2] + h[3];
 
 /** Сколько тайлов каждого цвета видно на доске (включая перевёрнутые под монументами). */
 export function visibleOnBoard(s) {
+  const { N } = geom(s);
   const v = [0, 0, 0, 0];
   for (let i = 0; i < N; i++) {
     const t = s.tile[i];
@@ -73,7 +74,7 @@ export function unknownPool(view, rng = Math.random) {
   const s = view.state;
   const mine = s.players[view.me];
   if (view.counting === 'none') {
-    const start = TOTAL_TILES.slice();
+    const start = boxOf(s).slice();
     start[0] -= s.startTemples;
     return { weights: start, exact: false };
   }
@@ -82,7 +83,7 @@ export function unknownPool(view, rng = Math.random) {
   for (let c = 0; c < 4; c++) {
     let seen = board[c] + mine.hand[c];
     if (view.counting === 'exact') seen += view.publicRemoved[c] + mine.discarded[c];
-    pool[c] = Math.max(0, TOTAL_TILES[c] - seen);
+    pool[c] = Math.max(0, boxOf(s)[c] - seen);
   }
   if (view.counting === 'approx') {
     // «на глаз»: видит доску, но не помнит ушедшее из игры и ошибается в счёте

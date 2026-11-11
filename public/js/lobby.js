@@ -218,7 +218,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
 
       <h2>Правила стола</h2>
       <div class="opts">
-        <span class="seg"><button data-board="standard" class="${o.board === 'standard' ? 'on' : ''}" ${dis}>Обычное поле</button><button data-board="advanced" class="${o.board === 'advanced' ? 'on' : ''}" ${dis}>Продвинутое поле</button></span>
+        <span class="seg"><button data-board="standard" class="${o.board === 'standard' ? 'on' : ''}" ${dis}>Обычное поле</button><button data-board="advanced" class="${o.board === 'advanced' ? 'on' : ''}" ${dis}>Продвинутое поле</button><button data-board="big" class="${o.board === 'big' ? 'on' : ''}" ${dis} title="Поле 19 на 13: 20 храмов с сокровищами, 215 тайлов, партия идет до 3 сокровищ на поле">Большое поле</button></span>
         <span class="seg" title="Вид поля, на правила не влияет. В партии каждый может сменить его для себя">${[['relief', 'Рельеф'], ['cells', 'Клетки']].map(([id, t]) => `<button data-look="${id}" class="${(o.look ?? 'relief') === id ? 'on' : ''}" ${dis}>${t}</button>`).join('')}</span>
         <label><input type="checkbox" data-opt="englishSupport" ${o.englishSupport ? 'checked' : ''} ${dis}> Английская поддержка</label>
         <label><input type="checkbox" data-opt="buildings" ${o.buildings ? 'checked' : ''} ${dis}> Здания</label>

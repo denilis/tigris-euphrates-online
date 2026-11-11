@@ -14,7 +14,7 @@
 // Оба варианта используют один генератор и дают одинаковый результат.
 
 import { legalMoves, applyMove, cloneState, monumentOptions, components } from '../engine/engine.js';
-import { N, NB, RED } from '../engine/constants.js';
+import { geom, RED } from '../engine/constants.js';
 import { determinize, probAtLeast } from './belief.js';
 import { evaluate, positionRecord, recordValue } from './evaluate.js';
 import { settle, treasureExposure } from './policy.js';
@@ -178,6 +178,7 @@ export function decideAsync(view, settings = DEFAULT_SETTINGS, rng = Math.random
 
 /** Отобранные кандидаты действия (полный список слишком длинный и почти весь бессмыслен). */
 export function candidateActions(s) {
+  const { N, NB } = geom(s);
   const all = legalMoves(s);
   const nearOcc = new Uint8Array(N);
   const nearLeader = new Uint8Array(N);
@@ -320,6 +321,7 @@ const sum4 = (a) => a[0] + a[1] + a[2] + a[3];
  * бот почти не ходил (разбор 25.10.2026, sim/relocations.js).
  */
 export function relocationPurpose(s, m) {
+  const { N, NB } = geom(s);
   if (m.type !== 'leader') return false;
   const from = s.players[s.cur].leaders[m.color];
   if (from < 0) return false;
