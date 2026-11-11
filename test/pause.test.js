@@ -67,7 +67,7 @@ test('пауза в окне отмены: окно останавливаетс
   assert.equal(confirmDue(t, T0 + 10 ** 9), false);
   assert.equal(code(() => undo(t, seat.userId, { version: t.version }, { now: T0 + 3000 })), 'paused');
   for (const u of Object.values(USERS)) ready(t, u.userId, T0 + 50_000);
-  assert.equal(t.game.confirmBy, T0 + 50_000 + 10_000);
+  assert.equal(t.game.confirmBy, T0 + 50_000 + 20_000);
 });
 
 test('пауза: долгая пауза не делает стол брошенным, закрыть его может только хозяин', () => {

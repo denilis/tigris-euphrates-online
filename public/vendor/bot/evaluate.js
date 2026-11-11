@@ -11,7 +11,7 @@
 // перебирает веса, а бот в игре проходит тот же путь.
 
 import { components, finalVector, templeCount } from '../engine/engine.js';
-import { geom, RED, BLUE, GREEN, BLACK, EMPTY, HAND_SIZE } from '../engine/constants.js';
+import { geom, boxOf, treasureEndOf, RED, BLUE, GREEN, BLACK, EMPTY, HAND_SIZE } from '../engine/constants.js';
 
 export const DEFAULT_WEIGHTS = {
   lowest: [1.0, 0.45, 0.2, 0.1], // вес отсортированных очков, от слабейшего цвета
@@ -104,7 +104,11 @@ export function turnsLeft(s) {
   let treasures = 0;
   for (let i = 0; i < N; i++) treasures += s.treasure[i];
   const byBag = bag / (s.np * 2.2);
-  return Math.max(0, Math.min(byBag, treasures <= 3 ? 3 : 40));
+  // одно взятие сокровища до конца (порог у поля свой: 2, у большого 3) — конец близко; потолок
+  // 40 ходов растет с коробкой тайлов (у большого поля 215 против 153)
+  const box = boxOf(s);
+  const cap = (40 * (box[0] + box[1] + box[2] + box[3])) / 153;
+  return Math.max(0, Math.min(byBag, treasures <= treasureEndOf(s) + 1 ? 3 : cap));
 }
 
 // --- Признаки позиции

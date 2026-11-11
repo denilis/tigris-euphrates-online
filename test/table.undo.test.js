@@ -79,7 +79,7 @@ test('отмена: чужая, устаревшая и пустая откло�
 });
 
 test('окно подтверждения: ход ждет, в окне можно отменить, по сроку завершается сам', () => {
-  const t = humanTurn(3);
+  const t = humanTurn(3, { confirmSeconds: 10 });
   const who = decider(t);
   const cur = stateFromJSON(t.game.state).cur;
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 1000 });
@@ -111,7 +111,7 @@ test('окно подтверждения: ход ждет, в окне можн
 });
 
 test('отмена не работает после срока окна подтверждения, до срока работает', () => {
-  const t = humanTurn(3);
+  const t = humanTurn(3, { confirmSeconds: 10 });
   const who = decider(t);
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 1000 });
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 2000 });
@@ -125,7 +125,7 @@ test('отмена не работает после срока окна подт
 });
 
 test('вид: «Отменить» пропадает, как только срок окна вышел', () => {
-  const t = humanTurn(3);
+  const t = humanTurn(3, { confirmSeconds: 10 });
   const who = decider(t);
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 1000 });
   submit(t, who.userId, { version: t.version, index: clean(t) }, { rng: makeRng(3), now: T0 + 2000 });
@@ -155,7 +155,7 @@ test('после решения не ходящего места (сокрови
   assert.ok(treasure > 0, 'среди них есть выбор сокровища');
 });
 
-test('сброс тайлов не отменяется, и после него ход проходит без окна', () => {
+test('сброс тайлов не отменяется, но окно есть: «Завершить ход» или само по сроку (Денис 11.11)', () => {
   const t = humanTurn(4);
   const who = decider(t);
   const cur = stateFromJSON(t.game.state).cur;
@@ -164,11 +164,45 @@ test('сброс тайлов не отменяется, и после него 
   const d = legal.findIndex((m) => m.type === 'discard');
   assert.ok(d >= 0, 'сброс доступен');
   submit(t, who.userId, { version: t.version, index: d }, { rng: makeRng(5), now: T0 });
-  const s = stateFromJSON(t.game.state);
-  assert.notEqual(s.phase, 'confirm');
-  assert.ok(s.over || s.cur !== cur);
+  let s = stateFromJSON(t.game.state);
+  assert.equal(s.phase, 'confirm', 'ход ждет человека');
+  assert.equal(s.cur, cur);
+  assert.equal(t.game.confirmBy, T0 + 20000);
   assert.equal(t.game.undo.length, 0);
-  assert.equal(canUndo(t), false);
+  assert.equal(canUndo(t), false, 'отменять нечего: новые тайлы уже видны');
+  assert.equal(viewFor(t, who.userId, { now: T0 + 1000 }).game.canUndo, false);
+  // «Завершить ход» сразу
+  const end = legalMoves(s).findIndex((m) => m.type === 'confirm');
+  submit(t, who.userId, { version: t.version, index: end }, { rng: makeRng(5), now: T0 + 1000 });
+  s = stateFromJSON(t.game.state);
+  assert.ok(s.over || s.cur !== cur, 'ход перешел');
+  assert.equal(t.game.confirmBy, null);
+});
+
+test('после боя в своем ходу окно тоже есть, отменить нельзя; у бота окна нет', () => {
+  let fights = 0;
+  for (let seed = 1; seed <= 40 && fights < 2; seed++) {
+    const t = started(seed);
+    const r = makeRng(seed + 31), draw = makeRng(seed + 32);
+    let warTurn = null;
+    for (let k = 0; k < 900; k++) {
+      const s = stateFromJSON(t.game.state);
+      if (s.over) break;
+      const seat = t.seats.find((x) => x.id === t.game.order[s.cur]);
+      if (s.phase === 'action') warTurn = null;
+      if (CONFLICT.includes(s.phase)) warTurn = s.turn;
+      if (s.phase === 'confirm') {
+        assert.equal(seat.kind, 'human', 'окно ждет только человека');
+        assert.ok(t.game.confirmBy != null, `seed ${seed}: окно открыто`);
+        if (warTurn === s.turn && !t.game.undo.length) {
+          fights++;
+          assert.equal(canUndo(t), false);
+        }
+      }
+      randomStep(t, r, draw);
+    }
+  }
+  assert.ok(fights >= 1, `не нашлось хода человека, закончившегося боем: ${fights}`);
 });
 
 /**
@@ -322,7 +356,7 @@ test('без окна подтверждения ход проходит сра�
 });
 
 test('время: копится по местам, сверх времени хода отдельно, окно подтверждения не считается', () => {
-  const t = humanTurn(6, { turnSeconds: 30 });
+  const t = humanTurn(6, { turnSeconds: 30, confirmSeconds: 10 });
   const who = decider(t);
   const c = t.game.clock;
   assert.equal(c.at, T0);

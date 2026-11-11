@@ -424,7 +424,7 @@ test('отмена и окно подтверждения через API: сро
   v = await move();
   assert.equal(v.game.phase, 'confirm');
   assert.equal(v.game.canUndo, true);
-  assert.equal(v.game.clock.confirmBy, at + 10000);
+  assert.equal(v.game.clock.confirmBy, at + 20000, 'окно по умолчанию 20 с (Денис 11.11)');
   assert.equal(v.game.clock.now, at);
 
   const u = await req('POST', `tables/${code}`, { body: { action: 'undo', version: v.version }, token: p.token });
@@ -436,7 +436,7 @@ test('отмена и окно подтверждения через API: сро
 
   v = await move();
   assert.equal(v.game.phase, 'confirm');
-  at += 9999;
+  at += 19999;
   assert.equal((await req('GET', `tables/${code}/poll`, { token: P.andrey.token })).body.botDue, false, 'окно еще идет');
   at += 2;
   assert.equal((await req('GET', `tables/${code}/poll`, { token: P.andrey.token })).body.botDue, true, 'окно вышло');

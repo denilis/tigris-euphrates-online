@@ -26,11 +26,12 @@ const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётс�
 // постоянные герои компании (просьба Дениса 01.11): выбор по умолчанию, в лобби его можно сменить
 const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['влад', 'lion']]);
 // turnSeconds — время на ход, сверх него таймер уходит в минус (ход не отнимается);
-// confirmSeconds — окно, в котором сделанный ход еще можно отменить, потом он завершается сам
-// (0 — без окна; по умолчанию 10 с). Решения Дениса 29.10.
+// confirmSeconds — окно после последнего действия: ход еще можно отменить или завершить кнопкой,
+// потом он завершается сам (0 — без окна). Решения Дениса 29.10; 11.11 по умолчанию 20 с вместо 10
+// и окно у человека всегда, даже когда отменять нечего (после боя или сброса).
 export const DEFAULT_OPTIONS = {
   board: 'advanced', englishSupport: true, buildings: true, wonder: true, openScore: false, order: 'loser',
-  turnSeconds: 30, confirmSeconds: 10, tournament: 'auto', look: 'relief', monument: 'enamel', building: 'chip', tiles: 'plate',
+  turnSeconds: 30, confirmSeconds: 20, tournament: 'auto', look: 'relief', monument: 'enamel', building: 'chip', tiles: 'plate',
 };
 // стиль по умолчанию «Универсальный» (решение Дениса 22.10), остальное как в панели бота
 export const DEFAULT_BOT = { style: 'universal', strength: 50, counting: 'none', risk: 50, errors: 5 };
@@ -412,14 +413,18 @@ function applyLegal(t, s, move, rng, now) {
   const entries = step(t, s, move, rng, now);
   const g = t.game;
   if (!s.over && s.phase === 'confirm') {
-    // отменять нечего (сброс, нападение, бот): ход завершается сразу, без окна
-    if (!g.undo.length) entries.push(...step(t, s, { type: 'confirm' }, rng, now));
+    // у бота ход завершается сразу; у человека окно всегда (Денис 11.11: после боя или сброса ход
+    // уходил сразу, «нет времени»): отменить, если можно, или «Завершить ход», иначе само по сроку
+    if (!humanTurn(t, s)) entries.push(...step(t, s, { type: 'confirm' }, rng, now));
     else g.confirmBy = (Number.isFinite(now) ? now : 0) + timing(t).confirmMs;
   }
   if (s.over) finish(t, s, now);
   touch(t, now);
   return { entries };
 }
+
+/** Ходит человек (окно подтверждения ждет только людей). */
+const humanTurn = (t, s) => t.seats.find((x) => x.id === t.game.order[s.cur])?.kind === 'human';
 
 /** Можно ли ходящему отменить последнее действие этого хода. */
 export function canUndo(t) {
@@ -485,7 +490,8 @@ export function ready(t, userId, now) {
     g.paused = null;
     if (g.clock) Object.assign(g.clock, { at: now, turnUsed: 0 });
     // окно отмены открывается заново: за паузу его время не должно было уйти
-    if (stateFromJSON(g.state).phase === 'confirm' && g.undo?.length) g.confirmBy = now + timing(t).confirmMs;
+    const st = stateFromJSON(g.state);
+    if (st.phase === 'confirm' && humanTurn(t, st)) g.confirmBy = now + timing(t).confirmMs;
   }
   touch(t, now);
 }
