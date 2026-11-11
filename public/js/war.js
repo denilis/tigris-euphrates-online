@@ -37,8 +37,35 @@ export function warWatching(view) {
   return Boolean(k) && k.att !== view.me && k.def !== view.me;
 }
 
-/** Нарисовать окно в box; вернуть 'decide', если решает смотрящий, 'wait', если он ждет, 'watch', если смотрит чужой бой, иначе false. */
-export function renderWarDock(box, view, ui, { move, redraw, undo }) {
+/**
+ * Нарисовать окно в box; вернуть 'decide', если решает смотрящий, 'wait', если он ждет, 'watch', если смотрит чужой бой, иначе false.
+ * Окно собирается заново на каждый выбор тайла и каждое обновление стола; прокрутка того же решения
+ * сохраняется (Андрей 11.11, ноутбук 13 дюймов: рука ниже края, после каждого тайла окно прыгало наверх).
+ */
+export function renderWarDock(box, view, ui, handlers) {
+  const g = view.game;
+  const key = g ? `${g.phase}|${g.turn}|${g.toMove}|${ui.collapsed ? 1 : 0}` : '';
+  const ds = box.dataset; // в тестах окно без DOM: прокрутки там нет
+  const same = ds?.scrollKey === key;
+  const top = same ? box.querySelector('.mcard')?.scrollTop || 0 : 0;
+  const res = drawWarDock(box, view, ui, handlers);
+  const card = box.querySelector('.mcard');
+  if (card && top) card.scrollTop = top;
+  else if (card && !same && res === 'decide') showHand(card);
+  if (ds) ds.scrollKey = key;
+  return res;
+}
+
+/** Новое решение: если рука для поддержки ушла под кнопки внизу окна, прокрутить к ней. */
+function showHand(card) {
+  if (typeof card.querySelector !== 'function') return;
+  const tiles = card.querySelector('.myhand'), foot = card.querySelector('.mfoot');
+  if (!tiles?.getBoundingClientRect || !foot?.getBoundingClientRect) return;
+  const over = tiles.getBoundingClientRect().bottom - foot.getBoundingClientRect().top + 8;
+  if (over > 0) card.scrollTop += over;
+}
+
+function drawWarDock(box, view, ui, { move, redraw, undo }) {
   const active = warActive(view), watch = warWatching(view);
   box.hidden = !active && !watch && !warWaiting(view);
   if (box.hidden) return false;

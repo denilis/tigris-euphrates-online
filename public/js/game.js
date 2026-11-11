@@ -74,10 +74,12 @@ const SKELETON = `<div class="app" id="game">
     <a class="brand" href="#/">Тигр и Евфрат</a>
     <button class="code" id="gCode" title="Скопировать ссылку на стол"></button>
     <div class="badges" id="gBadges"></div>
+    <button class="navbtn tmb" id="gViewBtn" data-menu="view" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu" title="Слои и вид поля, меняются только у вас">Вид &#9662;</button>
     <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button><span class="vol" id="gVol" role="group" aria-label="Громкость звуков"><button class="volbtn" data-vol="-1" title="Тише" aria-label="Тише">&minus;</button><b class="volpct" aria-live="polite"></b><button class="volbtn" data-vol="1" title="Громче" aria-label="Громче">+</button><i class="volpop" aria-hidden="true"></i></span><button class="volbtn sfxbtn" id="gSfxBtn" aria-haspopup="true" aria-expanded="false" aria-controls="gSfxMenu" title="Какие звуки играть">&#9662;</button></div>
     <div class="sfxmenu" id="gSfxMenu" role="dialog" aria-label="Какие звуки играть" hidden></div>
+    <div class="sfxmenu topmenu" id="gTopMenu" role="dialog" hidden></div>
     <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
-    <nav class="nav"><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><a class="navbtn" href="#/stats">Статистика</a><a class="navbtn" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
+    <nav class="nav"><button class="navbtn tmb none" id="gGameBtn" data-menu="game" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu" title="Пауза и конец партии">Партия &#9662;</button><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><button class="navbtn tmb" id="gMoreBtn" data-menu="more" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu">Ещё &#9662;</button><a class="navbtn nx" href="#/stats">Статистика</a><a class="navbtn nx" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <div class="sizer" id="gSizer" role="separator" aria-orientation="vertical" title="Потяните, чтобы изменить ширину панели. Двойной щелчок вернет ширину по умолчанию"></div>
@@ -150,6 +152,13 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
       drawVolume(root, true);
     });
     bindSfxMenu(root);
+    bindTopMenu(root);
+    // раскладка под размер окна (11.11): следим за окном и нижней панелью
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => fitLayout(root));
+      ro.observe(root.querySelector('#game'));
+      ro.observe(root.querySelector('#gHand'));
+    }
     unlockAudio();
     root.querySelector('#gLook').addEventListener('click', () => {
       ui.look = lookOf(current) === 'relief' ? 'cells' : 'relief';
@@ -552,6 +561,109 @@ function draw() {
   drawBattle(d);
   drawPause(d);
   renderEnd(root.querySelector('#gEnd'), view, ctl);
+  fitLayout(root);
+}
+
+/**
+ * Раскладка под окно (11.11, ноутбук Андрея 1280x690: кнопки внизу обрезались, шапка шире экрана).
+ * tight: нижняя панель уже 960 px (по содержимому), кнопки хода парой строкой, отмена значком,
+ * «Пауза» и «Сдаться» уходят в «Партия ▾» в шапке. Шапка: пока не помещается, по шагу прячет
+ * c1 слои поля в «Вид ▾», c2 «Статистику» и «Мои столы» в «Ещё ▾», c3 название сайта.
+ * На телефоне (до 900 px) шапка переносится строками, ее сжимает CSS.
+ */
+const TIGHT_W = 960;
+function fitLayout(root) {
+  const app = root?.querySelector('#game');
+  const hand = app?.querySelector('#gHand');
+  if (!hand) return;
+  const desk = innerWidth > 900;
+  const cs = getComputedStyle(hand);
+  const inner = hand.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  app.classList.toggle('tight', desk && !app.classList.contains('handside') && inner > 0 && inner <= TIGHT_W);
+  const top = app.querySelector('.top');
+  top.classList.remove('c1', 'c2', 'c3');
+  if (!desk) return;
+  for (const c of ['c1', 'c2', 'c3']) {
+    if (top.scrollWidth <= top.clientWidth + 1) break;
+    top.classList.add(c);
+  }
+}
+
+/** Вопросы перед паузой и концом партии: одни и те же для кнопок внизу и меню «Партия ▾». */
+function askPause() {
+  if (confirm('Поставить партию на паузу? Ходы и часы встанут. Продолжим, когда все игроки нажмут «Я на месте».')) ctl.act({ action: 'pause' });
+}
+function askStop(label) {
+  const q = label === 'Сдаться' ? 'Сдаться? Партия закончится, итога не будет, в статистику она не пойдет.' : 'Завершить партию для всех игроков? Итога не будет, в статистику она не пойдет. Вернуть ее нельзя.';
+  if (confirm(q)) ctl.act({ action: 'close' });
+}
+
+/**
+ * Меню шапки «Вид ▾», «Ещё ▾», «Партия ▾» (11.11): видны, только когда шапке или нижней панели
+ * тесно. Пункты повторяют настоящие кнопки и нажимают их, поэтому логика одна.
+ */
+function topMenuHtml(root, kind) {
+  const head = (t) => `<div class="sfxhead"><b>${t}</b><button class="sfxclose" data-tm="close" aria-label="Закрыть">&times;</button></div>`;
+  if (kind === 'view') {
+    const rows = [...root.querySelectorAll('#gLayers [data-layer]')].map((b) => `<div class="sfxrow"><button class="sw" role="switch" data-tm="layer:${b.dataset.layer}" aria-checked="${b.getAttribute('aria-checked')}" title="${esc(b.title)}"><i></i>${esc(b.textContent)}</button></div>`).join('');
+    return head('Вид поля') + rows + `<div class="tmlist"><button class="btn" data-tm="look">${esc(root.querySelector('#gLook').textContent)}</button></div>`;
+  }
+  if (kind === 'more') {
+    return head('Ещё') + `<div class="tmlist"><a class="btn" data-tm="go" href="#/">На главную</a><a class="btn" data-tm="go" href="#/stats">Статистика</a><a class="btn" data-tm="go" href="#/tables">Мои столы</a></div>`;
+  }
+  const s = ui.stopActs || {};
+  return head('Партия') + `<div class="tmlist">${s.pause ? '<button class="btn" data-tm="pause">Пауза</button>' : ''}${s.label ? `<button class="btn" data-tm="stop">${s.label}</button>` : ''}</div>`;
+}
+
+function bindTopMenu(root) {
+  const menu = root.querySelector('#gTopMenu');
+  let from = null;
+  const close = () => {
+    menu.hidden = true;
+    from?.setAttribute('aria-expanded', 'false');
+    from = null;
+    removeEventListener('pointerdown', outside, true);
+    removeEventListener('keydown', onKey, true);
+  };
+  const outside = (e) => { if (!menu.contains(e.target) && !from?.contains(e.target)) close(); };
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    const b = from;
+    close();
+    b?.focus();
+  };
+  const fill = () => { menu.innerHTML = topMenuHtml(root, from.dataset.menu); };
+  root.querySelectorAll('.top [data-menu]').forEach((btn) => btn.addEventListener('click', () => {
+    const again = from === btn;
+    if (from) close();
+    if (again) return;
+    from = btn;
+    fill();
+    menu.setAttribute('aria-label', btn.textContent.replace('▾', '').trim());
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    const r = btn.getBoundingClientRect(), w = Math.min(280, innerWidth - 24);
+    Object.assign(menu.style, { width: `${w}px`, top: `${r.bottom + 6}px`, left: `${Math.max(12, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 12))}px`, maxHeight: `${innerHeight - r.bottom - 18}px` });
+    addEventListener('pointerdown', outside, true);
+    addEventListener('keydown', onKey, true);
+  }));
+  menu.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-tm]');
+    if (!t) return;
+    const v = t.dataset.tm;
+    if (v.startsWith('layer:')) {
+      root.querySelector(`#gLayers [data-layer="${v.slice(6)}"]`)?.click();
+      return fill();
+    }
+    if (v === 'look') {
+      root.querySelector('#gLook').click();
+      return fill();
+    }
+    close();
+    if (v === 'pause') askPause();
+    else if (v === 'stop') askStop(ui.stopActs?.label);
+  });
 }
 
 // --- пауза (просьба Дениса 03.11): поле видно, поверх него карточка сбора игроков
@@ -878,6 +990,8 @@ const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
 const END_WHEN = 'Заработает после второго действия: ход можно завершить, не дожидаясь конца окна отмены';
 const UNDO_WHEN = 'Работает в ваш ход после действия, пока не вышло время на отмену';
 
+const UNDO_ICON = '<svg class="ico" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7.5 4.5 3.5 8.5l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 8.5h8a4.5 4.5 0 0 1 0 9H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
 function turnActs({ view, g, decides }) {
   if (g.stopped || g.over || g.paused) return { end: false, undo: false };
   if (!decides) return { end: false, undo: Boolean(g.canUndo) }; // тайл ходящего столкнул других игроков
@@ -897,14 +1011,12 @@ function drawHand(d) {
   const canPause = !ctl.lesson && view.seats.some((s) => s.id === view.me && s.kind === 'human') && !g.over && !g.stopped && !g.paused;
   const stop = (canPause ? '<button class="btn" data-pause title="Не успели доиграть: партия встанет, вернуться к ней можно позже">Пауза</button>' : '')
     + (label ? `<button class="btn" data-stop>${label}</button>` : '');
+  // те же действия в меню «Партия ▾» шапки, когда внизу тесно (11.11)
+  ui.stopActs = { pause: canPause, label };
+  ctl.root.querySelector('#gGameBtn').classList.toggle('none', !stop || myP < 0);
   const bindStop = () => {
-    el.querySelector('[data-stop]')?.addEventListener('click', () => {
-      const q = label === 'Сдаться' ? 'Сдаться? Партия закончится, итога не будет, в статистику она не пойдет.' : 'Завершить партию для всех игроков? Итога не будет, в статистику она не пойдет. Вернуть ее нельзя.';
-      if (confirm(q)) ctl.act({ action: 'close' });
-    });
-    el.querySelector('[data-pause]')?.addEventListener('click', () => {
-      if (confirm('Поставить партию на паузу? Ходы и часы встанут. Продолжим, когда все игроки нажмут «Я на месте».')) ctl.act({ action: 'pause' });
-    });
+    el.querySelector('[data-stop]')?.addEventListener('click', () => askStop(label));
+    el.querySelector('[data-pause]')?.addEventListener('click', askPause);
   };
   if (myP < 0) {
     el.innerHTML = `<div class="hint">Вы смотрите партию со стороны.</div><div class="hrow"><div class="acts">${stop ? `<div class="pair">${stop}</div>` : ''}</div></div>`;
@@ -916,7 +1028,8 @@ function drawHand(d) {
   // в уроке и после конца партии только когда нужны
   const ta = turnActs(d), always = !ctl.lesson && !g.over && !g.stopped;
   const turn = (ta.end || always ? `<button class="btn${ta.end ? ' primary' : ''}" data-now="confirm"${ta.end ? '' : ` disabled title="${END_WHEN}"`}>Завершить ход</button>` : '')
-    + (ta.undo || always ? `<button class="btn" data-now="undo"${ta.undo ? '' : ` disabled title="${UNDO_WHEN}"`}>Отменить действие</button>` : '');
+    // в тесноте (11.11, предложение Андрея) отмена значком, как «отменить» в редакторах
+    + (ta.undo || always ? `<button class="btn undo" data-now="undo" aria-label="Отменить действие"${ta.undo ? ' title="Отменить действие"' : ` disabled title="${UNDO_WHEN}"`}><span class="lbl">Отменить действие</span>${UNDO_ICON}</button>` : '');
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
   // кнопки ряда по парам (08.11): кнопки хода, партия (пауза, завершить), рука (сброс, пас); на тесном экране
@@ -959,7 +1072,7 @@ function drawHand(d) {
       <div class="nudge" id="gNudge" role="status" hidden><b>Ваш ход!</b><i data-clock="over"></i></div>
       <div class="acts">
         ${turn ? `<div class="pair turnacts">${turn}</div>` : ''}
-        ${stop ? `<div class="pair">${stop}</div>` : ''}
+        ${stop ? `<div class="pair stop">${stop}</div>` : ''}
         ${handActs ? `<div class="pair">${handActs}</div>` : ''}
       </div>
     </div>`;
