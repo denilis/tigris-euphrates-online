@@ -11,7 +11,7 @@ import { fmt, fmtTotal, clockNow, undoExpired } from './clock.js';
 import { pickableLeader, hitCells, squareCells } from './pick.js';
 import { trailMarks, markLabel, markLine, ageMarks, liveMarks } from './trail.js';
 import { stockItems } from './stock.js';
-import { initPanels, holdNowOpen, holdStockOpen } from './panels.js';
+import { initPanels, holdNowOpen, holdStockOpen, fitSide } from './panels.js';
 import { stopLabel } from './layout-core.js';
 import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
 import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, volume, nextVolume, setVolume, previewVolume, VOL, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds, previewSound } from './signals.js';
@@ -69,6 +69,9 @@ function resetFor(view) {
 
 const FOLD = '<button class="fold" aria-label="Свернуть или развернуть блок" title="Свернуть или развернуть"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>';
 
+// «Настроить» в строке «Игроки» (Денис 12.11): размер текста панели, портреты, лидеры, время
+const SIDESET = '<button class="bset" id="gSideSet" aria-haspopup="true" aria-expanded="false" aria-controls="gSideMenu" title="Настроить панель: размер текста, портреты, лидеры, время"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 4h7M13 4h1M2 12h1M7 12h7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="11" cy="4" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span>Настроить</span></button>';
+
 const SKELETON = `<div class="app" id="game">
   <header class="top">
     <a class="brand" href="#/">Тигр и Евфрат</a>
@@ -78,13 +81,14 @@ const SKELETON = `<div class="app" id="game">
     <div class="layers" id="gLayers" role="group" aria-label="Слои поля, меняются только у вас">${LAYERS.map((l) => `<button class="sw" role="switch" data-layer="${l.id}" title="${l.title}"><i></i>${l.label}</button>`).join('')}<button class="sw" role="switch" id="gSound" title="Тихий щелчок, когда закончился ход, и звон, когда решать вам"><i></i>Звук</button><span class="vol" id="gVol" role="group" aria-label="Громкость звуков"><button class="volbtn" data-vol="-1" title="Тише" aria-label="Тише">&minus;</button><b class="volpct" aria-live="polite"></b><button class="volbtn" data-vol="1" title="Громче" aria-label="Громче">+</button><i class="volpop" aria-hidden="true"></i></span><button class="volbtn sfxbtn" id="gSfxBtn" aria-haspopup="true" aria-expanded="false" aria-controls="gSfxMenu" title="Какие звуки играть">&#9662;</button></div>
     <div class="sfxmenu" id="gSfxMenu" role="dialog" aria-label="Какие звуки играть" hidden></div>
     <div class="sfxmenu topmenu" id="gTopMenu" role="dialog" hidden></div>
+    <div class="sfxmenu sidemenu" id="gSideMenu" role="dialog" aria-label="Настройка панели" hidden></div>
     <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
     <nav class="nav"><button class="navbtn tmb none" id="gGameBtn" data-menu="game" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu" title="Пауза и конец партии">Партия &#9662;</button><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><button class="navbtn tmb" id="gMoreBtn" data-menu="more" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu">Ещё &#9662;</button><a class="navbtn nx" href="#/stats">Статистика</a><a class="navbtn nx" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
   <div class="sizer" id="gSizer" role="separator" aria-orientation="vertical" title="Потяните, чтобы изменить ширину панели. Двойной щелчок вернет ширину по умолчанию"></div>
   <aside class="side" id="gSide">
-    <section data-block="players"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Игроки</h3>${FOLD}</div><div class="bbody"><div class="players" id="gPlayers"></div></div></section>
+    <section data-block="players"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Игроки</h3>${SIDESET}${FOLD}</div><div class="bbody"><div class="players" id="gPlayers"></div></div></section>
     <section data-block="stock"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Запас</h3>${FOLD}</div><div class="bbody"><div class="stock" id="gStock"></div></div></section>
     <section class="now" data-block="now"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3 id="gNowHead"></h3>${FOLD}</div><div class="bbody" id="gNow"></div></section>
     <section class="log" data-block="log"><div class="blockhead" title="Потяните, чтобы переставить блок"><h3>Журнал</h3>${FOLD}</div><div class="bbody"><ol id="gLog"></ol></div></section>
@@ -580,6 +584,7 @@ function fitLayout(root) {
   const cs = getComputedStyle(hand);
   const inner = hand.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   app.classList.toggle('tight', desk && !app.classList.contains('handside') && inner > 0 && inner <= TIGHT_W);
+  fitSide();
   const top = app.querySelector('.top');
   top.classList.remove('c1', 'c2', 'c3');
   if (!desk) return;

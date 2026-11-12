@@ -446,7 +446,7 @@ html{touch-action:manipulation}
 .side section.moving{outline:2px dashed var(--gold2);outline-offset:-2px;opacity:.75}
 .side section.moving .blockhead{cursor:grabbing}
 .side .log.shut{flex:none;min-height:0}
-.sidefoot{order:99;display:flex;justify-content:space-between;gap:8px;padding:2px 8px;margin-top:auto}
+.sidefoot{order:99;display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 8px;padding:2px 8px;margin-top:auto}
 .side section{border-bottom:1px solid var(--line);padding:10px 12px}
 .side h3{margin:0 0 7px;font:600 11px/1 "Segoe UI",sans-serif;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
 .players{display:flex;flex-direction:column;gap:6px}
@@ -555,7 +555,7 @@ html{touch-action:manipulation}
 @container (max-width:1210px){@media (pointer:coarse){.acts .pair .btn{min-height:36px}}}
 
 /* ---------- окно конфликта ---------- */
-.app.conflict{--sidew:max(var(--side),var(--dock))}
+.app.conflict{--sidew:max(var(--side),var(--dock),var(--sidemin,0px))}
 .app.conflict .sizer{visibility:hidden}
 .app.conflict .side{visibility:hidden}
 /* шапка и рука гаснут только у того, кто решает в бою; ждущий и смотрящий видят руку целиком (просьба Дениса 03.11) */
@@ -1310,3 +1310,26 @@ html{touch-action:manipulation}
   .top #gViewBtn,.top #gMoreBtn{display:inline-block}
   .app.lesson .top #gViewBtn{display:none}
 }
+
+/* Настройка панели (Денис 12.11). Панель не уже содержимого: --sidemin меряет panels.js fitSide.
+   Кнопка «Настроить» в строке «Игроки»: текст всей панели мельче (zoom), без портретов, лидеров,
+   времени в карточках игроков. Классы p-no* и --sidezoom ставит panels.js apply. */
+.app{--sidew:max(var(--side),var(--sidemin,0px))}
+.side>section{zoom:var(--sidezoom,1)}
+.bset{flex:none;display:inline-flex;align-items:center;gap:4px;background:none;border:1px solid transparent;border-radius:6px;padding:2px 6px;color:var(--muted);font:inherit;font-size:11px;line-height:1.2;cursor:pointer}
+.bset:hover,.bset[aria-expanded="true"]{color:var(--gold);border-color:var(--line)}
+.bset:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.app.p-noavatars .pc{grid-template-columns:minmax(0,1fr) auto}
+.app.p-noavatars .pc .av{display:none}
+.app.p-noavatars .pc .leaders,.app.p-noavatars .pc .row,.app.p-noavatars .pc .ptime{grid-column:1 / 3}
+.app.p-noleaders .pc .leaders{display:none}
+.app.p-notime .pc .ptime{display:none}
+/* копия блока для замера ширины: у гибкого столбца имени (1fr, min-width:0) по содержимому минимум 0,
+   поэтому в копии столбцы auto, и имя меряется по самому длинному слову */
+.app .sizeprobe .pc{grid-template-columns:auto auto auto}
+.app.p-noavatars .sizeprobe .pc{grid-template-columns:auto auto}
+.sizeprobe .pc .nm{min-width:auto}
+.sidemenu .psseg{display:flex;margin:4px 0 2px}
+.sidemenu .psseg button{flex:1;min-height:32px;padding:4px 8px;font-size:13px;color:var(--text)}
+.sidemenu .psseg button.on{color:#1b1713}
+.pshint{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.35}

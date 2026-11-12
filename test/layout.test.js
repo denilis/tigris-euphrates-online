@@ -11,20 +11,32 @@ import { fakeUpstash } from './fake-upstash.js';
 const ENV = { SESSION_SECRET: 's', CODE_PEPPER: 'p', ADMIN_CODE: 'ADMN-TEST-2345', ADMIN_NAME: 'Денис' };
 
 test('настройки по умолчанию и защита от мусора', () => {
-  const base = { side: 0, left: false, handSide: false, order: BLOCKS, shut: [] };
+  const base = { side: 0, left: false, handSide: false, order: BLOCKS, shut: [], scale: 100, hide: [] };
   for (const bad of [null, undefined, 5, 'x', []]) assert.deepEqual(cleanLayout(bad), base);
   assert.deepEqual(cleanLayout({ side: 9999, left: 'да', order: ['log'], shut: ['чужое', 'log'] }), { ...base, shut: ['log'] });
   assert.equal(cleanLayout({ side: 300.5 }).side, 0);
-  const good = { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['stock'] };
+  const good = { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['stock'], scale: 90, hide: ['avatars', 'leaders'] };
   assert.deepEqual(cleanLayout(good), good);
 });
 
+test('настройка панели (12.11): размер текста из списка, прятать только известное', () => {
+  assert.equal(cleanLayout({ scale: 80 }).scale, 80);
+  for (const bad of [85, '90', 120, null]) assert.equal(cleanLayout({ scale: bad }).scale, 100, String(bad));
+  assert.deepEqual(cleanLayout({ hide: ['time', 'чужое', 'avatars'] }).hide, ['avatars', 'time']);
+  assert.deepEqual(cleanLayout({ hide: 'avatars' }).hide, []);
+  assert.deepEqual(cleanPrefs({ scale: 80, hide: ['leaders', 'x'] }), { ...cleanPrefs(null), scale: 80, hide: ['leaders'] });
+});
+
 test('ширина панели в границах, карте остается место', () => {
-  assert.equal(clampSide(100), 250);
+  assert.equal(clampSide(100), 180);
   assert.equal(clampSide(900), 520);
   assert.equal(clampSide(333.4), 333);
   assert.equal(clampSide(520, 900), 400, 'узкое окно');
-  assert.equal(clampSide(520, 600), 250, 'меньше минимума не бывает');
+  assert.equal(clampSide(520, 600), 180, 'меньше минимума не бывает');
+  assert.equal(clampSide(200), 200, 'с настройкой панели можно уже 250');
+  assert.equal(clampSide(260, 1280, 297), 297, 'не уже, чем нужно содержимому');
+  assert.equal(clampSide(260, 700, 297), 297, 'даже когда карте тесно');
+  assert.equal(clampSide(400, 1280, 297), 400);
 });
 
 test('перестановка блоков', () => {
@@ -50,9 +62,9 @@ test('кнопка организатора: с ботами сдаться, с 
 
 test('сервер принимает только форму настроек', () => {
   assert.deepEqual(cleanPrefs({ side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'], лишнее: 'x'.repeat(5000) }),
-    { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'] });
+    { side: 400, left: true, handSide: true, order: ['log', 'now', 'stock', 'players'], shut: ['log'], scale: 100, hide: [] });
   assert.equal(cleanPrefs({ handSide: 'да' }).handSide, false, 'рука сбоку только по true');
-  assert.deepEqual(cleanPrefs('мусор'), { side: 0, left: false, handSide: false, order: BLOCKS, shut: [] });
+  assert.deepEqual(cleanPrefs('мусор'), { side: 0, left: false, handSide: false, order: BLOCKS, shut: [], scale: 100, hide: [] });
   assert.deepEqual(cleanPrefs({ side: 1e9, order: ['log', 'log', 'log', 'log'] }).order, BLOCKS);
 });
 
@@ -66,7 +78,7 @@ for (const [name, make] of [['память', memoryStore], ['Redis', () => redis
 
     assert.equal((await req('GET', 'prefs')).status, 401, 'без входа нельзя');
     assert.deepEqual((await req('GET', 'prefs', undefined, denis.token)).body, {}, 'пока пусто');
-    const mine = { side: 410, left: true, handSide: true, order: ['now', 'log', 'players', 'stock'], shut: ['stock'] };
+    const mine = { side: 410, left: true, handSide: true, order: ['now', 'log', 'players', 'stock'], shut: ['stock'], scale: 80, hide: ['avatars'] };
     assert.equal((await req('POST', 'prefs', mine, denis.token)).status, 200);
     assert.deepEqual((await req('GET', 'prefs', undefined, denis.token)).body, mine);
     assert.deepEqual((await req('GET', 'prefs', undefined, andrey.token)).body, {}, 'у Андрея свои настройки');
