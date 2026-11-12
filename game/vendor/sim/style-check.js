@@ -22,6 +22,8 @@
 //   init6 — из early6 только в свой ход (в войне от чужого тайла атакующим по правилам бывает и не он);
 //   first — раунд первой своей атаки (среднее по партиям, где она была); late13 — доля атак с 13-го раунда;
 //   atkWin — доля выигранных своих атак; mons, blds — построено монументов и зданий; reloc — перестановок
+// Бот Дениса (12.11, его описание стиля): together — сколько своих лидеров в одном царстве после 5 своих
+//   ходов (наибольшее), treas — взято сокровищ, mon1 — раунд первого своего монумента (по партиям с ним)
 
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -53,7 +55,7 @@ if (CODE) {
 
 const blank = () => ({ games: 0, wins: 0, place: 0, start: 0, shared: 0, guestIn: 0, revolts: 0, wars: 0,
   guest: 0, host: 0, temples: 0, thin: 0, fragile: 0, lost: 0, samples: 0, leaders: 0,
-  atk: 0, early6: 0, init6: 0, late13: 0, atkWon: 0, firstSum: 0, firstN: 0, mons: 0, blds: 0, reloc: 0 });
+  together: 0, treas: 0, mon1Sum: 0, mon1N: 0, atk: 0, early6: 0, init6: 0, late13: 0, atkWon: 0, firstSum: 0, firstN: 0, mons: 0, blds: 0, reloc: 0 });
 const per = Object.fromEntries(STYLES.map((k) => [k, blank()]));
 
 function minDistance(s, p) {
@@ -72,6 +74,14 @@ function minDistance(s, p) {
   return best;
 }
 
+/** Сколько своих лидеров стоит в одном царстве (наибольшее по царствам). */
+function together(s, p) {
+  const comps = components(s);
+  const n = new Map();
+  for (const x of s.players[p].leaders) if (x >= 0) n.set(comps.lab[x], (n.get(comps.lab[x]) || 0) + 1);
+  return Math.max(0, ...n.values());
+}
+
 function sharesKingdom(s, p) {
   const comps = components(s);
   const mine = new Set(s.players[p].leaders.filter((x) => x >= 0).map((x) => comps.lab[x]));
@@ -87,6 +97,7 @@ for (let g = 0; g < GAMES; g++) {
   const ownTurns = order.map(() => 0);
   const sampled = order.map(() => false);
   const firstAt = order.map(() => 0); // раунд первой своей атаки
+  const firstMon = order.map(() => 0); // раунд первого своего монумента
   let lastTurn = 0, warAtt = -1;
   const r = playGame({
     seats,
@@ -104,6 +115,7 @@ for (let g = 0; g < GAMES; g++) {
           st.start += Number.isFinite(d) ? d : 16;
           st.shared += sharesKingdom(s, p) ? 1 : 0;
         }
+        if (ownTurns[p] === 5) st.together += together(s, p);
         const rec = positionRecord(s, { shape: true }).players[p];
         st.guest += rec[X_GUEST];
         st.host += rec[X_HOST];
@@ -150,12 +162,21 @@ for (let g = 0; g < GAMES; g++) {
         if (ev.winner === warAtt) per[order[warAtt]].atkWon++;
         warAtt = -1;
       }
-      if (ev.ev === 'monument') per[order[ev.p]].mons++;
+      if (ev.ev === 'monument') {
+        per[order[ev.p]].mons++;
+        if (!firstMon[ev.p]) firstMon[ev.p] = round;
+      }
+      if (ev.ev === 'treasure') per[order[ev.p]].treas++;
       if (ev.ev === 'building') per[order[ev.p]].blds++;
       if (ev.ev === 'leader' && ev.from >= 0) per[order[ev.p]].reloc++;
       if (ev.ev === 'leaderReturned') per[order[ev.p]].lost++;
       if ((ev.ev === 'revolt' || ev.ev === 'war') && ev.loser >= 0) per[order[ev.loser]].lost++;
     },
+  });
+  firstMon.forEach((r, p) => {
+    if (!r) return;
+    per[order[p]].mon1Sum += r;
+    per[order[p]].mon1N++;
   });
   firstAt.forEach((r, p) => {
     if (!r) return;
@@ -183,6 +204,8 @@ for (const [k, st] of Object.entries(per)) {
     lost: +(st.lost / n).toFixed(1),
     atk: +(st.atk / n).toFixed(1), early6: +(st.early6 / n).toFixed(2), init6: +(st.init6 / n).toFixed(2), first: st.firstN ? +(st.firstSum / st.firstN).toFixed(1) : null,
     late13: st.atk ? +(st.late13 / st.atk).toFixed(2) : null, atkWin: st.atk ? +(st.atkWon / st.atk).toFixed(2) : null,
+    together: +(st.together / n).toFixed(2), treas: +(st.treas / n).toFixed(2),
+    mon1: st.mon1N ? +(st.mon1Sum / st.mon1N).toFixed(1) : null,
     mons: +(st.mons / n).toFixed(2), blds: +(st.blds / n).toFixed(2), reloc: +(st.reloc / n).toFixed(2),
   };
 }

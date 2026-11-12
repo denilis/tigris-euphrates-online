@@ -78,7 +78,12 @@ test('стили различаются характером: риск, вкус
   const a = styleParams({ style: 'andrey' }), v = styleParams({ style: 'vlad' }), d = styleParams({ style: 'denis' });
   assert.ok(a.riskShift < 0 && v.riskShift > 0, 'Андрей осторожнее, Влад смелее');
   assert.ok(params({ style: 'andrey' }).attackThreshold > params({ style: 'vlad' }).attackThreshold);
-  assert.ok(v.weights.guest > 0 && d.weights.guest < 0 && !(a.weights.guest > 0), 'в чужие царства ставит только Влад');
+  assert.ok(v.weights.guest > 0 && !(a.weights.guest > 0), 'в чужие царства охотно ставит только Влад');
+  // Денис (12.11): своего лидера ставит к чужому монументу и туда, где много тайлов цвета
+  assert.ok(d.weights.guest === 0 && d.weights.support > a.weights.support && d.weights.attack > 0, 'Денис ходит в чужие царства за тайлами и монументом');
+  assert.ok(d.weights.cohesion > a.weights.cohesion && d.weights.temple > a.weights.temple, 'Денис держит лидеров вместе у храмов');
+  assert.ok(d.weights.bRevolt > a.weights.bRevolt && !params({ style: 'denis' }).peaceRounds, 'Денис восстает охотнее Андрея и без мирных раундов');
+  assert.ok(d.weights.bMonument > a.weights.bMonument && d.weights.traderTreasure > a.weights.traderTreasure, 'монументы и сокровища');
   assert.ok(d.weights.host < 0, 'Денис выбивает чужих из своего царства');
   assert.ok(d.weights.crowd > v.weights.crowd, 'Денис встает дальше Влада');
   // Андрей без вкусов формы (замер 12.11, вариант B): оценка без дорогого расчета формы царства
