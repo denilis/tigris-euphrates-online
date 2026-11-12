@@ -947,7 +947,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const seg = String(path || '').split('/').filter(Boolean);
     const [head, ...rest] = seg;
     if (method === 'GET' && head === 'ping') {
-      return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.commit.slice(0, 7), store: store.kind, chat: tg.on };
+      return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.hash.slice(0, 7), store: store.kind, chat: tg.on };
     }
     if (method === 'POST' && head === 'activate') return activate(body, ip);
     if (method === 'GET' && head === 'avatar') return avatarFile(rest.join('/'));

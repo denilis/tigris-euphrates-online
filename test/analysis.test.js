@@ -24,10 +24,10 @@ test('движок и бот для браузера: public/vendor совпад
   for (const dir of ['engine', 'bot']) {
     const src = new URL(`../game/vendor/${dir}/`, import.meta.url), dst = new URL(`../public/vendor/${dir}/`, import.meta.url);
     const files = readdirSync(src).filter((f) => f.endsWith('.js')).sort();
-    assert.deepEqual(readdirSync(dst).filter((f) => f.endsWith('.js')).sort(), files, `${dir}: состав, запустите node tools/sync-public-vendor.mjs`);
+    assert.deepEqual(readdirSync(dst).filter((f) => f.endsWith('.js')).sort(), files, `${dir}: состав, запустите node tools/bot-sync.mjs`);
     // без учета переводов строк: git на Windows может хранить их по-разному в рабочей папке
     const text = (u) => readFileSync(u, 'utf8').split('\r\n').join('\n');
-    for (const f of files) assert.equal(text(new URL(f, dst)), text(new URL(f, src)), `${dir}/${f}: запустите node tools/sync-public-vendor.mjs`);
+    for (const f of files) assert.equal(text(new URL(f, dst)), text(new URL(f, src)), `${dir}/${f}: запустите node tools/bot-sync.mjs`);
   }
 });
 

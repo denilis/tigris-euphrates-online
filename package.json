@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "sync-engine": "node tools/sync-engine.js"
+    "bot-sync": "node tools/bot-sync.mjs"
   },
   "engines": {
     "node": ">=20"
