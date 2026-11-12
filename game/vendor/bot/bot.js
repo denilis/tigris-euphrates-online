@@ -14,9 +14,9 @@
 // Оба варианта используют один генератор и дают одинаковый результат.
 
 import { legalMoves, applyMove, cloneState, monumentOptions, components } from '../engine/engine.js';
-import { geom, RED } from '../engine/constants.js';
+import { geom, RED, GREEN } from '../engine/constants.js';
 import { determinize, probAtLeast } from './belief.js';
-import { evaluate, positionRecord, recordValue, recordOpts } from './evaluate.js';
+import { evaluate, positionRecord, recordValue, recordOpts, turnsLeft } from './evaluate.js';
 import { settle, treasureExposure } from './policy.js';
 
 // цена открытого храма при выборе сокровища: только порядок выбора, позиции после взятия равны
@@ -273,6 +273,48 @@ export function conflictOdds(view, s, m) {
   return worst;
 }
 
+// Экономика восстания (Денис 12.11, партия с ботом: Универсальный на 3-м ходу восстал против жреца
+// у одинокого храма и отдал 3 красных за царство, где кроме этого храма ничего нет). Красные в руке
+// ценны: это защита от восстаний и будущие храмы. Если своих храмов рядом у атакующего не больше, чем
+// у защитника, победа требует красных из руки, и такое восстание бот начинает, только когда в царстве
+// есть что взять: не меньше REVOLT_PRIZE_TILES тайлов цвета лидера, монумент этого цвета или (для
+// торговца) сокровище. В конце партии (своих ходов осталось не больше REVOLT_FREE_TURNS) красные
+// уже не пригодятся, и правило не действует.
+export const REVOLT_PRIZE_TILES = 3;
+export const REVOLT_FREE_TURNS = 3;
+
+/**
+ * Стоит ли самому начинать восстание ходом m. Возвращает { ok, tiles, monument, treasures, needHand,
+ * late } или null, если ход не начинает восстания, где ходящий атакует.
+ */
+export function revoltWorth(s, m) {
+  if (m.type !== 'leader') return null;
+  const s1 = cloneState(s);
+  try {
+    applyMove(s1, m, fixedRng);
+  } catch (e) {
+    return null;
+  }
+  const r = s1.phase === 'revoltSupport' ? s1.ctx.revolt : null;
+  if (!r || r.att !== s.cur) return null;
+  const { N } = geom(s1);
+  const comps = components(s1);
+  const L = comps.lab[r.attPos], c = r.leaderColor;
+  const mons = new Map(s1.monuments.map((x) => [x.id, x]));
+  let tiles = 0, treasures = 0, monument = false;
+  for (let i = 0; i < N; i++) {
+    if (comps.lab[i] !== L) continue;
+    if (s1.tile[i] === c) tiles++;
+    if (s1.treasure[i]) treasures++;
+    const mm = s1.monument[i] >= 0 ? mons.get(s1.monument[i]) : null;
+    if (mm && (mm.c1 === c || mm.c2 === c)) monument = true;
+  }
+  const needHand = r.attBoard <= r.defBoard;
+  const late = turnsLeft(s1) <= REVOLT_FREE_TURNS;
+  const prize = tiles >= REVOLT_PRIZE_TILES || monument || (c === GREEN && treasures > 0);
+  return { ok: !needHand || prize || late, tiles, monument, treasures, needHand, late };
+}
+
 /**
  * Кандидаты, которые бот готов играть: отобранные candidateActions без
  * конфликтов с шансом ниже порога. Если объединение начинает несколько войн,
@@ -297,6 +339,7 @@ export function playableActions(view, s, P, odds, catInfo) {
     }
     const c = conflictOdds(view, s, m);
     if (c && odds) odds.set(m, c);
+    if (c && c.kind === 'revolt' && revoltWorth(s, m)?.ok === false) continue;
     const p = c ? (c.wars.length > 1 ? c.best : c.pWin) : 1;
     if (p >= threshold) ok.push(m);
   }
