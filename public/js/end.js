@@ -34,11 +34,27 @@ export function stopText(g) {
   return 'Организатор завершил партию досрочно. Итога нет, в статистику она не идет.';
 }
 
+// Крестик и Esc закрывают итог, как «Посмотреть поле» (Денис 12.11). Слушатель Esc один на модуль:
+// renderEnd зовется на каждом обновлении стола и только запоминает, какое окно закрывать.
+const X_BTN = '<button class="btn sm endx" id="eX" type="button" aria-label="Закрыть" title="Закрыть и посмотреть поле. Итог снова откроет кнопка «Итог партии»">×</button>';
+let escTarget = null;
+let escBound = false;
+function onEsc(e) {
+  if (e.key !== 'Escape' || !escTarget) return;
+  const { box, close } = escTarget;
+  if (!box.isConnected || box.hidden) return;
+  if (document.querySelector('.shot')) return; // сверху открыта «Картинка итога»
+  e.preventDefault();
+  close();
+}
+
 export function renderEnd(box, view, { act, go }) {
   const g = view.game;
   const stopped = Boolean(g?.stopped);
   const show = stopped || (view.status === 'over' && g?.result);
+  const opening = box.hidden || box.dataset.openCode !== view.code;
   box.hidden = !show;
+  escTarget = null;
   if (!show) return;
   // за итогом картина праздника (Денис 04.11), у досрочно завершенной партии обычное затемнение
   box.classList.toggle('feast', !stopped);
@@ -54,13 +70,20 @@ export function renderEnd(box, view, { act, go }) {
     return;
   }
   box.parentElement.querySelector('#gReopen')?.remove();
+  // окно начинается под шапкой партии (CSS), а на телефоне страница могла уехать вниз: при открытии наверх
+  box.dataset.openCode = view.code;
+  if (opening) globalThis.scrollTo?.(0, 0);
+  const close = () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); };
+  escTarget = { box, close };
+  if (!escBound) { escBound = true; globalThis.addEventListener?.('keydown', onEsc); }
+  const bindClose = () => ['#eX', '#eClose'].forEach((id) => box.querySelector(id).addEventListener('click', close));
   if (stopped) {
     box.innerHTML = `<div class="endcard" role="dialog" aria-label="Партия завершена">
-      <h2>Партия завершена</h2>
+      <div class="endhead"><h2>Партия завершена</h2>${X_BTN}</div>
       <p class="msub">${stopText(g)}</p>
       <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn primary" id="eHome">К столам</button></div>
     </div>`;
-    box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
+    bindClose();
     box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
     return;
   }
@@ -77,7 +100,7 @@ export function renderEnd(box, view, { act, go }) {
     </tr>`;
   }).join('');
   box.innerHTML = `<div class="endcard" role="dialog" aria-label="Итог партии">
-    <h2>Партия окончена</h2>
+    <div class="endhead"><h2>Партия окончена</h2>${X_BTN}</div>
     <p class="msub">${endReasonText(g.endReason)} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
     ${statsTable(view, list, seat)}
@@ -91,7 +114,7 @@ export function renderEnd(box, view, { act, go }) {
     </div>
     ${view.me != null && !view.next ? '<p class="mnote">В реванше тот же состав и правила, первым ходит последнее место.</p>' : ''}
   </div>`;
-  box.querySelector('#eClose').addEventListener('click', () => { box.dataset.closed = view.code; renderEnd(box, view, { act, go }); });
+  bindClose();
   box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
   box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
   // картинка итога (этап 4, 04.11): модуль грузится по нажатию, поле берется с экрана партии

@@ -20,12 +20,25 @@ test('шапка: меню «Вид», «Ещё», «Партия» есть и 
   }
   assert.match(game, /id="gTopMenu"/);
   // в тесноте прячутся слои, ссылки и название сайта, а кнопки меню появляются
-  for (const rule of ['.top.c1 #gViewBtn', '.top.c2 #gMoreBtn', '.top.c3 .brand', '.app.tight #gGameBtn']) assert.ok(css.includes(rule), rule);
+  for (const rule of ['.top.c1 #gViewBtn', '.top.c2 #gMoreBtn', '.top.c3 .brand']) assert.ok(css.includes(rule), rule);
 });
 
-test('нижняя панель в тесноте: пауза и сдаться уходят в шапку, отмена значком с подписью', () => {
-  assert.match(game, /class="pair stop"/);
-  assert.ok(css.includes('.app.tight .acts .pair.stop{display:none}'));
+test('«Пауза» и «Сдаться» на любом экране только в «Партия ▾» шапки (Денис 12.11)', () => {
+  // внизу их больше нет ни в тесноте, ни на широком экране, ни у зрителя
+  assert.doesNotMatch(game, /data-pause|data-stop|class="pair stop"/);
+  // кнопка меню видна всегда, когда есть что нажать, а не только в тесноте
+  assert.ok(css.includes('#gGameBtn:not(.none){display:inline-block}'));
+  assert.ok(!css.includes('.app.tight #gGameBtn'));
+  assert.match(game, /classList\.toggle\('none', !\(canPause \|\| label\)\)/);
+  // в меню те же действия и те же вопросы перед ними
+  assert.match(game, /data-tm="pause">Пауза<\/button>/);
+  assert.match(game, /data-tm="stop">\$\{s\.label\}<\/button>/);
+  // подсказки не отправляют искать паузу внизу
+  const texts = ['rules-text.js', 'tours-data.js'].map((f) => readFileSync(new URL(`../public/js/${f}`, import.meta.url), 'utf8')).join('\n');
+  assert.doesNotMatch(texts, /рядом с «Пауза»|«Пас» и «Пауза»|закончить начатую партию кнопкой внизу/);
+});
+
+test('нижняя панель в тесноте: отмена значком с подписью', () => {
   assert.match(game, /class="btn undo" data-now="undo" aria-label="Отменить действие"/);
   assert.ok(css.includes('.app.tight .acts .undo .lbl{display:none}'));
   // кнопки одного столбца одной ширины (Денис 11.11)

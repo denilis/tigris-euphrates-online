@@ -629,9 +629,15 @@ html{touch-action:manipulation}
 .mnote{flex-basis:100%;text-align:center;margin:0;font-size:11px;color:var(--muted)}
 
 /* ---------- итог партии ---------- */
-.endwrap{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(10,7,4,.72);backdrop-filter:blur(3px)}
-.endcard{width:min(760px,100%);max-height:100%;overflow:auto;background:linear-gradient(180deg,#2e2419,#1c1712);border:1px solid var(--gold2);border-radius:18px;padding:20px 22px 14px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
+/* шапка партии с меню остается над итогом (Денис 12.11): окно начинается под ней (--toph меряет fitLayout),
+   страница под окном не прокручивается, чтобы шапка не уехала */
+.endwrap{position:fixed;inset:0;top:var(--toph,0px);z-index:60;display:grid;place-items:center;padding:16px;background:rgba(10,7,4,.72);backdrop-filter:blur(3px)}
+.app:has(> .endwrap:not([hidden])) > .top{position:relative;z-index:61}
+html:has(.endwrap:not([hidden])){overflow:hidden}
+.endcard{width:min(760px,100%);max-height:100%;overflow:auto;overscroll-behavior:contain;background:linear-gradient(180deg,#2e2419,#1c1712);border:1px solid var(--gold2);border-radius:18px;padding:20px 22px 14px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
 .endcard h2{font-family:Cinzel,Georgia,serif;color:var(--gold);margin:0 0 4px;font-size:24px}
+.endhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.endx{flex:none;min-width:34px;margin:-4px -6px 0 0;padding:0 10px;font-size:18px;line-height:1}
 .endcard .mfoot{position:sticky;bottom:-14px;margin:14px -22px -14px;padding:12px 22px 14px;background:#1c1712}
 .stathead{margin:16px 0 6px;font-size:14px;font-weight:600;color:var(--gold)}
 .statwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
@@ -1254,16 +1260,16 @@ html{touch-action:manipulation}
 .top.c2 .nav .nx{display:none}
 .top.c2 #gMoreBtn{display:inline-block}
 .top.c3 .brand{display:none}
-.app.tight #gGameBtn:not(.none){display:inline-block}
+/* «Партия ▾» с паузой и сдаться видна на любом экране (Денис 12.11), внизу этих кнопок нет */
+#gGameBtn:not(.none){display:inline-block}
 .topmenu .tmlist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .topmenu .tmlist .btn{min-height:38px;justify-content:flex-start;font-size:13.5px}
 /* нижняя панель в тесноте (схема Андрея, одобрена 11.11): «Завершить ход» и отмена значком строкой,
-   под ними «Сбросить тайлы» и «Пас»; пауза и сдаться в «Партия ▾» */
+   под ними «Сбросить тайлы» и «Пас» */
 .btn .ico{display:none;flex:none}
 /* сеткой в два столбца: кнопки одного столбца одной ширины (Денис 11.11: «одного размера») */
 .app.tight .acts{display:grid;grid-template-columns:auto auto;gap:4px;align-items:stretch;align-self:flex-end}
 .app.tight .acts .pair{display:contents}
-.app.tight .acts .pair.stop{display:none}
 .app.tight .acts .pair .btn{min-height:30px;max-width:none;padding:0 10px;font-size:12.5px;line-height:1.1;white-space:nowrap}
 .app.tight .acts .undo{padding:0 8px}
 .app.tight .acts .undo .lbl{display:none}

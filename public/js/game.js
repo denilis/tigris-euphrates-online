@@ -572,8 +572,8 @@ function draw() {
 
 /**
  * Раскладка под окно (11.11, ноутбук Андрея 1280x690: кнопки внизу обрезались, шапка шире экрана).
- * tight: нижняя панель уже 960 px (по содержимому), кнопки хода парой строкой, отмена значком,
- * «Пауза» и «Сдаться» уходят в «Партия ▾» в шапке. Шапка: пока не помещается, по шагу прячет
+ * tight: нижняя панель уже 960 px (по содержимому), кнопки хода парой строкой, отмена значком
+ * («Пауза» и «Сдаться» с 12.11 всегда в «Партия ▾»). Шапка: пока не помещается, по шагу прячет
  * c1 слои поля в «Вид ▾», c2 «Статистику» и «Мои столы» в «Ещё ▾», c3 название сайта.
  * На телефоне (до 900 px) шапка переносится строками, ее сжимает CSS.
  */
@@ -589,6 +589,7 @@ function fitLayout(root) {
   fitSide();
   const top = app.querySelector('.top');
   top.classList.remove('c1', 'c2', 'c3');
+  app.style.setProperty('--toph', top.offsetHeight + 'px'); // окно итога встает под шапку (12.11)
   if (!desk) return;
   for (const c of ['c1', 'c2', 'c3']) {
     if (top.scrollWidth <= top.clientWidth + 1) break;
@@ -596,7 +597,7 @@ function fitLayout(root) {
   }
 }
 
-/** Вопросы перед паузой и концом партии: одни и те же для кнопок внизу и меню «Партия ▾». */
+/** Вопросы перед паузой и концом партии из меню «Партия ▾». */
 function askPause() {
   if (confirm('Поставить партию на паузу? Ходы и часы встанут. Продолжим, когда все игроки нажмут «Я на месте».')) ctl.act({ action: 'pause' });
 }
@@ -606,8 +607,8 @@ function askStop(label) {
 }
 
 /**
- * Меню шапки «Вид ▾», «Ещё ▾», «Партия ▾» (11.11): видны, только когда шапке или нижней панели
- * тесно. Пункты повторяют настоящие кнопки и нажимают их, поэтому логика одна.
+ * Меню шапки «Вид ▾», «Ещё ▾», «Партия ▾» (11.11): «Вид» и «Ещё» видны, только когда шапке тесно,
+ * их пункты повторяют настоящие кнопки и нажимают их. «Партия» (пауза, сдаться) видна всегда (12.11).
  */
 function topMenuHtml(root, kind) {
   const head = (t) => `<div class="sfxhead"><b>${t}</b><button class="sfxclose" data-tm="close" aria-label="Закрыть">&times;</button></div>`;
@@ -990,7 +991,7 @@ function onNow(a) {
 const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
 
 /**
- * Кнопки хода внизу, рядом с «Пауза» (Денис 06.11 и 08.11; раньше были на панели «Сейчас»):
+ * Кнопки хода внизу (Денис 06.11 и 08.11; раньше были на панели «Сейчас»):
  * «Завершить ход» в окне подтверждения и «Отменить действие» там, где отмена возможна. В конфликте
  * отмену нападения дает его окно; пока в руке выбран тайл или идет сброс, рядом своя «Отмена».
  */
@@ -1016,18 +1017,12 @@ function drawHand(d) {
   const label = view.isHost && !g.over && !g.stopped ? stopLabel(view.seats, view.me) : null;
   // пауза (просьба Дениса 03.11): любой человек за столом, если не успели доиграть
   const canPause = !ctl.lesson && view.seats.some((s) => s.id === view.me && s.kind === 'human') && !g.over && !g.stopped && !g.paused;
-  const stop = (canPause ? '<button class="btn" data-pause title="Не успели доиграть: партия встанет, вернуться к ней можно позже">Пауза</button>' : '')
-    + (label ? `<button class="btn" data-stop>${label}</button>` : '');
-  // те же действия в меню «Партия ▾» шапки, когда внизу тесно (11.11)
+  // «Пауза» и «Сдаться» на любом экране в меню «Партия ▾» шапки (Денис 12.11; с 11.11 туда уходили
+  // только в тесноте), внизу остаются кнопки хода и руки
   ui.stopActs = { pause: canPause, label };
-  ctl.root.querySelector('#gGameBtn').classList.toggle('none', !stop || myP < 0);
-  const bindStop = () => {
-    el.querySelector('[data-stop]')?.addEventListener('click', () => askStop(label));
-    el.querySelector('[data-pause]')?.addEventListener('click', askPause);
-  };
+  ctl.root.querySelector('#gGameBtn').classList.toggle('none', !(canPause || label));
   if (myP < 0) {
-    el.innerHTML = `<div class="hint">Вы смотрите партию со стороны.</div><div class="hrow"><div class="acts">${stop ? `<div class="pair">${stop}</div>` : ''}</div></div>`;
-    bindStop();
+    el.innerHTML = '<div class="hint">Вы смотрите партию со стороны.</div>';
     return;
   }
   const acting = decides && g.phase === 'action' && !ui.confirmPass;
@@ -1039,7 +1034,7 @@ function drawHand(d) {
     + (ta.undo || always ? `<button class="btn undo" data-now="undo" aria-label="Отменить действие"${ta.undo ? ' title="Отменить действие"' : ` disabled title="${UNDO_WHEN}"`}><span class="lbl">Отменить действие</span>${UNDO_ICON}</button>` : '');
   const pl = g.players[myP];
   const has = (type, c) => legal.some((m) => m.type === type && (c == null || m.color === c));
-  // кнопки ряда по парам (08.11): кнопки хода, партия (пауза, завершить), рука (сброс, пас); на тесном экране
+  // кнопки ряда по парам (08.11): кнопки хода и рука (сброс, пас); на тесном экране
   // пара встает столбиком, иначе ряд вылезал за край панели
   const handActs = (acting && has('discard') && !ui.discard ? '<button class="btn" data-hand="discard">Сбросить тайлы</button>' : '')
     + (acting && ui.discard ? `<button class="btn primary" data-now="discardYes" ${ui.discard.size ? '' : 'disabled'}>${ui.discard.size ? `Сбросить ${ui.discard.size}` : 'Выберите тайлы'}</button><button class="btn" data-now="cancel">Отмена</button>` : '')
@@ -1079,11 +1074,9 @@ function drawHand(d) {
       <div class="nudge" id="gNudge" role="status" hidden><b>Ваш ход!</b><i data-clock="over"></i></div>
       <div class="acts">
         ${turn ? `<div class="pair turnacts">${turn}</div>` : ''}
-        ${stop ? `<div class="pair stop">${stop}</div>` : ''}
         ${handActs ? `<div class="pair">${handActs}</div>` : ''}
       </div>
     </div>`;
-  bindStop();
   updateClocks(); // перерисовка не прячет плашку и не оставляет пустые часы до следующего тика
   el.querySelectorAll('[data-tile]').forEach((b) => b.addEventListener('click', () => {
     if (!acting) return;
