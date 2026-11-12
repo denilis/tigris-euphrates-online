@@ -100,13 +100,34 @@ function makeBot(t, id) {
   return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
 
+const nameKey = (seat) => String(seat.name).trim().toLowerCase();
+
 /** Посадить человека с его героем: бот уступает и берет другого, героя другого человека не отбираем. */
 function giveOwnHero(t, seat) {
-  const hero = OWN_HEROES.get(String(seat.name).trim().toLowerCase());
+  const hero = OWN_HEROES.get(nameKey(seat));
   const holder = t.seats.find((s) => s.hero === hero);
   if (!hero || holder?.kind === 'human') return;
   seat.hero = hero;
   if (holder) holder.hero = botHero(t);
+}
+
+// бот с характером человека берет его героя, если самого человека за столом нет (Денис 12.11):
+// бот Андрей лук, бот Влад лев, бот Денис кувшин. Героя человека не отбираем; у другого бота
+// забираем обменом, второй бот того же стиля остается при своем.
+const STYLE_PERSON = { andrey: 'андрей', vlad: 'влад', denis: 'денис' };
+function botTakesOwn(t, bot) {
+  const person = STYLE_PERSON[bot.bot.style];
+  const hero = person && OWN_HEROES.get(person);
+  if (!hero || bot.hero === hero) return;
+  if (t.seats.some((s) => s.kind === 'human' && s.userId && nameKey(s) === person)) return;
+  const holder = t.seats.find((s) => s.hero === hero);
+  if (holder && (holder.kind === 'human' || STYLE_PERSON[holder.bot.style] === person)) return;
+  if (holder) holder.hero = bot.hero;
+  bot.hero = hero;
+}
+/** Человек встал из-за стола: бот его стиля забирает освободившегося героя. */
+function afterLeave(t, person) {
+  for (const s of t.seats) if (s.kind === 'bot' && STYLE_PERSON[s.bot.style] === person) botTakesOwn(t, s);
 }
 
 const DAY_FORMAT = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -147,7 +168,9 @@ export function sit(t, user, seatId, now) {
 export function leave(t, userId, now) {
   needLobby(t);
   const seat = needSeated(t, userId);
+  const person = nameKey(seat);
   Object.assign(seat, emptyHuman(seat.id));
+  afterLeave(t, person);
   // ушёл хост: стол переходит к следующему сидящему человеку
   if (userId === t.hostUserId) {
     // кого позвали, того может не быть на сайте: стол остался бы без хозяина под рукой
@@ -184,7 +207,9 @@ export function unseat(t, hostId, seatId, now) {
   const seat = seatById(t, seatId);
   if (seat.kind !== 'human' || !seat.userId) fail('seat-empty', 'На этом месте никого нет', 409);
   if (seat.userId === hostId) fail('is-host', 'Себя можно убрать кнопкой «Встать»', 409);
+  const person = nameKey(seat);
   Object.assign(seat, emptyHuman(seat.id));
+  afterLeave(t, person);
   touch(t, now);
 }
 
@@ -247,6 +272,7 @@ export function setBot(t, userId, seatId, settings, now) {
     if (!Object.hasOwn(BOT_CHECKS, k) || !BOT_CHECKS[k](v)) fail('bad-option', `Недопустимая настройка бота ${k}`);
   }
   Object.assign(seat.bot, settings);
+  if (Object.hasOwn(settings, 'style')) botTakesOwn(t, seat);
   nameBots(t);
   touch(t, now);
 }
