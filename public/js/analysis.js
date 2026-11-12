@@ -2,7 +2,7 @@
 // Готовый разбор берется с сервера; если его нет, кнопка «Разобрать партию» считает его в фоне
 // браузера (analysis-worker.js) и сохраняет на сервере, чтобы второй раз не считать.
 import { api } from './api.js';
-import { esc } from './util.js';
+import { esc, turnLabel } from './util.js';
 
 const num = (v) => String(v).replace('.', ',');
 
@@ -17,7 +17,7 @@ function render(el, view, a, go) {
         <div class="anahead"><b>${esc(seat(id)?.name || 'Игрок')}</b><span>Точность ${p.accuracy ?? 0}%</span></div>
         <small>точных ${p.exact} из ${p.actions}</small>
         ${p.mistakes.length ? `<ol>${p.mistakes.map((m) => `<li>
-          <div class="anam"><b>Ход ${m.turn}, потеря ${num(m.loss)}</b><button class="btn sm" data-frame="${m.k}" type="button">на поле</button></div>
+          <div class="anam"><b>${turnLabel(m.turn, view.game.order?.length)}, потеря ${num(m.loss)}</b><button class="btn sm" data-frame="${m.k}" type="button">на поле</button></div>
           <div>Сыграно: ${esc(m.played)}</div><div class="anabest">Лучше: ${esc(m.best)}</div>
         </li>`).join('')}</ol>` : '<p class="mnote">Ошибок нет.</p>'}
       </div>`;

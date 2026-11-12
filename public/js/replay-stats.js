@@ -2,7 +2,7 @@
 // у каждого игрока (график на всю партию, будущее бледно, метка на текущем кадре; наведение
 // показывает значения, щелчок переходит на кадр), бои с начала партии и монументы под контролем
 // на этот момент. Считают чистые функции replay-core.js.
-import { HEX, COLNAME, SCORE_ORDER, esc, finalScore } from './util.js';
+import { HEX, COLNAME, SCORE_ORDER, esc, finalScore, roundOf, turnLabel } from './util.js';
 import { battlesAt, monumentHolds, wonderHolder } from './replay-core.js';
 
 // линии на пергаменте: игровые цвета, синий и зеленый чуть разведены, иначе на графике сливаются
@@ -39,10 +39,16 @@ export function mountStats(el, data, boards, { name, go }) {
   const X = (j) => X0 + (N ? (j * (X1 - X0)) / N : 0);
   const Y = (v) => Y1 - (v * (Y1 - Y0)) / M;
   const ticks = [];
-  data.frames.forEach((f, j) => { if (f.action === 1 && f.turn % 10 === 0) ticks.push([j + 1, f.turn]); });
+  // подписи шкалы по кругам (Денис 12.11): начало каждого третьего круга
+  data.frames.forEach((f, j) => {
+    const r = roundOf(f.turn, np);
+    if (f.action === 1 && r.k === 1 && r.round % 3 === 0) ticks.push([j + 1, `к${r.round}`]);
+  });
   const frameName = (j) => {
     const f = j ? data.frames[j - 1] : null;
-    return f ? `Ход ${f.turn}, действие ${f.action}` : 'Начало партии';
+    if (!f) return 'Начало партии';
+    const t = turnLabel(f.turn, np);
+    return `${t[0].toUpperCase()}${t.slice(1)}, действие ${f.action}`;
   };
   let k = 0;
 

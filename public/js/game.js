@@ -19,7 +19,7 @@ import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
-  unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName,
+  unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName, roundOf, turnLabel,
 } from './util.js';
 
 // состояние интерфейса между перерисовками (не уходит на сервер)
@@ -82,7 +82,7 @@ const SKELETON = `<div class="app" id="game">
     <div class="sfxmenu" id="gSfxMenu" role="dialog" aria-label="Какие звуки играть" hidden></div>
     <div class="sfxmenu topmenu" id="gTopMenu" role="dialog" hidden></div>
     <div class="sfxmenu sidemenu" id="gSideMenu" role="dialog" aria-label="Настройка панели" hidden></div>
-    <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span>ход <b id="gTurn"></b></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
+    <div class="meta"><span id="gBagBox">в мешке <b id="gBag"></b></span><span id="gTurnBox"></span><span id="gTrBox"><span class="trl">сокровищ на поле</span><span class="trs">сокровищ</span><i class="tri" aria-label="сокровищ на поле"></i> <b id="gTr"></b></span></div>
     <nav class="nav"><button class="navbtn tmb none" id="gGameBtn" data-menu="game" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu" title="Пауза и конец партии">Партия &#9662;</button><button class="navbtn" id="gLook" title="Вид поля, меняется только у вас"></button><a class="navbtn" href="#/rules">Правила</a><button class="navbtn tmb" id="gMoreBtn" data-menu="more" aria-haspopup="true" aria-expanded="false" aria-controls="gTopMenu">Ещё &#9662;</button><a class="navbtn nx" href="#/stats">Статистика</a><a class="navbtn nx" href="#/tables">Мои столы</a>${fsButton('navbtn')}</nav>
   </header>
   <main class="boardwrap"><svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Поле"></svg></main>
@@ -532,7 +532,9 @@ function draw() {
   // мешок только процентом (просьба Дениса 04.11): число тайлов не показываем
   root.querySelector('#gBag').textContent = g.bagPct + '%';
   root.querySelector('#gBagBox').title = 'Сколько тайлов осталось в мешке, в процентах от мешка после выкладки стартовых храмов';
-  root.querySelector('#gTurn').textContent = g.turn;
+  // круг и ход в нем (Денис 12.11), а не сквозной номер хода каждого игрока
+  const rt = roundOf(g.turn, g.order.length);
+  root.querySelector('#gTurnBox').innerHTML = `круг <b id="gTurn">${rt.round}</b>${rt.n > 1 ? `, ход <b>${rt.k}</b> из ${rt.n}` : ''}`;
   // сокровища на поле (просьба Дениса 06.11): за одно взятие до конца партии число красное
   const tr = treasuresOn(g), trB = root.querySelector('#gTr');
   trB.textContent = tr;
@@ -1197,7 +1199,7 @@ function drawLog({ g, seat }) {
   const name = (id) => seat(id)?.name || 'Бот';
   ctl.root.querySelector('#gLog').innerHTML = logLines(g.log, name).reverse().slice(0, 120)
     .filter((l) => l.parts.length || l.pts.length || l.wars.length)
-    .map((l) => `<li data-cell="${l.cell ?? ''}"><i>${l.turn}</i><div class="lbody">${lineHTML(l, name)}</div></li>`).join('');
+    .map((l) => `<li data-cell="${l.cell ?? ''}"><i title="${turnLabel(l.turn, g.order.length)}">${roundOf(l.turn, g.order.length).round}</i><div class="lbody">${lineHTML(l, name)}</div></li>`).join('');
 }
 
 export { plural };

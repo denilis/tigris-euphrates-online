@@ -1,7 +1,7 @@
 // Ход боя (просьба Дениса 29.10, как на BGA): после войны и восстания видно, сколько тайлов
 // у каждой стороны было на поле и сколько выложено из руки, итог и победитель. Особенно нужно,
 // когда отбивается бот: он отвечает сразу, без окна, и иначе его поддержку не увидеть.
-import { HEX, COLNAME, COLDAT, LEADER, LEADERACC, tileImg, tokenImg, esc, plural } from './util.js';
+import { HEX, COLNAME, COLDAT, LEADER, LEADERACC, tileImg, tokenImg, esc, plural, turnLabel } from './util.js';
 
 /** Бои в журнале начиная с записи from: { i, e, points, removed }. */
 export function battlesIn(log, from = 0) {
@@ -55,7 +55,7 @@ export function battleCard({ e, points, removed }, view) {
   const tie = e.attTotal === e.defTotal ? 'Ничья, побеждает защитник. ' : '';
   const title = revolt ? `Восстание: ${LEADER[lc]}` : `Война за ${COLNAME[lc]}`;
   return `<div class="bcard">
-    <div class="bhead"><i style="background:${HEX[lc]}"></i><b>${title}</b><small>ход ${e.turn}</small></div>
+    <div class="bhead"><i style="background:${HEX[lc]}"></i><b>${title}</b><small>${turnLabel(e.turn, view?.game?.order?.length)}</small></div>
     <div class="sides">
       ${side(e.att, 'атака', 'att', e.attBoard, e.attN, e.attTotal, attFrom)}
       ${side(e.def, 'защита', 'def', e.defBoard, e.defN, e.defTotal, defFrom)}

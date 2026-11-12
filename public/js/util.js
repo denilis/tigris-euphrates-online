@@ -83,6 +83,21 @@ export const momentKey = (view) => {
   return `${view.code}:${g.turn}:${g.actionNo}:${g.phase}:${g.toMove}:${g.logEpoch}`;
 };
 
+/**
+ * Круг и ход в круге (Денис 12.11: «ход считать кругами, круг это когда все сходили»). turn в
+ * движке растет с каждым игроком с 1; np игроков. { round, k, n }: круг, ход в нем, ходов в круге.
+ */
+export function roundOf(turn, np) {
+  const n = Math.max(1, np || 1), t = Math.max(1, turn || 1);
+  return { round: Math.ceil(t / n), k: ((t - 1) % n) + 1, n };
+}
+
+/** «круг 2, ход 1 из 4» (у одного игрока просто «круг 2»). */
+export function turnLabel(turn, np) {
+  const { round, k, n } = roundOf(turn, np);
+  return n > 1 ? `круг ${round}, ход ${k} из ${n}` : `круг ${round}`;
+}
+
 export function plural(n, c) {
   const f = PLURAL[c], m10 = n % 10, m100 = n % 100;
   return m10 === 1 && m100 !== 11 ? f[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? f[1] : f[2];
