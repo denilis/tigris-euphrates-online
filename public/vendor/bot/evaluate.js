@@ -47,7 +47,17 @@ export const DEFAULT_WEIGHTS = {
   bPass: 0, // пас
   oppMax: 0.6, // вес сильнейшего соперника
   oppMean: 0.4, // вес среднего соперника
+  // Характер (Денис 11.11): вкус игрока, а не сила позиции, поэтому идет только в свою оценку
+  // (taste), в силу соперников не входит. Знак: штрафы положительные, guest/host со своим знаком.
+  crowd: 1.2, // дебют: свой лидер рядом с чужим (люди расходятся по углам, боты садились вплотную)
+  guest: 0, // свой лидер в чужом царстве (без монумента своего цвета): Влад любит, Денис и Андрей нет
+  host: 0, // чужой лидер в своем царстве: минус — хочет выбить
+  fragile: 0, // царство рвется одной катастрофой: сколько тайлов она отрежет от лидера
+  thin: 0, // лидер держится за один храм, который можно накрыть катастрофой
 };
+
+/** Нужны ли записи позиции признаки формы царств (дорогие, считаются только для стиля с ними). */
+export const recordOpts = (w) => ({ shape: Boolean(w && (w.fragile || w.thin)) });
 
 /**
  * Прогноз итогового счёта: очки плюс ожидаемые будущие очки по цветам,
@@ -128,7 +138,12 @@ const P_TRADER_ONE = 15;
 const P_LEADERS = 16;
 const L_ON = 0, L_SIZE = 1, L_MON = 2, L_SUP = 3, L_TEM = 4, L_EXP = 5, L_HOLE = 6, L_ATT = 7;
 const L_STRIDE = 8;
-export const PLAYER_SLOTS = P_LEADERS + 4 * L_STRIDE;
+// признаки характера в конце записи: старые файлы самоигры (короче) читаются с нулями на их месте
+const P_X = P_LEADERS + 4 * L_STRIDE;
+export const X_CROWD = P_X, X_GUEST = P_X + 1, X_HOST = P_X + 2, X_FRAGILE = P_X + 3, X_THIN = P_X + 4;
+export const PLAYER_SLOTS = P_X + 5;
+const CROWD_R = 4; // дальше 4 клеток по прямым чужой лидер уже не теснит
+const OPENING_ROUNDS = 4; // теснота в дебюте весит полностью в 1-м круге и сходит на нет к 5-му
 const SIZE_CAP = 2.5; // множитель роста царства: 1 на 9 тайлах, 2,5 на 32 и больше
 
 /** Квадраты 2x2 с тремя тайлами одного цвета и пустой четвёртой клеткой, куда этот цвет можно положить. */
@@ -207,7 +222,7 @@ function nearGroups(s, comps) {
  * Числа, из которых складывается оценка: на игрока — очки, рука, катастрофы и
  * по каждому лидеру его королевство, опора, угрозы. Не зависят от весов.
  */
-export function positionRecord(s) {
+export function positionRecord(s, opts = {}) {
   const comps = components(s);
   const info = kingdomInfo(s, comps);
   const near = nearGroups(s, comps);
@@ -292,7 +307,151 @@ export function positionRecord(s) {
     }
     rec.players.push(r);
   }
+  characterFeatures(s, comps, info, monById, rec, opts);
   return rec;
+}
+
+/** Хозяин царства: у кого больше лидеров, при равенстве у кого больше тайлов их цветов; иначе -1. */
+function homeOf(k) {
+  const n = new Map(), sup = new Map();
+  for (const l of k.leaders) {
+    n.set(l.p, (n.get(l.p) || 0) + 1);
+    sup.set(l.p, (sup.get(l.p) || 0) + k.tiles[l.c]);
+  }
+  if (n.size < 2) return n.size ? k.leaders[0].p : -1;
+  let best = -1, tie = false;
+  for (const [p, c] of n) {
+    if (best < 0) { best = p; continue; }
+    const d = c - n.get(best) || sup.get(p) - sup.get(best);
+    if (d > 0) { best = p; tie = false; } else if (d === 0) tie = true;
+  }
+  return tie ? -1 : best;
+}
+
+/**
+ * Признаки характера (Денис 11.11): теснота дебюта, лидеры в гостях и чужие у себя, хрупкость
+ * царств перед катастрофой и лидеры на одном храме. Последние два дорогие и считаются по opts.shape.
+ */
+function characterFeatures(s, comps, info, monById, rec, opts) {
+  const { W } = geom(s);
+  const opening = Math.max(0, Math.min(1, 1 - (s.turn - 1) / (OPENING_ROUNDS * s.np)));
+  if (opening > 0) {
+    for (let q = 0; q < s.np; q++) {
+      let sum = 0;
+      for (const a of s.players[q].leaders) {
+        if (a < 0) continue;
+        let close = 0;
+        for (let o = 0; o < s.np; o++) {
+          if (o === q) continue;
+          for (const b of s.players[o].leaders) {
+            if (b < 0) continue;
+            const d = Math.abs((a % W) - (b % W)) + Math.abs(Math.floor(a / W) - Math.floor(b / W));
+            const c = Math.max(0, CROWD_R + 1 - d) / CROWD_R;
+            if (c > close) close = c;
+          }
+        }
+        sum += close;
+      }
+      rec.players[q][X_CROWD] = opening * sum;
+    }
+  }
+  for (const k of info) {
+    if (k.leaders.length < 2) continue;
+    const home = homeOf(k);
+    if (home < 0) continue;
+    for (const l of k.leaders) {
+      if (l.p === home) continue;
+      // лидер пришел к монументу своего цвета: это цель, а не «в гостях» (Денис ставит цвет к пирамиде)
+      if (k.monuments.some((id) => { const m = monById.get(id); return m && (m.c1 === l.c || m.c2 === l.c); })) continue;
+      rec.players[l.p][X_GUEST] += 1;
+      rec.players[home][X_HOST] += 1;
+    }
+  }
+  if (opts.shape) {
+    for (let q = 0; q < s.np; q++) {
+      let thin = 0, frag = 0;
+      for (const at of s.players[q].leaders) {
+        if (at < 0) continue;
+        thin += thinLeader(s, at);
+        frag += Math.min(cutDamage(s, comps, at), 8) / 4;
+      }
+      rec.players[q][X_THIN] = thin;
+      rec.players[q][X_FRAGILE] = frag;
+    }
+  }
+}
+
+/** 1, если лидер держится за единственный храм и тот можно накрыть катастрофой. */
+function thinLeader(s, at) {
+  const { NB } = geom(s);
+  let red = -1, n = 0;
+  for (const j of NB[at]) if (s.tile[j] === RED) { n++; red = j; }
+  return n === 1 && !s.treasure[red] && s.building[red] < 0 ? 1 : 0;
+}
+
+const canCatastrophe = (s, i) => s.leader[i] < 0 && s.tile[i] >= 0 && s.tile[i] <= 3 && !s.treasure[i] && s.building[i] < 0;
+
+/**
+ * Сколько клеток царства одна катастрофа отрежет от лидера в клетке at (худшая клетка): точки
+ * сочленения в обходе от лидера (Тарьян), отрезанное — поддеревья детей с low >= disc.
+ * Царство в две линии таких точек не имеет (Денис: «как минимум две параллельных линии»).
+ */
+// Буферы обхода на модуль (12.11): раньше на каждого лидера в каждой оценке заводились 4 массива на
+// все поле и стек из массивов, и оценка с формой царства шла в 1,8 раза дольше обычной (бот с этими
+// весами успевал перебрать меньше ходов за то же время). Клетка считается пройденной, если ее
+// отметка равна номеру обхода, поэтому массивы не надо чистить. Ответы те же (сверка на 998 позициях).
+let CUT = null;
+function cutBuffers(N) {
+  if (!CUT || CUT.N !== N) {
+    CUT = { N, gen: 0, seen: new Int32Array(N), disc: new Int16Array(N), low: new Int16Array(N), size: new Int16Array(N),
+      dmg: new Int16Array(N), sv: new Int16Array(N), sp: new Int16Array(N), si: new Int8Array(N) };
+  }
+  if (++CUT.gen > 2e9) {
+    CUT.gen = 1;
+    CUT.seen.fill(0);
+  }
+  return CUT;
+}
+
+function cutDamage(s, comps, at) {
+  const { N, NB } = geom(s);
+  const lab = comps.lab, L = lab[at];
+  const B = cutBuffers(N);
+  const { seen, disc, low, size, dmg, sv, sp, si } = B, gen = B.gen;
+  // стек обхода: клетка, откуда пришли, номер следующего соседа
+  let top = 0;
+  sv[0] = at; sp[0] = -1; si[0] = 0;
+  seen[at] = gen; disc[at] = low[at] = 0; size[at] = 1; dmg[at] = 0;
+  let time = 1, worst = 0;
+  while (top >= 0) {
+    const v = sv[top], parent = sp[top];
+    const nb = NB[v];
+    if (si[top] < nb.length) {
+      const u = nb[si[top]++];
+      if (lab[u] !== L || u === parent) continue;
+      if (seen[u] !== gen) {
+        seen[u] = gen; disc[u] = low[u] = time++; size[u] = 1; dmg[u] = 0;
+        top++;
+        sv[top] = u; sp[top] = v; si[top] = 0;
+      } else if (disc[u] < low[v]) low[v] = disc[u];
+      continue;
+    }
+    top--;
+    if (parent < 0) continue;
+    if (low[v] < low[parent]) low[parent] = low[v];
+    size[parent] += size[v];
+    if (parent !== at) {
+      if (low[v] >= disc[parent]) dmg[parent] += size[v];
+      if (dmg[parent] > worst && canCatastrophe(s, parent)) worst = dmg[parent];
+    }
+  }
+  return worst;
+}
+
+/** Вкус игрока по признакам характера: прибавка к своей оценке. */
+function taste(r, w) {
+  return -(w.crowd || 0) * r[X_CROWD] + (w.guest || 0) * r[X_GUEST] + (w.host || 0) * r[X_HOST]
+    - (w.fragile || 0) * r[X_FRAGILE] - (w.thin || 0) * r[X_THIN];
 }
 
 // --- Сложение признаков с весами
@@ -366,12 +525,13 @@ export function recordValue(rec, p, w = DEFAULT_WEIGHTS, opts = {}) {
     n++;
   }
   const oppW = opts.oppWeight ?? 1;
-  return mineS - oppW * (w.oppMax * max + w.oppMean * (sum / n));
+  return mineS - oppW * (w.oppMax * max + w.oppMean * (sum / n)) + taste(rec.players[p], w);
 }
 
 /** Оценка позиции глазами игрока p. opts: { weights, ignoreThreats, oppWeight }. */
 export function evaluate(s, p, opts = {}) {
-  return recordValue(positionRecord(s), p, opts.weights || DEFAULT_WEIGHTS, opts);
+  const w = opts.weights || DEFAULT_WEIGHTS;
+  return recordValue(positionRecord(s, recordOpts(w)), p, w, opts);
 }
 
 // сравнение векторов «у соперника лучше» > 0

@@ -16,7 +16,7 @@
 import { legalMoves, applyMove, cloneState, monumentOptions, components } from '../engine/engine.js';
 import { geom, RED } from '../engine/constants.js';
 import { determinize, probAtLeast } from './belief.js';
-import { evaluate, positionRecord, recordValue } from './evaluate.js';
+import { evaluate, positionRecord, recordValue, recordOpts } from './evaluate.js';
 import { settle, treasureExposure } from './policy.js';
 
 // цена открытого храма при выборе сокровища: только порядок выбора, позиции после взятия равны
@@ -38,8 +38,9 @@ const FIRST_STEP_SHARE = 0.5;
 
 export function params(settings) {
   const st = clamp(settings.strength ?? 50, 0, 100) / 100;
-  const risk = clamp(settings.risk ?? 50, 0, 100);
   const style = styleParams(settings);
+  // характер сдвигает риск (Денис 11.11): Андрей тянет с конфликтом, Влад нападает охотнее
+  const risk = clamp((settings.risk ?? 50) + (style.riskShift || 0), 0, 100);
   return {
     // settings.weights — веса поверх стиля (подбор весов в самоигре, sim/tune.js)
     weights: settings.weights ? { ...style.weights, ...settings.weights } : style.weights,
@@ -76,6 +77,11 @@ export function params(settings) {
     // Порог шанса победы, чтобы самому начать конфликт (ТЗ: осторожный от 80%,
     // азартный от 35-40%).
     attackThreshold: 0.8 - 0.45 * (risk / 100),
+    // Характер по раундам (Андрей 11.11, «строитель, потом каток»): в первые peaceRounds раундов
+    // конфликт только при почти верной победе; после них вкус к войне растет на lateWar за LATE_SPAN
+    // раундов. У стилей без этих полей все как было.
+    peaceRounds: settings.peaceRounds ?? style.peaceRounds ?? 0,
+    lateWar: settings.lateWar ?? style.lateWar ?? 0,
     // Вторую катастрофу держать в запасе до конца партии (галочка в панели).
     catReserve: settings.catReserve === true || settings.catReserve === 'true',
     // Перестановка лидера, уже стоящего на поле, и снятие лидера тратят
@@ -277,6 +283,7 @@ export function conflictOdds(view, s, m) {
 export function playableActions(view, s, P, odds, catInfo) {
   const cands = candidateActions(s);
   const ok = [];
+  const threshold = conflictThreshold(s, P);
   for (const m of cands) {
     // катастрофы — по правилам bot/catastrophe.js; вторым действием атака
     // имеет смысл, только если сама выселяет лидера соперника
@@ -291,7 +298,7 @@ export function playableActions(view, s, P, odds, catInfo) {
     const c = conflictOdds(view, s, m);
     if (c && odds) odds.set(m, c);
     const p = c ? (c.wars.length > 1 ? c.best : c.pWin) : 1;
-    if (p >= P.attackThreshold) ok.push(m);
+    if (p >= threshold) ok.push(m);
   }
   // защитные катастрофы на пустые клетки: закрыть объединение или чужой монумент
   if (s.phase === 'action') {
@@ -371,19 +378,37 @@ export function moveFlags(s, m) {
   return f;
 }
 
-/** Цена хода по его типу: перестановка и сброс стоят, вкус стиля прибавляет ценность. */
-export function flagCost(flags, P) {
+// Мирные раунды: порог шанса, чтобы самому начать конфликт (у Андрея на BGA 3 атаки в раундах 1-6
+// за 57 партий); за сколько раундов после них поздний вкус к войне доходит до полного.
+export const PEACE_THRESHOLD = 0.95;
+export const LATE_SPAN = 5;
+const roundOf = (s) => Math.ceil(s.turn / s.np);
+
+/** Порог шанса для своего конфликта: в мирные раунды стиля почти верная победа, потом обычный. */
+export function conflictThreshold(s, P) {
+  return P.peaceRounds && roundOf(s) <= P.peaceRounds ? Math.max(P.attackThreshold, PEACE_THRESHOLD) : P.attackThreshold;
+}
+
+/** Прибавка к вкусу войны после мирных раундов: 0 до них, растет до lateWar за LATE_SPAN раундов. */
+export function lateWarBias(s, P) {
+  if (!P.lateWar || !s) return 0;
+  return P.lateWar * Math.max(0, Math.min(1, (roundOf(s) - (P.peaceRounds || 0)) / LATE_SPAN));
+}
+
+/** Цена хода по его типу: перестановка и сброс стоят, вкус стиля прибавляет ценность. s — для вкуса по раундам. */
+export function flagCost(flags, P, s) {
   let c = 0;
   if (flags & F_RELOCATE) c += flags & F_PURPOSE ? P.relocate * (P.relocPurpose ?? 1) : P.relocate;
   if (flags & F_DISCARD) c += P.discard;
   const w = P.weights;
   for (const [bit, key] of BIASES) if (flags & bit) c -= w[key] || 0;
+  if (flags & F_WAR) c -= lateWarBias(s, P);
   return c;
 }
 
 /** Есть ли у стиля вкус к типам ходов (иначе тип хода нужен только для перестановки и сброса). */
 function hasBias(P) {
-  return BIASES.some(([, key]) => P.weights[key]);
+  return Boolean(P.lateWar) || BIASES.some(([, key]) => P.weights[key]);
 }
 
 /** Цена хода сверх оценки позиции: перестановка и снятие лидера тратят действие. */
@@ -394,7 +419,7 @@ function moveCost(s, m, P) {
     if (m.type === 'discard') return P.discard;
     return 0;
   }
-  return flagCost(moveFlags(s, m), P);
+  return flagCost(moveFlags(s, m), P, s);
 }
 
 const PASS = { type: 'pass' };
@@ -480,7 +505,7 @@ function* valueAfterReply(det, c, me, rng, P, clock) {
       const s2 = cloneState(cur);
       applyMove(s2, m, rng);
       settle(s2, rng);
-      const rec = positionRecord(s2);
+      const rec = positionRecord(s2, recordOpts(P.weights));
       const vOpp = recordValue(rec, opp, P.weights);
       if (!best || vOpp > best.vOpp) best = { vOpp, s2, mine: recordValue(rec, me, P.weights) };
       yield* pause(clock);

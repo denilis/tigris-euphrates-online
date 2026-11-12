@@ -17,7 +17,7 @@
 
 import { legalMoves, applyMove, cloneState } from '../engine/engine.js';
 import { determinize } from './belief.js';
-import { positionRecord, recordValue } from './evaluate.js';
+import { positionRecord, recordValue, recordOpts } from './evaluate.js';
 import { settle } from './policy.js';
 
 const keyOf = (m) => `${m.type}:${m.pos ?? ''}:${m.color ?? ''}:${m.counts ? m.counts.join('') : ''}`;
@@ -47,7 +47,7 @@ export function* mctsSearch(view, P, rng, { cands, oppCands, moveCost, playable,
       } catch (e) {
         continue;
       }
-      const rec = positionRecord(x);
+      const rec = positionRecord(x, recordOpts(P.weights));
       const cost = p === me ? moveCost(s, m) : 0;
       const prior = recordValue(rec, p, W) - cost;
       const e = { m, key: keyOf(m), prior, cost, n: 0, w: 0, avail: 0, node: null };
@@ -64,7 +64,7 @@ export function* mctsSearch(view, P, rng, { cands, oppCands, moveCost, playable,
   }
 
   const leafVals = (s) => {
-    const rec = positionRecord(s);
+    const rec = positionRecord(s, recordOpts(P.weights));
     const vals = new Array(np);
     for (let q = 0; q < np; q++) vals[q] = recordValue(rec, q, W);
     return vals;
