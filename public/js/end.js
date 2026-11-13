@@ -4,6 +4,7 @@
 import { HEX, HERONAME, COLNAME, SCORE_ORDER, faceBg, esc, ANALYSIS_SHOWN } from './util.js';
 import { matchStats, turnsOf, STAT_ROWS } from './matchstats.js';
 import { fmtTotal } from './clock.js';
+import { stepNote } from './path-core.js';
 
 /** Таблица как в конце партии на BGA: столбцы в порядке мест. */
 function statsTable(view, list, seat) {
@@ -81,10 +82,12 @@ export function renderEnd(box, view, { act, go }) {
     box.innerHTML = `<div class="endcard" role="dialog" aria-label="Партия завершена">
       <div class="endhead"><h2>Партия завершена</h2>${X_BTN}</div>
       <p class="msub">${stopText(g)}</p>
-      <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn primary" id="eHome">К столам</button></div>
+      ${view.step ? '<p class="steppath">Партия пути новичка не засчитана: считается только сыгранная до конца. Начать ее заново можно с главной.</p>' : ''}
+      <div class="mfoot"><button class="btn" id="eClose">Посмотреть поле</button><button class="btn${view.step ? '' : ' primary'}" id="eHome">К столам</button>${view.step ? '<button class="btn primary" id="ePath">К пути новичка</button>' : ''}</div>
     </div>`;
     bindClose();
     box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
+    box.querySelector('#ePath')?.addEventListener('click', () => go('#/'));
     return;
   }
   const seat = (id) => view.seats.find((s) => s.id === id);
@@ -99,9 +102,12 @@ export function renderEnd(box, view, { act, go }) {
       <td><span class="sc2">${chips}<em title="сокровища">+${r.treasures}</em></span></td>
     </tr>`;
   }).join('');
+  // у партии шага пути новичка (13.11) вместо «Еще партию» дорога дальше по пути: реванш был бы
+  // обычным столом, шагом он не считается, и новичок сыграл бы его впустую (ревью 13.11)
   box.innerHTML = `<div class="endcard" role="dialog" aria-label="Итог партии">
     <div class="endhead"><h2>Партия окончена</h2>${X_BTN}</div>
     <p class="msub">${endReasonText(g.endReason)} Итог считается по слабейшему цвету, сокровища добавляются к слабейшим.</p>
+    ${view.step ? `<p class="steppath">${esc(stepNote(view.step))}</p>` : ''}
     <table class="endtbl"><thead><tr><th>Место</th><th>Игрок</th><th>Итог</th><th>Очки и сокровища</th></tr></thead><tbody>${rows}</tbody></table>
     ${statsTable(view, list, seat)}
     ${g.replay && ANALYSIS_SHOWN ? '<div class="ana" id="eAna"></div>' : ''}
@@ -110,13 +116,15 @@ export function renderEnd(box, view, { act, go }) {
       ${g.replay ? '<button class="btn" id="eReplay">Просмотр по ходам</button>' : ''}
       <button class="btn" id="ePicture">Картинка итога</button>
       <button class="btn" id="eHome">К столам</button>
-      ${view.me != null ? `<button class="btn primary" id="eAgain">${view.next ? 'Перейти к реваншу' : 'Еще партию'}</button>` : ''}
+      ${view.me != null && !view.step ? `<button class="btn primary" id="eAgain">${view.next ? 'Перейти к реваншу' : 'Еще партию'}</button>` : ''}
+      ${view.step ? `<button class="btn primary" id="ePath">${view.step >= 3 ? 'На главную' : 'К пути новичка'}</button>` : ''}
     </div>
-    ${view.me != null && !view.next ? '<p class="mnote">В реванше тот же состав и правила, первым ходит последнее место.</p>' : ''}
+    ${view.me != null && !view.next && !view.step ? '<p class="mnote">В реванше тот же состав и правила, первым ходит последнее место.</p>' : ''}
   </div>`;
   bindClose();
   box.querySelector('#eHome').addEventListener('click', () => go('#/tables'));
   box.querySelector('#eReplay')?.addEventListener('click', () => go(`#/t/${view.code}/replay`));
+  box.querySelector('#ePath')?.addEventListener('click', () => go('#/')); // партия шага пути новичка (13.11)
   // картинка итога (этап 4, 04.11): модуль грузится по нажатию, поле берется с экрана партии
   box.querySelector('#ePicture').addEventListener('click', async () => (await import('./endshot.js')).openPicture(view, document.querySelector('#board')));
   // разбор ботом (этап 5, 04.11): готовый с сервера или кнопкой, модуль грузится только здесь

@@ -22,6 +22,9 @@ import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText } from '
 import { openBotGuide } from './bots-info.js';
 import { renderJoin } from './join.js';
 import { JOIN_ROUTE, joinUrl, linkNote, linkLine } from './join-link.js';
+import { inviteBoxHTML, bindInviteBox } from './invite-box.js';
+import { needsSurvey, isNovice, pathLabel } from './path-core.js';
+import { renderSurvey, mountPath } from './path.js';
 import { DEFAULT_FILTER, cleanFilter, filterTables, whoNames, PEOPLE_WORD } from './tables-filter.js';
 import { fsButton, bindFullscreen } from './fullscreen.js';
 
@@ -235,13 +238,18 @@ function renderNew() {
  * шестью разделами, без списка столов. Если где-то ждут хода игрока, на «Моих столах» метка.
  */
 async function renderStart() {
+  const me = session.get()?.user;
+  // у новичка сверху «Путь новичка» (13.11): место под блок есть сразу, чтобы страница не прыгала
   app.innerHTML = `<div class="page">${topbar('')}<div class="lobby"><div class="lcard clay start">
     <div class="band top" aria-hidden="true"></div>
-    ${welcomeHTML(session.get()?.user)}
+    ${isNovice(me) ? '<section class="npath" id="nPath" aria-label="Путь новичка"><h2>Путь новичка</h2><p class="npsub">Загружаю...</p></section>' : ''}
+    ${welcomeHTML(me)}
     ${newsHTML(recentNews())}
     <div class="band bot" aria-hidden="true"></div>
   </div></div></div>`;
   bindTopbar();
+  const pathBox = app.querySelector('#nPath');
+  if (pathBox) mountPath(pathBox, { go, opened: () => toast('Путь новичка пройден: турниры и приглашения открыты') });
   let list;
   try { list = await api('GET', 'tables'); } catch { return; } // метка не главное: главная работает и без нее
   const n = list.filter((t) => t.status === 'playing' && !t.paused && t.me != null && t.toMove === t.me).length;
@@ -410,14 +418,16 @@ function openTable(code) {
 async function renderAdmin() {
   // роли (04.11): администратор видит всех и отзывает коды; игрок заводит новых и видит приглашенных им
   const admin = Boolean(session.get()?.user?.admin);
+  const novice = isNovice(session.get()?.user); // путь новичка не пройден (13.11): приглашать пока нельзя
   app.innerHTML = `<div class="page">${topbar('admin')}<main class="pcard">
     <h1>Коды игроков</h1>
+    ${novice ? '<p class="pnote">Приглашать новых игроков можно после трех партий пути новичка. <a href="#/">К пути новичка</a></p>' : ''}
     <p class="muted">${admin
       ? 'Каждому игроку свой код. Код показывается один раз: сразу отправьте его игроку. Отозванный код перестает работать на всех устройствах.'
       : 'Пригласите нового игрока: впишите его имя, и он получит свой код для входа. Код показывается один раз: сразу отправьте его игроку. Ниже вы и те, кого вы пригласили.'} Свой код: от 8 до 20 латинских букв и цифр. Такой код легче угадать, чем случайный.</p>
     <form id="newUser" class="join"><input id="newName" placeholder="Имя нового игрока" maxlength="30" aria-label="Имя нового игрока"><input id="newPin" placeholder="Код (пусто = случайный)" maxlength="32" autocapitalize="characters" spellcheck="false" autocomplete="off" aria-label="Свой код"><label class="chk" id="newAdminBox" hidden><input type="checkbox" id="newAdmin"> администратор</label><button class="btn primary" type="submit">Выдать код</button></form>
     <div id="newCode"></div>
-    <div class="jlinks"><span class="muted">Или ссылкой: новичок сам впишет имя, получит код и сразу войдет.</span><button class="btn sm" id="newLink" type="button">Создать ссылку-приглашение</button></div>
+    <div class="jlinks"><span class="muted">Или ссылкой и QR-кодом: новичок сам впишет имя, получит код и сразу войдет.</span><button class="btn sm" id="newLink" type="button">Создать ссылку и QR-код</button></div>
     <div id="newLinkBox"></div>
     <div id="linkList"></div>
     <h2 id="uHead">Игроки</h2>
@@ -460,8 +470,9 @@ async function renderAdmin() {
     try {
       const r = await api('POST', 'joinlinks', {});
       const url = joinUrl(r.token);
-      $('#newLinkBox').innerHTML = `<div class="codebox"><span>Ссылка-приглашение:</span><code class="jurl">${esc(url)}</code><button class="btn sm" id="cpLink" type="button">Скопировать</button></div><p class="muted small">${esc(linkNote(r))}</p>`;
-      $('#cpLink').addEventListener('click', () => copy(url));
+      // ссылка и QR-код одним блоком (13.11): QR можно показать с экрана или сохранить картинкой
+      $('#newLinkBox').innerHTML = inviteBoxHTML(url, linkNote(r));
+      bindInviteBox($('#newLinkBox'), url);
       loadLinks();
     } catch (ex) { toast(ex.message); } finally { b.disabled = false; }
   });
@@ -481,12 +492,12 @@ async function renderAdmin() {
     const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
     const may = !u.self && !u.main && (iAmMain || !u.admin);
     return `<tr class="${u.self ? 'me' : ''}${u.revoked ? ' off' : ''}">
-      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
+      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}${u.path && !u.revoked ? `<br><small class="muted">${esc(pathLabel(u.path))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
       <td data-l="Добавлен">${dateText(u.createdAt)}</td>
       <td data-l="Партий">${u.games}</td>
       <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
       <td data-l="Код"><span>${u.main ? 'главный' : u.revoked ? 'отозван' : 'действует'}</span>${flag}</td>
-      <td class="uacts">${may ? `<div class="ubtns"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}</div>` : ''}</td>
+      <td class="uacts">${may ? `<div class="ubtns"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}${admin && u.path && !u.revoked ? `<button class="btn sm" data-open="${esc(u.id)}" data-name="${esc(u.name)}">Открыть доступ</button>` : ''}</div>` : ''}</td>
     </tr>`;
   };
   const draw = () => {
@@ -537,6 +548,14 @@ async function renderAdmin() {
       load();
       return;
     }
+    // новичку открыть турниры и приглашения без трех партий (13.11)
+    const o = e.target.closest('[data-open]');
+    if (o) {
+      if (!confirm(`Открыть ${o.dataset.name} турниры и приглашения без трех партий с ботами?`)) return;
+      await api('POST', `admin/users/${o.dataset.open}/path`, { open: true }).catch((ex) => toast(ex.message));
+      load();
+      return;
+    }
     const b = e.target.closest('[data-new]');
     if (!b) return;
     const code = prompt(`Новый код для ${b.dataset.name}. Оставьте пустым, и код будет случайным. Старый перестанет работать.`, '');
@@ -578,6 +597,7 @@ async function renderAdmin() {
       load();
     } catch (ex) { toast(ex.message); }
   });
+  if (novice) app.querySelectorAll('#newUser input, #newUser button, #newLink').forEach((el) => { el.disabled = true; });
   load().catch((e) => toast(e.message));
 }
 
@@ -639,6 +659,11 @@ function route() {
   }
   startPresence();
   setBusy(false);
+  // зарегистрировался по ссылке и еще не ответил, играл ли раньше (13.11): сначала опрос. Новичка
+  // после ответа ведем на главную, к пути; тот, кто шел по ссылке за стол, идет к столу
+  if (needsSurvey(s)) {
+    return renderSurvey(app, { done: (fresh) => (fresh && !/^t\//.test(h) && h !== '' ? go('#/') : route()) });
+  }
   if (h === 'rules') return renderRules(app, topbar('rules'), bindTopbar);
   if (LEARN.test(h)) return showLearn(h.match(LEARN), topbar('learn'));
   const rp = h.match(/^t\/([A-Za-z0-9]{6})\/replay(?:\/(\d+))?$/); // просмотр партии по ходам (04.11)

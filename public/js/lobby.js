@@ -9,6 +9,8 @@ import { play } from './signals.js';
 import { buildingIcon, monImg, CHIPS_READY } from './board.js';
 import { botShort, openBotGuide } from './bots-info.js';
 import { joinUrl, linkNote } from './join-link.js';
+import { inviteBoxHTML, bindInviteBox } from './invite-box.js';
+import { isNovice } from './path-core.js';
 
 // ссылка для нового игрока за этот стол (06.11): показывается один раз, а лобби перерисовывается
 // при каждом изменении стола, поэтому созданная ссылка живет здесь, пока открыта страница. Ключ с
@@ -16,7 +18,8 @@ import { joinUrl, linkNote } from './join-link.js';
 const madeLinks = new Map(); // «игрок:стол» -> { token, until, table }
 const madeKey = (code) => `${session.get()?.user?.id || ''}:${code}`;
 window.addEventListener('tigris:logout', () => madeLinks.clear());
-const madeHTML = (m) => `<div class="invite jnew"><code>${esc(joinUrl(m.token))}</code><button class="btn sm" id="lJoinCopy" type="button">Скопировать</button></div><p class="muted small jnote">${esc(linkNote(m))}</p>`;
+// ссылка новому игроку вместе с QR-кодом (13.11): один блок с «Кодами игроков»
+const madeHTML = (m) => inviteBoxHTML(joinUrl(m.token), linkNote(m), 'jnew');
 
 const ORDER = [
   { id: 'loser', t: 'Первым ходит проигравший прошлой партии', d: 'Если эта компания уже играла: и для реванша, и для новой партии после перерыва. Остальные по кругу.' },
@@ -206,7 +209,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
       <div class="band top" aria-hidden="true"></div>
       <div class="lhead"><h1>Стол ${esc(view.title || view.code)}</h1>${tour ? '' : `<div class="lnav"><button class="btn sm" id="lBack" type="button">Назад</button><button class="btn sm lclose" id="lClose" type="button" aria-label="Закрыть" title="Закрыть: к моим столам. Место за столом остается за вами">×</button></div>`}</div>
       <p class="sub">Отправьте ссылку игрокам: каждый садится на свободное место и выбирает героя. Двух одинаковых героев за столом не бывает.</p>
-      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}${tour ? '' : '<button class="btn sm" id="lJoin" type="button">Ссылка для нового игрока</button>'}</div>
+      <div class="invite"><code>${esc(link)}</code><button class="btn sm" id="lCopy">Скопировать ссылку</button>${canChat ? '<button class="btn sm" id="lChat">Позвать в чат</button>' : ''}${tour || isNovice(session.get()?.user) ? '' : '<button class="btn sm" id="lJoin" type="button">Ссылка и QR для нового игрока</button>'}</div>
       ${made ? madeHTML(made) : ''}
 
       <h2>Места и герои</h2>
@@ -229,6 +232,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
       <div class="opts"><span class="muted olbl">Вид монумента</span><span class="seg monseg">${MONUMENTS.map(([id, t]) => `<button data-monument="${id}" class="${(o.monument ?? 'enamel') === id ? 'on' : ''}" ${dis}><img src="/img/monuments/${id}/red-blue.webp" width="26" height="26" alt="">${t}${peekMon(id, t)}</button>`).join('')}</span></div>
       <div class="opts"><span class="muted olbl">Вид зданий</span><span class="seg monseg">${BUILDINGS.map(([id, t]) => `<button data-building="${id}" class="${(o.building === 'seal' ? 'seal' : 'chip') === id ? 'on' : ''}" ${dis}>${buildingIcon(0, 26, id)}${t}${peekBld(id, t)}</button>`).join('')}</span></div>
       <div class="opts" id="lTour" hidden></div>
+      ${view.novice ? '<p class="muted small">За столом игрок, который еще не прошел путь новичка: эта партия пойдет вне турниров и в рейтинг не попадет.</p>' : ''}
       <h2>Время</h2>
       <div class="opts">
         <span class="muted">На ход</span><span class="seg">${[20, 30, 45, 60, 90].map((n) => `<button data-time="turnSeconds" data-val="${n}" class="${(o.turnSeconds ?? 30) === n ? 'on' : ''}" ${dis}>${n} с</button>`).join('')}</span>
@@ -252,7 +256,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
   root.querySelector('#lBack')?.addEventListener('click', () => (back ? back() : (location.hash = '#/tables')));
   root.querySelector('#lClose')?.addEventListener('click', () => (close ? close() : (location.hash = '#/tables')));
   root.querySelector('#lCopy').addEventListener('click', () => copy(link));
-  const bindMade = (m) => root.querySelector('#lJoinCopy')?.addEventListener('click', () => copy(joinUrl(m.token)));
+  const bindMade = (m) => bindInviteBox(root, joinUrl(m.token));
   if (made) bindMade(made);
   root.querySelector('#lJoin')?.addEventListener('click', async (e) => {
     const b = e.currentTarget;
@@ -261,8 +265,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
       const m = await api('POST', 'joinlinks', { table: view.code });
       madeLinks.set(madeKey(view.code), m);
       // вставляем ссылку на месте, а не перерисовкой: вид стола в замыкании мог устареть, пока шел запрос
-      const box = root.querySelector('.invite.jnew');
-      if (box) { box.nextElementSibling?.classList.contains('jnote') && box.nextElementSibling.remove(); box.remove(); }
+      root.querySelector('.qrbox.jnew')?.remove();
       root.querySelector('.invite')?.insertAdjacentHTML('afterend', madeHTML(m));
       bindMade(m);
     } catch (ex) {

@@ -1369,3 +1369,51 @@ html:has(.endwrap:not([hidden])){overflow:hidden}
 .sidemenu .psseg button{flex:1;min-height:32px;padding:4px 8px;font-size:13px;color:var(--text)}
 .sidemenu .psseg button.on{color:#1b1713}
 .pshint{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.35}
+
+/* ---------- приглашение с QR-кодом, опрос и путь новичка (Денис 13.11, схема одобрена) ---------- */
+/* блок приглашения: QR-код слева, ссылка и кнопки справа; на узком экране в столбик. У кода свои
+   белые поля в 4 модуля, поэтому отступов у белой плашки нет */
+.qrbox{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;background:#3b2a12;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;margin:12px 0}
+.qrpic{flex:none;width:168px;background:#fff;border-radius:8px;line-height:0;overflow:hidden}
+.qrpic svg{display:block;width:100%;height:auto}
+.qrside{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.qrurl{font-size:13px;color:#f3d99a;word-break:break-all}
+.qracts{display:flex;gap:8px;flex-wrap:wrap}
+.qrnote{margin:0}
+.lcard.clay .qrbox{margin:6px 0 0;border:0;background:rgba(110,70,32,.16);box-shadow:inset 0 2px 5px rgba(60,30,10,.4),inset 0 -1px 0 var(--lip)}
+.lcard.clay .qrurl{color:var(--ink)}
+@media (max-width:560px){
+  .qrpic{width:min(220px,100%);margin:0 auto}
+}
+/* опрос «играли раньше?»: два равных ответа */
+.gcard.survey{width:min(480px,100%)}
+.gcard .svq{font-size:19px;line-height:1.35;color:var(--text)}
+.svbtns{display:flex;gap:10px;flex-wrap:wrap}
+.svbtns .btn{flex:1 1 180px;min-height:52px;font-weight:600}
+.gcard .svnote{font-size:13.5px;line-height:1.5}
+/* «Путь новичка» на главной: активный шаг с золотой кнопкой, сыгранный с зеленой отметкой, закрытые бледные */
+.lcard.clay .npath{margin:0 0 22px;padding:14px 16px 12px;border:1px solid rgba(80,45,15,.5);border-radius:12px;background:rgba(255,238,205,.26);box-shadow:inset 0 1px 0 var(--lip),0 2px 5px rgba(60,30,10,.3)}
+.lcard.clay .npath h2{margin:0 0 4px;font:600 17px/1.2 Cinzel,Georgia,serif;letter-spacing:.06em;text-transform:uppercase}
+.npsub,.npend{margin:0 0 8px;color:var(--ink2);font-size:14px;line-height:1.45;font-weight:500}
+.npend{margin:8px 0 0;font-size:13px}
+.npl{list-style:none;margin:0;padding:0}
+.npi{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1.5px solid var(--cut);box-shadow:inset 0 1px 0 var(--lip)}
+.npn{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;color:#fbe9c8;background:#6b3f17}
+.npt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+.npt b{color:#4a2c13;font-size:15.5px;text-shadow:0 1px 0 var(--lip)}
+.npt small{color:var(--ink2);font-size:13px;font-weight:500}
+.npa{flex:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.npmark{font-size:13px;font-weight:700;color:#2c6e31}
+.npmark.off{color:var(--ink2);font-weight:500}
+.npi.np-locked{opacity:.55}
+.npi.np-done .npn{background:#2c6e31}
+.npi.np-now .npn{background:#8a5a12;box-shadow:0 0 0 2px rgba(224,182,90,.8)}
+.lcard.clay .npath .btn.primary{min-width:120px;background:linear-gradient(#f3d37f,#d9a93f);border-color:#8a6418;color:#2a180a}
+.lcard.clay .npath .btn.primary:hover:not([disabled]){background:linear-gradient(#f8dc92,#e0b24a)}
+@media (max-width:560px){
+  .npi{flex-wrap:wrap}
+  .npa{flex-basis:100%;justify-content:flex-start;padding-left:42px}
+}
+/* подсказка новичку в «Кодах игроков» и строка пути в окне итога */
+.pnote{margin:0 0 12px;padding:10px 14px;border:1px solid var(--gold2);border-radius:10px;background:#3b2a12;color:#f3d99a}
+.steppath{margin:10px 0;padding:9px 12px;border:1px solid var(--gold2);border-radius:10px;background:rgba(224,182,90,.1);color:#f3d99a;font-size:14px;line-height:1.45}

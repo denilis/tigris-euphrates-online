@@ -5,7 +5,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode, newJoinToken, isJoinToken, joinHash } from './auth.js';
 import {
   createTable, sit, leave, seatPeople, unseat, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
-  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready, ownPerson, OWN_PEOPLE,
+  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready, ownPerson, OWN_PEOPLE, HEROES,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { replayFrames } from '../game/frames.js';
@@ -15,6 +15,7 @@ import { SEASON, SEASON_PLAYERS, tourGames, publicTour, playerGames, tourOf, tou
 import { whoIs, namesOf, nameKey, normName } from './people.js';
 import { ratings, ratedGames, ratingOf } from './rating.js';
 import { profileSummary } from './profile.js';
+import { STEPS, locked, publicPath, surveyPath, stepPath, pathView } from './novice.js';
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
@@ -81,7 +82,11 @@ const due = (m, at) => m === 'bot' || ((m[0] === 'c' || m[0] === 'b') && at >= N
 const botIn = (m, at) => (m[0] === 'b' && Number(m.slice(1)) > at ? { botIn: Number(m.slice(1)) - at } : {});
 const DELETED = 'deleted'; // отметка удаленного стола для опроса: он отвечает «нет такого стола»
 const TABLE_LOG_MAX = 300; // журнал удалений хранит последние записи
-const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
+// path есть, только пока путь новичка не пройден (13.11): по нему страницы показывают опрос и путь
+const publicUser = (u) => ({
+  id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null,
+  ...(publicPath(u) ? { path: publicPath(u) } : {}),
+});
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const letterId = () => randomBytes(6).toString('hex');
 
@@ -117,6 +122,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
   const needAdmin = (u) => u.admin || http(403, 'not-admin', 'Это может сделать только администратор');
   const needMain = (u) => u.id === ADMIN_ID || http(403, 'not-main', 'Это может сделать только главный администратор');
+  // путь новичка (13.11): пока он не пройден, новых игроков не приглашают и турниров не заводят
+  const needOpen = (u) => !locked(u) || http(403, 'novice', 'Это откроется после трех партий пути новичка: он на главной странице');
 
   async function mainAdmin() {
     let user = await store.getUser(ADMIN_ID);
@@ -219,6 +226,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       }));
     }
     if (method === 'POST' && !rest.length) {
+      needOpen(u);
       const name = cleanName(body.name);
       if (body.admin) needMain(u);
       await countNewPlayer(u);
@@ -258,7 +266,109 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       forgetPeople();
       return { ok: true };
     }
+    // открыть новичку доступ без трех партий (13.11): только администратор, строкой выше это уже проверено
+    if (method === 'POST' && op === 'path') {
+      if (body.open !== true) http(400, 'bad-path', 'Открыть доступ: open = true');
+      await setPath(id, (cur) => (locked(cur) ? { state: 'done', how: 'admin', at: now(), by: u.id } : null));
+      return { ok: true };
+    }
     http(404, 'no-route', 'Нет такого адреса');
+  }
+
+  // --- путь новичка (13.11, server/novice.js)
+
+  /**
+   * Сменить путь игрока: next(запись) дает новый путь или null, если менять нечего. Запись сверяется
+   * с базой, как у фото и имени: одновременная смена имени или отзыв кода не должны потеряться.
+   * Возвращает запись игрока после смены или null.
+   */
+  async function setPath(userId, next, { revoked = false } = {}) {
+    for (let k = 0; k < 4; k++) {
+      const cur = await store.getUser(userId);
+      // revoked: менять и у игрока с отозванным кодом (зачет сыгранной партии от кода не зависит)
+      if (!cur || (cur.revoked && !revoked)) return null;
+      const path = next(cur);
+      if (!path) return null;
+      const user = { ...cur, path };
+      if (await store.casUser(cur, user)) {
+        forgetPeople();
+        return user;
+      }
+    }
+    http(409, 'stale', 'Не получилось сохранить, попробуйте еще раз');
+  }
+
+  /** Идущая партия очередного шага пути: стол, помеченный этим шагом и этим игроком. */
+  async function stepTable(u) {
+    const n = (u.path?.steps || 0) + 1;
+    const docs = await store.getTables(await store.myTables(u.id));
+    return docs.find((t) => t && t.status === 'playing' && t.step?.userId === u.id && t.step.n === n) || null;
+  }
+
+  const myPath = async (u) => pathView(u, u.path?.state === 'novice' ? (await stepTable(u))?.code || null : null);
+
+  /** Ответ на опрос ({ played }) или отметка обучения ({ learn: 'skip' | null }). */
+  async function answerPath(u, body) {
+    let user;
+    if (Object.hasOwn(body, 'learn')) {
+      if (body.learn !== 'skip' && body.learn !== null) http(400, 'bad-path', 'Обучение: skip или null');
+      if (u.path?.state !== 'novice') http(409, 'no-path', 'Путь новичка уже пройден или еще не начат');
+      user = await setPath(u.id, (cur) => {
+        if (cur.path?.state !== 'novice') return null;
+        const { learn, ...rest } = cur.path;
+        return body.learn ? { ...rest, learn: 'skip' } : rest;
+      });
+    } else {
+      if (typeof body.played !== 'boolean') http(400, 'bad-path', 'Ответ на опрос: played = true или false');
+      if (u.path?.state !== 'ask') http(409, 'answered', 'На этот вопрос вы уже ответили');
+      user = await setPath(u.id, (cur) => (cur.path?.state === 'ask' ? surveyPath(body.played, now()) : null));
+    }
+    user = user || (await store.getUser(u.id)) || u; // пока писали, путь мог смениться: отдаем как есть
+    return { user: publicUser(user), path: await myPath(user) };
+  }
+
+  /**
+   * Партия очередного шага: сервер сам собирает стол (новичок и боты шага, вне турниров) и сразу
+   * начинает партию, новичок ходит первым. Состав поменять нельзя, шаг не облегчить. Пока партия
+   * шага идет, кнопка «Играть» ведет на нее же.
+   */
+  async function playStep(u) {
+    if (u.path?.state !== 'novice') http(409, 'no-path', 'Путь новичка уже пройден или еще не начат');
+    const n = (u.path.steps || 0) + 1, step = STEPS[n - 1];
+    const cur = await stepTable(u);
+    if (cur) return { code: cur.code, n };
+    const title = await tableTitle();
+    for (let k = 0; k < 5; k++) {
+      const at = now();
+      const t = createTable({ code: newTableCode(), title, host: seatUser(u), now: at });
+      setSeatCount(t, u.id, step.bots + 1, at);
+      for (const s of t.seats.slice(1)) setSeatKind(t, u.id, s.id, 'bot', at);
+      for (const s of t.seats.slice(1)) setBot(t, u.id, s.id, step.set, at);
+      if (!t.seats[0].hero) setHero(t, u.id, t.seats[0].id, HEROES.find((h) => !t.seats.some((s) => s.hero === h)), at);
+      setOptions(t, u.id, { tournament: 'none', order: 'custom' }, at);
+      t.step = { n, userId: u.id };
+      start(t, u.id, { now: at });
+      if (await store.putTable(t, null, meta(t))) {
+        await store.addMyTable(u.id, t.code);
+        return { code: t.code, n };
+      }
+    }
+    http(500, 'no-code', 'Не удалось подобрать код стола');
+  }
+
+  /**
+   * Сыгранная до конца партия шага засчитывает шаг. Повтор безопасен: считается только очередной шаг.
+   * false, если запись игрока не далась (ее меняли одновременно): тогда зачет повторит следующий запрос.
+   */
+  async function creditStep(t) {
+    try {
+      // код могли отозвать, пока шла партия: шаг все равно засчитан, с новым кодом путь продолжится (ревью 13.11)
+      await setPath(t.step.userId, (cur) => stepPath(cur.path, t.step.n, now()), { revoked: true });
+      return true;
+    } catch (e) {
+      if (e instanceof HttpError) return false;
+      throw e;
+    }
   }
 
   // --- ссылки-приглашения (Денис 06.11): новичок сам вписывает имя, получает код и сразу входит.
@@ -296,7 +406,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (!(await store.takeJoin(hash))) joinGone(); // забор атомарный: по одной ссылке проходит один
     const id = 'u-' + randomBytes(6).toString('hex');
     const { code, hash: codeHash } = await claimCode('', id, null);
-    const user = { id, name, admin: false, revoked: false, codeHash, createdAt: now(), invitedBy: inv.by };
+    // зарегистрировался сам: сначала опрос «играли раньше?», от ответа зависит путь (13.11)
+    const user = { id, name, admin: false, revoked: false, codeHash, createdAt: now(), invitedBy: inv.by, path: { state: 'ask' } };
     await store.putUser(user);
     forgetPeople();
     await store.delJoinItems(inv.by, [inv.id]);
@@ -322,6 +433,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return (await liveJoins(u.id)).map(({ id, createdAt, until, table }) => ({ id, createdAt, until, table }));
     }
     if (method === 'POST' && !rest.length) {
+      needOpen(u);
       let table = null;
       if (body.table != null) {
         const code = String(body.table).toUpperCase();
@@ -424,6 +536,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   }
 
   async function newTour(u, body) {
+    needOpen(u);
     const name = String(body.name ?? '').trim();
     if (!name || name.length > TOUR_NAME_MAX) http(400, 'bad-name', `Название от 1 до ${TOUR_NAME_MAX} знаков`);
     const list = Array.isArray(body.players) ? body.players.map(String) : [];
@@ -436,6 +549,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (tours.some((t) => t.name.toLowerCase() === name.toLowerCase())) http(409, 'name-taken', 'Такой турнир уже есть');
     const users = await Promise.all(ids.map((id) => store.getUser(id)));
     if (users.some((x) => !x || x.revoked)) http(400, 'bad-players', 'Участником может быть только игрок с действующим кодом');
+    const fresh = users.filter(locked).map((x) => x.name);
+    if (fresh.length) http(400, 'bad-players', `В турниры берут после трех партий пути новичка. Пока его не прошли: ${fresh.join(', ')}`);
     const t = { id: 't-' + randomBytes(5).toString('hex'), name, ownerId: u.id, players: users.map((x) => ({ id: x.id, name: x.name })), createdAt: now() };
     await store.putTour(t);
     return publicTour(t);
@@ -539,7 +654,24 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * Вид стола для игрока. chat: стол компании и смотрит свой. Браузер раньше решал это сам по именам
    * за столом и после смены имени прятал кнопки чата, хотя сервер их разрешал (ревью 13.11).
    */
-  const viewOf = (t, u, opts) => ({ ...viewFor(t, u.id, opts), chat: chatTable(t, u) });
+  // step: номер шага пути новичка, только хозяину такой партии (окно итога зовет дальше по пути).
+  // novice: в лобби сидит игрок, не прошедший путь: партия пойдет вне турниров (13.11).
+  async function viewOf(t, u, opts) {
+    const v = { ...viewFor(t, u.id, opts), chat: chatTable(t, u) };
+    if (t.step?.userId === u.id) v.step = t.step.n;
+    if (t.status === 'lobby' && (await novicesAt(t))) v.novice = true;
+    return v;
+  }
+
+  /** За столом сидит человек, у которого путь новичка не пройден. fresh: список людей прямо из базы. */
+  async function novicesAt(t, fresh = false) {
+    const ids = t.seats.filter((s) => s.kind === 'human' && s.userId).map((s) => s.userId);
+    if (!ids.length) return false;
+    let known = await knownPeople(fresh);
+    // только что зарегистрированного на другом экземпляре в списке еще нет: перечитываем (ревью 13.11)
+    if (!fresh && ids.some((id) => !known.has(id))) known = await knownPeople(true);
+    return ids.some((id) => locked(known.get(id)));
+  }
 
   /** Позвать чат за стол. Замок снимается при сбое, чтобы отправку можно было сразу повторить. */
   async function callChat(u, body) {
@@ -594,6 +726,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     // код мог смениться на другом экземпляре функции: перед отказом смотрим свежий список,
     // иначе честного игрока выбросит с сайта. Отозванный код на чужом экземпляре живет до минуты
     if (!u || u.revoked || (u.sv || 0) !== s.epoch) u = (await knownPeople(true)).get(s.id);
+    // путь новичка меняется на другом экземпляре (ответ на опрос, зачет шага, доступ от администратора).
+    // Запись новичка берем прямо из базы: иначе страница до минуты показывала бы прежнее состояние и
+    // прятала открытое (ревью 13.11). Лишнее чтение только у тех, кто путь еще не прошел
+    if (u && locked(u)) u = (await store.getUser(s.id)) || u;
     checkUser(u, s.epoch);
     const ids = [...(await knownPeople()).values()].filter((x) => !x.revoked).map((x) => x.id);
     const { marks, letters } = await store.readPresence(ids, u.id);
@@ -729,6 +865,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       await store.setCompanyLast(e);
       t.game.historySaved = true;
     }
+    // и шаг пути новичка тоже: партия сыграна до конца
+    if (from === 'over' && t.step && !t.step.done && (await creditStep(t))) t.step.done = true;
     t.deleted = { from, at: now(), by: u.id, byName: u.name };
     t.status = 'deleted';
     t.version = version + 1;
@@ -784,11 +922,16 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   /** Итог законченной партии в историю: один раз, повтор безопасен. */
   async function ensureHistory(t, version) {
-    if (t.status !== 'over' || t.game.historySaved) return;
-    const e = historyEntry(t);
-    await store.addHistory(e);
-    await store.setCompanyLast(e);
-    t.game.historySaved = true;
+    if (t.status !== 'over') return;
+    const credit = Boolean(t.step) && !t.step.done; // шаг пути новичка (13.11) засчитывается тут же
+    if (t.game.historySaved && !credit) return;
+    if (!t.game.historySaved) {
+      const e = historyEntry(t);
+      await store.addHistory(e);
+      await store.setCompanyLast(e);
+      t.game.historySaved = true;
+    }
+    if (credit && (await creditStep(t))) t.step.done = true;
     t.version = version + 1;
     if (!(await store.putTable(t, version, meta(t)))) t.version = version; // не вышло: допишет следующий запрос
   }
@@ -805,7 +948,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       const t = createTable({ code: newTableCode(), title, host: seatUser(u), now: now() });
       if (await store.putTable(t, null, meta(t))) {
         await store.addMyTable(u.id, t.code);
-        return { code: t.code, view: viewOf(t, u, { now: now() }) };
+        return { code: t.code, view: await viewOf(t, u, { now: now() }) };
       }
     }
     http(500, 'no-code', 'Не удалось подобрать код стола');
@@ -959,7 +1102,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (wait.length) http(409, 'not-here', `Ждем за столом: ${wait.map((s) => s.name).join(', ')}`);
       const humans = t.seats.filter((s) => s.kind === 'human').map((s) => s.userId);
       const last = t.options.order === 'loser' && humans.every(Boolean) ? await store.companyLast(companyKey(humans)) : null;
+      // за столом новичок, не прошедший путь: партия идет вне турниров (13.11). Прежняя настройка
+      // запоминается: в реванше она вернется, к тому времени путь может быть пройден
+      // у столов, заведенных до настройки турнира (до 31.10), поля нет: это то же, что «по составу» (ревью 13.11)
+      const was = t.options.tournament ?? 'auto';
+      const tourWas = was !== 'none' && (await novicesAt(t, true)) ? was : null;
+      if (tourWas) t.options.tournament = 'none';
       start(t, u.id, { last, now: now() });
+      if (tourWas) t.game.tourWas = tourWas;
     },
     async rematch(t, u) {
       if (t.next) return;
@@ -972,6 +1122,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       // отказ rematch не должен расходовать номер стола за день
       const title = t.status === 'over' && seatOfUser(t, u.id) ? await tableTitle() : null;
       const { created } = rematch(t, u.id, { code, title, now: now() });
+      if (t.game?.tourWas) created.options.tournament = t.game.tourWas; // партия шла вне турниров из-за новичка
       // места реванша скопированы со старого стола: имя, фото и ключ компании берем нынешние (13.11)
       const known = await knownPeople(true);
       for (const s of created.seats) {
@@ -1008,7 +1159,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const extra = await hooks?.commit?.(); // поля для ответа, например ушло ли сообщение в чат
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
-    return { ...viewOf(t, u, { now: now() }), ...extra };
+    return { ...(await viewOf(t, u, { now: now() })), ...extra };
   }
 
   /**
@@ -1078,6 +1229,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
     if (method === 'GET' && head === 'me' && rest[0] === 'profile' && rest.length === 1) return profile(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'name' && rest.length === 1) return setName(u, body);
+    if (method === 'GET' && head === 'me' && rest[0] === 'path' && rest.length === 1) return myPath(u);
+    if (method === 'POST' && head === 'me' && rest[0] === 'path' && rest.length === 1) return answerPath(u, body);
+    if (method === 'POST' && head === 'me' && rest[0] === 'path' && rest[1] === 'play' && rest.length === 2) return playStep(u);
     if (method === 'POST' && head === 'invite' && rest[0] === 'chat') return callChat(u, body);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
