@@ -56,3 +56,17 @@ export function recentHTML(p) {
   }).join('');
   return `<h2>Последние партии</h2><ul class="pfrecent">${rows}</ul>`;
 }
+
+/**
+ * Строка под именем в профиле игрока, который открыл администратор (13.11): прежние имена, права,
+ * отозванный код, путь новичка. Текст без разметки: экранирует тот, кто вставляет.
+ */
+export function playerNote(p) {
+  const out = [];
+  if (p.was?.length) out.push(`раньше: ${p.was.join(', ')}`);
+  if (p.user?.main) out.push('главный администратор');
+  else if (p.user?.admin) out.push('администратор');
+  if (p.revoked) out.push('код отозван');
+  if (p.user?.path) out.push(p.user.path.state === 'novice' ? `новичок: сыграно ${p.user.path.steps} из 3` : 'новичок: еще не ответил на опрос');
+  return out.join(' | ');
+}

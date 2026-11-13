@@ -1188,6 +1188,9 @@ html:has(.endwrap:not([hidden])){overflow:hidden}
 .ulist th .linkbtn:hover,.ulist th .linkbtn.on{color:var(--gold)}
 .ulist td{padding:7px 10px;border-bottom:1px solid #3a2e22;vertical-align:middle}
 .ulist td b{color:var(--gold)}
+/* имя игрока ведет в его профиль (13.11) */
+.ulist a.ulink{text-decoration:none}
+.ulist a.ulink:hover b,.ulist a.ulink:focus-visible b{text-decoration:underline}
 .ulist td .chk{display:block;font-size:12px;color:var(--muted)}
 .ulist tr.me td{background:rgba(214,170,90,.07)}
 .ulist tr.off td{color:var(--muted)}

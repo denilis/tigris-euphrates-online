@@ -5,7 +5,7 @@
 import { api, session } from './api.js';
 import { esc, toast, faceBg } from './util.js';
 import { openCrop } from './avatar-crop.js';
-import { numsHTML, whereHTML, recentHTML, sinceText } from './profile-core.js';
+import { numsHTML, whereHTML, recentHTML, sinceText, playerNote } from './profile-core.js';
 
 const NAME_MAX = 30;
 
@@ -132,4 +132,41 @@ export function renderProfile(app, top, bindTop, opts = {}) {
   paintBg();
 
   $('pOut').addEventListener('click', () => opts.logout?.());
+}
+
+/**
+ * Профиль другого игрока (Денис 13.11): только просмотр, раскладка как у «Моего профиля», без
+ * настроек и загрузки фото. Открывает администратор из «Кодов игроков»; сервер чужой профиль
+ * игроку не отдает. Отсюда же переход в личную статистику этого игрока.
+ */
+export async function renderPlayer(app, top, bindTop, id) {
+  app.innerHTML = `<div class="page">${top}<main class="pcard profile">
+    <h1>Профиль игрока</h1>
+    <div class="pfrow">
+      <i class="face huge" id="pFace"></i>
+      <div class="pfinfo">
+        <b class="pfname" id="pName"></b>
+        <span class="muted small" id="pSince"></span>
+        <span class="muted small" id="pNote"></span>
+      </div>
+    </div>
+    <div class="pnums" id="pNums"><p class="muted">Загружаю...</p></div>
+    <p class="muted small pfnote">Рейтинг считается по партиям с людьми на сайте и по сезону BGA. Партии с ботами его не меняют.</p>
+    <div id="pPlay"></div>
+    <div class="pflinks"><a class="btn primary" href="#/stats/p/${esc(id)}">Вся статистика игрока</a><a class="btn" href="#/admin">Коды игроков</a></div>
+  </main></div>`;
+  bindTop();
+  const $ = (x) => app.querySelector('#' + x);
+  try {
+    const p = await api('GET', `players/${encodeURIComponent(id)}/profile`);
+    if (!$('pNums')) return; // страницу уже сменили
+    $('pFace').style.backgroundImage = faceBg(p.user);
+    $('pName').textContent = p.user.name;
+    $('pSince').textContent = sinceText(p);
+    $('pNote').textContent = playerNote(p);
+    $('pNums').innerHTML = numsHTML(p);
+    $('pPlay').innerHTML = whereHTML(p) + recentHTML(p);
+  } catch (e) {
+    if ($('pNums')) $('pNums').innerHTML = `<p class="err">${esc(e.status === 403 ? 'Профиль другого игрока открывает только администратор.' : e.message)}</p>`;
+  }
 }

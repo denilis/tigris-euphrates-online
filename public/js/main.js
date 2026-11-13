@@ -12,7 +12,7 @@ import { recentNews, newsHTML } from './news.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { openTour } from './tour.js';
-import { renderProfile } from './profile.js';
+import { renderProfile, renderPlayer } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion, backFrom, NAV_PAGES, pageBack } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
@@ -494,7 +494,7 @@ async function renderAdmin() {
     const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
     const can = userActions(u, { admin, main: iAmMain });
     return `<tr class="${u.self ? 'me' : ''}${u.revoked ? ' off' : ''}">
-      <td data-l="Имя">${u.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i> ` : ''}<b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}${u.path && !u.revoked ? `<br><small class="muted">${esc(pathLabel(u.path))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
+      <td data-l="Имя">${u.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i> ` : ''}${can.profile ? `<a class="ulink" href="${u.self ? '#/me' : `#/p/${esc(u.id)}`}" title="Профиль игрока"><b>${esc(u.name)}</b></a>` : `<b>${esc(u.name)}</b>`}${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}${u.path && !u.revoked ? `<br><small class="muted">${esc(pathLabel(u.path))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
       <td data-l="Добавлен">${dateText(u.createdAt)}</td>
       <td data-l="Партий">${u.games}</td>
       <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
@@ -700,6 +700,11 @@ function route() {
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
   if (h === 'stats/me') return renderPersonal(app, topbar('stats'), bindTopbar);
+  // профиль и личная статистика другого игрока (13.11): открывает администратор, свой номер ведет к себе
+  const pm = h.match(/^p\/([a-z0-9-]{1,40})$/);
+  if (pm) return pm[1] === s.user?.id ? go('#/me') : renderPlayer(app, topbar('admin'), bindTopbar, pm[1]);
+  const sp = h.match(/^stats\/p\/([a-z0-9-]{1,40})$/);
+  if (sp) return renderPersonal(app, topbar('stats'), bindTopbar, sp[1]);
   if (h === 'me') return renderProfile(app, topbar(''), bindTopbar, { refresh: route, logout, bg: { still: () => still, set: setStill, hasVideo: Boolean(SCENE.video) } });
   return renderStart();
 }

@@ -435,3 +435,95 @@ test('лобби: имена в строке «Ждем за столом» эк
   assert.ok(src.includes('waiting.map((s) => esc(s.name)).join'), 'имя не должно попадать в разметку как есть');
   assert.ok(!src.includes('waiting.map((s) => s.name).join'));
 });
+
+// --- профиль другого игрока (13.11): администратор открывает любого, игрок только себя
+
+test('профиль игрока: администратор видит то же, что игрок у себя, плюс прежние имена и отзыв кода', async () => {
+  const s = setup();
+  const P = await people(s, 'Влад', 'Андрей', 'Петя');
+  const at = (id, who) => s.req('GET', `players/${id}/profile`, { token: who?.token });
+  const own = (await s.req('GET', 'me/profile', { token: P['Андрей'].token })).body;
+  const seen = await at(P['Андрей'].user.id, P.denis);
+  assert.equal(seen.status, 200, JSON.stringify(seen.body));
+  const { was, revoked, ...rest } = seen.body;
+  assert.deepEqual(rest, own, 'те же числа, рейтинг и последние партии');
+  assert.deepEqual(was, []);
+  assert.equal(revoked, false);
+  assert.equal(seen.body.games, BGA_GAMES.length, 'у Андрея партии сезона BGA');
+  // прежнее имя и отзыв кода
+  assert.equal((await rename(s, P['Петя'], 'Пётр')).status, 200);
+  assert.deepEqual((await at(P['Петя'].user.id, P.denis)).body.was, ['петя']);
+  assert.equal((await s.req('POST', `admin/users/${P['Влад'].user.id}/revoke`, { body: {}, token: P.denis.token })).status, 200);
+  const gone = (await at(P['Влад'].user.id, P.denis)).body;
+  assert.equal(gone.revoked, true);
+  assert.equal(gone.user.name, 'Влад', 'профиль отозванного открывается: его партии остались');
+});
+
+test('профиль игрока: чужой профиль игроку закрыт, свой открыт, без входа ничего', async () => {
+  const s = setup();
+  const P = await people(s, 'Андрей', 'Петя');
+  const at = (id, who) => s.req('GET', `players/${id}/profile`, { token: who?.token });
+  const no = await at(P['Андрей'].user.id, P['Петя']);
+  assert.equal(no.status, 403);
+  assert.equal(no.body.error, 'not-admin');
+  assert.equal((await at(P.denis.user.id, P['Петя'])).status, 403, 'и профиль администратора тоже');
+  const self = await at(P['Петя'].user.id, P['Петя']);
+  assert.equal(self.status, 200);
+  assert.equal(self.body.user.name, 'Петя');
+  assert.ok(!('was' in self.body) && !('revoked' in self.body), 'себе лишнего не отдаем: как в «Моем профиле»');
+  assert.deepEqual(self.body, (await s.req('GET', 'me/profile', { token: P['Петя'].token })).body);
+  assert.equal((await at(P['Андрей'].user.id, null)).status, 401);
+  assert.equal((await at('u-nobody', P.denis)).status, 404);
+  assert.equal((await at('u-nobody', P['Петя'])).status, 403, 'игроку не говорим, есть ли такой номер');
+  assert.equal((await s.req('GET', `players/${P['Петя'].user.id}`, { token: P.denis.token })).status, 404, 'адрес без хвоста не существует');
+  assert.equal((await s.req('POST', `players/${P['Петя'].user.id}/profile`, { token: P.denis.token })).status, 404);
+  // администратор, назначенный главным, тоже видит любого
+  assert.equal((await s.req('POST', `admin/users/${P['Петя'].user.id}/admin`, { body: { admin: true }, token: P.denis.token })).status, 200);
+  assert.equal((await at(P['Андрей'].user.id, P['Петя'])).status, 200);
+});
+
+test('личная статистика игрока: администратор открывает ее по номеру, игрок получает свою', async () => {
+  const s = setup();
+  const P = await people(s, 'Андрей', 'Петя');
+  const forAdmin = (await s.req('GET', 'stats/player', { token: P.denis.token, query: { id: P['Андрей'].user.id } })).body;
+  assert.equal(forAdmin.player.name, 'Андрей');
+  assert.ok(forAdmin.players.length >= 3, 'у администратора в списке все игроки');
+  const forPlayer = (await s.req('GET', 'stats/player', { token: P['Петя'].token, query: { id: P['Андрей'].user.id } })).body;
+  assert.equal(forPlayer.player.name, 'Петя', 'чужой номер игроку ничего не открывает');
+  assert.deepEqual(forPlayer.players.map((p) => p.name), ['Петя']);
+});
+
+test('профиль игрока: подпись под именем собирает прежние имена, права, отзыв и путь новичка', async () => {
+  const { playerNote } = await import('../public/js/profile-core.js');
+  assert.equal(playerNote({ user: { name: 'Вася' }, was: [], revoked: false }), '');
+  assert.equal(playerNote({ user: { name: 'Vlad' }, was: ['влад', 'владимир'] }), 'раньше: влад, владимир');
+  assert.equal(playerNote({ user: { name: 'Петя', admin: true }, was: [], revoked: true }), 'администратор | код отозван');
+  assert.equal(playerNote({ user: { name: 'Денис', admin: true, main: true } }), 'главный администратор');
+  assert.equal(playerNote({ user: { name: 'Гоша', path: { state: 'novice', steps: 2 } } }), 'новичок: сыграно 2 из 3');
+  assert.equal(playerNote({ user: { name: 'Миша', path: { state: 'ask' } }, was: ['миха'] }), 'раньше: миха | новичок: еще не ответил на опрос');
+});
+
+test('профиль игрока подключен: имя в списке ведет в профиль, оттуда в личную статистику', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+  const { NAV_PAGES } = await import('../public/js/online.js');
+  for (const h of ['p/u-123abc456def', 'p/u-admin', 'stats/p/u-123abc456def']) assert.ok(NAV_PAGES.test(h), `${h}: есть «Назад» и «×»`);
+  for (const h of ['p/', 'p/U-BIG', 'stats/p/', 'p/u-1/x']) assert.ok(!NAV_PAGES.test(h), h);
+  const main = read('public/js/main.js');
+  assert.match(main, /const pm = h\.match\(\/\^p\\\/\(\[a-z0-9-\]\{1,40\}\)\$\/\);/);
+  assert.match(main, /pm\[1\] === s\.user\?\.id \? go\('#\/me'\) : renderPlayer\(app, topbar\('admin'\), bindTopbar, pm\[1\]\)/, 'свой номер ведет в «Мой профиль»');
+  assert.match(main, /renderPersonal\(app, topbar\('stats'\), bindTopbar, sp\[1\]\)/);
+  assert.match(main, /\$\{can\.profile \? `<a class="ulink" href="\$\{u\.self \? '#\/me' : `#\/p\/\$\{esc\(u\.id\)\}`\}"/, 'ссылка только тому, кому профиль откроется');
+  const profile = read('public/js/profile.js');
+  assert.match(profile, /export async function renderPlayer\(app, top, bindTop, id\)/);
+  assert.match(profile, /<h1>Профиль игрока<\/h1>/);
+  assert.match(profile, /href="#\/stats\/p\/\$\{esc\(id\)\}">Вся статистика игрока<\/a>/);
+  assert.match(profile, /api\('GET', `players\/\$\{encodeURIComponent\(id\)\}\/profile`\)/);
+  const page = profile.slice(profile.indexOf('export async function renderPlayer'));
+  assert.doesNotMatch(page, /pFile|nForm|pOut|bgSeg|pDrop/, 'в чужом профиле нет загрузки фото и настроек');
+  assert.match(page, /\$\('pName'\)\.textContent = p\.user\.name;/, 'имя вставляется текстом, не разметкой');
+  const personal = read('public/js/personal-view.js');
+  assert.match(personal, /export async function renderPersonal\(app, top, bindTop, id = null\)/);
+  assert.match(personal, /load\(id \|\| session\.get\(\)\?\.user\?\.id\);/);
+  assert.ok(read('public/css/app.css').includes('.ulist a.ulink'));
+});

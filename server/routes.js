@@ -597,12 +597,18 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * «Мой профиль»: сводка по тем же партиям, что личная статистика, и рейтинг (server/rating.js).
    * Считается на лету: история небольшая.
    */
-  async function profile(u) {
+  /**
+   * id: чей профиль. Свой видит каждый; чужой только администратор (правило то же, что у личной
+   * статистики, Денис 04.11), ему заодно прежние имена и отозван ли код (13.11).
+   */
+  async function profile(u, id = u.id) {
+    const other = id !== u.id;
+    if (other) needAdmin(u); // сначала права: игроку не говорим, есть ли такой номер
     await keepFinishedOnce(store);
     await detailsOnce(store);
     const users = await store.listUsers();
     const who = whoIs(users);
-    const me = users.find((x) => x.id === u.id) || u;
+    const me = users.find((x) => x.id === id) || (other ? http(404, 'no-user', 'Нет такого игрока') : u);
     const history = await store.listHistory();
     const games = playerGames(me, history, await allTours(), who);
     return {
@@ -610,7 +616,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       joinedAt: me.createdAt ?? null,
       ...profileSummary(games, now()),
       // в таблице мест только действующие игроки: отозванные места не занимают
-      rating: ratingOf(me.id, ratings(ratedGames(history, who)), (id) => who.byId.has(id) && !who.byId.get(id).revoked),
+      rating: ratingOf(me.id, ratings(ratedGames(history, who)), (x) => who.byId.has(x) && !who.byId.get(x).revoked),
+      ...(other ? { was: me.was || [], revoked: Boolean(me.revoked) } : {}),
     };
   }
 
@@ -1246,6 +1253,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
     if (method === 'GET' && head === 'me' && rest[0] === 'profile' && rest.length === 1) return profile(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'name' && rest.length === 1) return setName(u, body);
+    if (method === 'GET' && head === 'players' && rest.length === 2 && rest[1] === 'profile') return profile(u, rest[0]);
     if (method === 'GET' && head === 'me' && rest[0] === 'path' && rest.length === 1) return myPath(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'path' && rest.length === 1) return answerPath(u, body);
     if (method === 'POST' && head === 'me' && rest[0] === 'path' && rest[1] === 'play' && rest.length === 2) return playStep(u);

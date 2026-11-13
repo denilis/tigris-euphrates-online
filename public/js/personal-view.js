@@ -124,7 +124,8 @@ function rowsHTML(games) {
 }
 
 /** Нарисовать вкладку в app. top и bindTop: шапка сайта и привязка ее кнопок. */
-export async function renderPersonal(app, top, bindTop) {
+/** id: чью статистику открыть сразу (13.11, из профиля игрока); чужую сервер отдает только администратору. */
+export async function renderPersonal(app, top, bindTop, id = null) {
   let kind = 'all';
   try { kind = localStorage.getItem(PICK_KEY) || 'all'; } catch { /* приватный режим */ }
   if (!KINDS.some(([k]) => k === kind)) kind = 'all';
@@ -257,5 +258,5 @@ export async function renderPersonal(app, top, bindTop) {
     sortKey = b.dataset.sort;
     update();
   });
-  load(session.get()?.user?.id);
+  load(id || session.get()?.user?.id);
 }
