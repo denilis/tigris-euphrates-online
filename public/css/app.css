@@ -1414,6 +1414,27 @@ html:has(.endwrap:not([hidden])){overflow:hidden}
   .npi{flex-wrap:wrap}
   .npa{flex-basis:100%;justify-content:flex-start;padding-left:42px}
 }
+/* окно кадрирования фото (Денис 13.11, схема одобрена): фото двигается под кругом, ниже масштаб и
+   три кружка настоящих размеров. На низком экране окно прокручивается, большой кружок убран */
+.picker.crop{width:min(420px,calc(100vw - 24px));max-height:calc(100dvh - 16px);overflow:auto}
+.cropin{gap:10px}
+.cropview{display:block;width:min(100%,48dvh);aspect-ratio:1;margin:0 auto;border-radius:10px;background:#14110e;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.cropview:active{cursor:grabbing}
+.cropview:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.cropzoom{display:flex;align-items:center;gap:10px}
+.cropzoom input{flex:1;min-width:0;accent-color:var(--gold)}
+.cropzoom .btn{flex:none;width:44px;min-height:44px;padding:0;font-size:20px;line-height:1}
+.cropprev{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cropprev span{flex-basis:100%}
+.cropprev canvas{flex:none;border-radius:50%;background:#14110e;box-shadow:0 0 0 1px var(--gold2)}
+.crophint{margin:0}
+.picker.crop .err{margin:0;color:#ff9b7a}
+.picker.crop .err:empty{display:none}
+.cropbtns{display:flex;gap:8px}
+.cropbtns .btn{flex:1}
+@media (max-height:760px){
+  .cropprev canvas[data-prev="120"]{display:none}
+}
 /* подсказка новичку в «Кодах игроков» и строка пути в окне итога */
 .pnote{margin:0 0 12px;padding:10px 14px;border:1px solid var(--gold2);border-radius:10px;background:#3b2a12;color:#f3d99a}
 .steppath{margin:10px 0;padding:9px 12px;border:1px solid var(--gold2);border-radius:10px;background:rgba(224,182,90,.1);color:#f3d99a;font-size:14px;line-height:1.45}

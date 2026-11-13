@@ -78,7 +78,7 @@ function mountTour(box, view, act) {
 }
 
 /** Закрыть окно выбора: стола под ним больше нет на экране. */
-export const closePicker = () => document.querySelector('dialog.picker')?.close();
+export const closePicker = () => document.querySelectorAll('dialog.picker').forEach((d) => d.close());
 
 /**
  * Окно выбора игроков. Живет в body: лобби под ним перерисовывается с каждым опросом стола.

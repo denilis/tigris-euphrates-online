@@ -18,13 +18,14 @@ import { freeSeat, deleteQuestion, backFrom, NAV_PAGES, pageBack } from './onlin
 import { deletionsHTML, bindRestore } from './deletions.js';
 import { SCENES, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
-import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText } from './admin-list.js';
+import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText, userActions } from './admin-list.js';
 import { openBotGuide } from './bots-info.js';
 import { renderJoin } from './join.js';
 import { JOIN_ROUTE, joinUrl, linkNote, linkLine } from './join-link.js';
 import { inviteBoxHTML, bindInviteBox } from './invite-box.js';
 import { needsSurvey, isNovice, pathLabel } from './path-core.js';
 import { renderSurvey, mountPath } from './path.js';
+import { openCrop } from './avatar-crop.js';
 import { DEFAULT_FILTER, cleanFilter, filterTables, whoNames, PEOPLE_WORD } from './tables-filter.js';
 import { fsButton, bindFullscreen } from './fullscreen.js';
 
@@ -444,6 +445,7 @@ async function renderAdmin() {
       <th><button class="linkbtn" data-usort="last" type="button">Последняя</button></th>
       <th>Код</th><th></th>
     </tr></thead><tbody id="users"></tbody></table></div>
+    <input type="file" id="uFile" accept="image/*" hidden>
     ${admin ? `<h2>Открытые столы всех игроков</h2>
     <p class="muted">Здесь столы, где партия не начиналась, из последних 20 столов каждого игрока.</p>
     <div id="openTables" class="tables"></div>
@@ -490,14 +492,14 @@ async function renderAdmin() {
   let users = [], iAmMain = false;
   const row = (u) => {
     const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
-    const may = !u.self && !u.main && (iAmMain || !u.admin);
+    const can = userActions(u, { admin, main: iAmMain });
     return `<tr class="${u.self ? 'me' : ''}${u.revoked ? ' off' : ''}">
-      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}${u.path && !u.revoked ? `<br><small class="muted">${esc(pathLabel(u.path))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
+      <td data-l="Имя">${u.avatar ? `<i class="face" style="background-image:${faceBg(u)}"></i> ` : ''}<b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}${u.path && !u.revoked ? `<br><small class="muted">${esc(pathLabel(u.path))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
       <td data-l="Добавлен">${dateText(u.createdAt)}</td>
       <td data-l="Партий">${u.games}</td>
       <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
       <td data-l="Код"><span>${u.main ? 'главный' : u.revoked ? 'отозван' : 'действует'}</span>${flag}</td>
-      <td class="uacts">${may ? `<div class="ubtns"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${u.revoked || !admin ? '' : `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>`}${admin && u.path && !u.revoked ? `<button class="btn sm" data-open="${esc(u.id)}" data-name="${esc(u.name)}">Открыть доступ</button>` : ''}</div>` : ''}</td>
+      <td class="uacts">${can.code ? `<div class="ubtns"><button class="btn sm" data-new="${esc(u.id)}" data-name="${esc(u.name)}">Новый код</button>${can.revoke ? `<button class="btn sm" data-revoke="${esc(u.id)}">Отозвать</button>` : ''}${can.open ? `<button class="btn sm" data-open="${esc(u.id)}" data-name="${esc(u.name)}">Открыть доступ</button>` : ''}${can.photo ? `<button class="btn sm" data-photo="${esc(u.id)}" data-name="${esc(u.name)}" title="Поставить игроку фото. Потом он сможет заменить или убрать его сам">Фото</button>` : ''}</div>` : ''}</td>
     </tr>`;
   };
   const draw = () => {
@@ -533,6 +535,22 @@ async function renderAdmin() {
     st.sort = k;
     draw();
   }));
+  let photoFor = null; // кому ставим фото: запоминается между нажатием «Фото» и выбором файла
+  $('#uFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0], who = photoFor;
+    e.target.value = ''; // тот же файл можно выбрать снова
+    photoFor = null;
+    if (!file || !who) return;
+    try {
+      const done = await openCrop(file, {
+        title: `Фото игрока ${who.name}`,
+        save: (image) => api('POST', `admin/users/${who.id}/avatar`, { image }),
+      });
+      if (!done) return;
+      toast(`Фото игрока ${who.name} сохранено`);
+      if ($('#users')) load().catch((ex) => toast(ex.message)); // страницу могли сменить, пока шло окно
+    } catch (ex) { toast(ex.message); }
+  });
   const box = $('#users');
   box.addEventListener('change', async (e) => {
     const b = e.target.closest('[data-admin]');
@@ -546,6 +564,13 @@ async function renderAdmin() {
       if (!confirm('Отозвать код? Игрок выйдет на всех устройствах.')) return;
       await api('POST', `admin/users/${r.dataset.revoke}/revoke`).catch((ex) => toast(ex.message));
       load();
+      return;
+    }
+    // фото игроку от администратора (13.11): выбор файла, дальше то же окно кадрирования, что в профиле
+    const ph = e.target.closest('[data-photo]');
+    if (ph) {
+      photoFor = { id: ph.dataset.photo, name: ph.dataset.name };
+      $('#uFile').click();
       return;
     }
     // новичку открыть турниры и приглашения без трех партий (13.11)

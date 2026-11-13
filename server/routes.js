@@ -266,6 +266,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       forgetPeople();
       return { ok: true };
     }
+    // фото игроку от администратора (13.11): у кого фото нет, тому его ставят из «Кодов игроков».
+    // Права проверены выше, как у отзыва кода: игрокам администратор, администраторам главный,
+    // главному никто. Игрок потом заменит или уберет фото сам, в профиле
+    if (method === 'POST' && op === 'avatar') {
+      // отозванному фото не ставим и говорим об этом прямо, а не «попробуйте еще раз» (ревью 13.11)
+      if (user.revoked) http(409, 'revoked', 'Код этого игрока отозван: сначала выдайте ему новый код');
+      return setAvatar(u, body, user.id);
+    }
     // открыть новичку доступ без трех партий (13.11): только администратор, строкой выше это уже проверено
     if (method === 'POST' && op === 'path') {
       if (body.open !== true) http(400, 'bad-path', 'Открыть доступ: open = true');
@@ -489,7 +497,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * Запись игрока сверяется с базой: одновременный отзыв кода или смена прав не должны потеряться.
    * Старый файл стирается последним, чтобы при сбое запись не указывала на пустое место.
    */
-  async function setAvatar(u, body) {
+  // forId: кому ставим. По умолчанию себе; администратор ставит игроку из «Кодов игроков» (13.11),
+  // права на это проверяет adminUsers. Счетчик частоты у того, кто загружает.
+  async function setAvatar(u, body, forId = u.id) {
     if ((await store.hit(`ava:${u.id}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) http(429, 'too-many', 'Слишком часто, подождите несколько минут');
     let avatar = null;
     if (body.image !== null) {
@@ -498,15 +508,22 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       avatar = randomBytes(16).toString('hex');
       await store.setAvatar(avatar, pic);
     }
-    for (let k = 0; k < 4; k++) {
-      const cur = await store.getUser(u.id);
-      if (!cur || cur.revoked) break;
-      const user = { ...cur, avatar };
-      if (await store.casUser(cur, user)) {
-        if (cur.avatar) await store.delAvatar(cur.avatar);
-        forgetPeople();
-        return { user: publicUser(user) };
+    try {
+      for (let k = 0; k < 4; k++) {
+        const cur = await store.getUser(forId);
+        if (!cur || cur.revoked) break;
+        const user = { ...cur, avatar };
+        if (await store.casUser(cur, user)) {
+          // запись уже указывает на новое фото: сбой при стирании старого файла не повод для отказа
+          if (cur.avatar) await store.delAvatar(cur.avatar).catch((e) => console.error('avatar', e.message));
+          forgetPeople();
+          return { user: publicUser(user) };
+        }
       }
+    } catch (e) {
+      // база отказала посреди записи: новый файл никому не достался, не оставляем его лежать (ревью 13.11)
+      if (avatar) await store.delAvatar(avatar).catch(() => {});
+      throw e;
     }
     if (avatar) await store.delAvatar(avatar);
     http(409, 'stale', 'Не получилось сохранить фото, попробуйте еще раз');

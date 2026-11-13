@@ -30,6 +30,19 @@ export function pickUsers(users, { q = '', sort = 'created', dir = defaultDir(so
     });
 }
 
+/**
+ * Что можно сделать со строкой игрока (13.11). viewer: кто смотрит, { admin, main }. Правила те же,
+ * что на сервере (adminUsers в server/routes.js): себя и главного не трогают, администратора меняет
+ * только главный. code: «Новый код» (и игрок своему приглашенному); revoke, photo: только
+ * администратор и только у действующего кода; open: новичку открыть доступ; profile: имя ведет
+ * в профиль игрока (чужой профиль видит администратор, свой видит каждый).
+ */
+export function userActions(u, { admin = false, main = false } = {}) {
+  const may = !u.self && !u.main && (main || !u.admin);
+  const live = may && admin && !u.revoked;
+  return { code: may, revoke: live, open: live && Boolean(u.path), photo: live, profile: admin || Boolean(u.self) };
+}
+
 /** Пригласившие для отбора у администратора, по алфавиту. */
 export const inviters = (users) => [...new Set(users.map((u) => u.invitedBy).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
 

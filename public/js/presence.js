@@ -42,7 +42,9 @@ function apply({ me, online, inbox }) {
   const s = session.get();
   // имя только что сменили в профиле: другой экземпляр сервера до минуты помнит прежнее и вернул бы его
   const keepName = s?.user && Date.now() - (s.nameAt || 0) < NAME_HOLD_MS;
-  const user = keepName ? { ...me, name: s.user.name } : me;
+  // то же с фото (ревью 13.11): прежняя ссылка уже стерта, с ней в шапке было бы пустое место
+  const keepFace = s?.user && Date.now() - (s.avatarAt || 0) < NAME_HOLD_MS;
+  const user = { ...me, ...(keepName ? { name: s.user.name } : {}), ...(keepFace ? { avatar: s.user.avatar } : {}) };
   if (s && JSON.stringify(s.user) !== JSON.stringify(user)) session.set({ ...s, user });
   const fresh = arrivals(st.online, online);
   st.online = online;
