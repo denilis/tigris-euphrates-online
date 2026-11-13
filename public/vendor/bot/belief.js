@@ -104,27 +104,127 @@ function drawColor(w, rng) {
   return 3;
 }
 
-/** Полная правдоподобная позиция: чужие руки и мешок достроены случайно. */
-export function determinize(view, rng) {
-  const s = cloneState(view.state);
+/** Добор из неизвестных тайлов: take() тянет цвет, used(c) отмечает тайл, взятый не добором. */
+function drawer(view, rng) {
   const { weights, exact } = unknownPool(view, rng);
   const w = weights.slice();
+  // без возврата: точный подсчёт уменьшает остаток, «на глаз» — мягко
+  const used = (c) => { w[c] = Math.max(exact ? 0 : 0.5, w[c] - 1); };
   const take = () => {
     const c = drawColor(w, rng);
-    // без возврата: точный подсчёт уменьшает остаток, «на глаз» — мягко
-    w[c] = Math.max(exact ? 0 : 0.5, w[c] - 1);
+    used(c);
     return c;
   };
+  return { take, used };
+}
+
+/**
+ * Полная правдоподобная позиция: чужие руки и мешок достроены случайно. hands — руки соперников,
+ * заданные заранее (по игрокам, своя не нужна): тогда случайно достраивается только мешок.
+ */
+export function determinize(view, rng, hands = null) {
+  const s = cloneState(view.state);
+  const { take, used } = drawer(view, rng);
   for (let q = 0; q < s.np; q++) {
     if (q === view.me) continue;
     const h = [0, 0, 0, 0];
-    for (let k = 0; k < view.handCounts[q]; k++) h[take()]++;
+    if (hands) {
+      for (let c = 0; c < 4; c++) {
+        h[c] = hands[q][c];
+        for (let k = 0; k < h[c]; k++) used(c);
+      }
+    } else {
+      for (let k = 0; k < view.handCounts[q]; k++) h[take()]++;
+    }
     s.players[q].hand = h;
   }
   const bag = [0, 0, 0, 0];
   for (let k = 0; k < view.bagTotal; k++) bag[take()]++;
   s.bag = bag;
   return s;
+}
+
+/**
+ * Только руки соперников, достроенные так же, как в determinize (без доски и мешка): быстрая раздача
+ * для долей исходов. Массив по игрокам, на своём месте null.
+ */
+export function sampleHands(view, rng) {
+  const { take } = drawer(view, rng);
+  const np = view.state.np;
+  const hands = new Array(np).fill(null);
+  for (let q = 0; q < np; q++) {
+    if (q === view.me) continue;
+    const h = [0, 0, 0, 0];
+    for (let k = 0; k < view.handCounts[q]; k++) h[take()]++;
+    hands[q] = h;
+  }
+  return hands;
+}
+
+// --- Точные веса исходов конфликта (13.11.2026)
+//
+// Ход, который начинает войну или восстание, бот оценивает по нескольким достройкам. Исход решает одно:
+// хватит ли защитнику тайлов нужного цвета в руке. При 6 достройках доля «хватит» случайна (вместо 73%
+// бывает и 50%, и 100%), и слабая война то кажется выигрышной, то нет. Поэтому достройки делятся по
+// исходам, и каждый исход получает свою настоящую долю, а не долю в случайной выборке.
+
+/**
+ * Признак исхода — { def, color, margin }: защитник def отобьётся, если у него в руке не меньше margin
+ * тайлов цвета color. Ключ исхода — строка из 1 и 0 по признакам.
+ */
+export const strataKey = (hands, feats) => feats.map((f) => (hands[f.def][f.color] >= f.margin ? '1' : '0')).join('');
+
+/**
+ * Доли исходов по той же модели, что determinize: n быстрых раздач рук. Map: ключ исхода ->
+ * { p — доля, hands — пример рук с таким исходом }.
+ */
+export function handStrata(view, feats, rng, n = 2048) {
+  const out = new Map();
+  for (let i = 0; i < n; i++) {
+    const hands = sampleHands(view, rng);
+    const key = strataKey(hands, feats);
+    const e = out.get(key);
+    if (e) e.n++;
+    else out.set(key, { n: 1, p: 0, hands });
+  }
+  for (const e of out.values()) e.p = e.n / n;
+  return out;
+}
+
+/**
+ * Достройки с весами исходов. base — обычные достройки. Исход с долей не меньше minP, которого среди них
+ * нет, получает одну достройку по примеру рук (не больше maxExtra, сначала самые вероятные). Вес достройки —
+ * доля её исхода, поделённая на число достроек с этим исходом; исходы без достроек не учитываются, веса
+ * приведены к сумме 1. Без признаков возвращает те же достройки и weights: null (обычное среднее).
+ * maxExtra по умолчанию покрывает все исходы трёх войн (8 исходов): если часть исходов оставить без
+ * достройки, их вес уходит самым вероятным, и оценка смещается (ревью 13.11: до +0,23 при трёх войнах).
+ * n = 2048: ошибка доли около 1 п.п., расчёт около 3 мс на набор признаков.
+ */
+export function stratifiedDets(view, base, feats, rng, { n = 2048, minP = 0.02, maxExtra = 7 } = {}) {
+  if (!feats.length) return { dets: base, weights: null };
+  const strata = handStrata(view, feats, rng, n);
+  const dets = base.slice();
+  const keys = dets.map((d) => strataKey(d.players.map((pl) => pl.hand), feats));
+  const count = new Map();
+  for (const k of keys) count.set(k, (count.get(k) || 0) + 1);
+  const missing = [...strata]
+    .filter(([k, e]) => !count.has(k) && e.p >= minP)
+    .sort((a, b) => b[1].p - a[1].p)
+    .slice(0, maxExtra);
+  for (const [k, e] of missing) {
+    dets.push(determinize(view, rng, e.hands));
+    keys.push(k);
+    count.set(k, 1);
+  }
+  // исход, который не встретился ни в одной из n раздач: реже одной раздачи
+  const rare = 0.5 / n;
+  let total = 0;
+  const weights = keys.map((k) => {
+    const w = (strata.get(k)?.p ?? rare) / count.get(k);
+    total += w;
+    return w;
+  });
+  return { dets, weights: weights.map((w) => w / total) };
 }
 
 /** Вероятность, что у соперника с handCount тайлами есть хотя бы k тайлов цвета c. */

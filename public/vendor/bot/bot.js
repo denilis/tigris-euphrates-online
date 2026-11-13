@@ -15,7 +15,7 @@
 
 import { legalMoves, applyMove, cloneState, monumentOptions, components } from '../engine/engine.js';
 import { geom, RED, GREEN } from '../engine/constants.js';
-import { determinize, probAtLeast } from './belief.js';
+import { determinize, probAtLeast, stratifiedDets } from './belief.js';
 import { evaluate, positionRecord, recordValue, recordOpts, turnsLeft } from './evaluate.js';
 import { settle, treasureExposure } from './policy.js';
 
@@ -29,6 +29,10 @@ import { mctsSearch } from './ismcts.js';
 export const DEFAULT_SETTINGS = { strength: 50, counting: 'none', risk: 50, errors: 5, style: 'base' };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Точные веса исходов конфликта: с какого числа достроек действуют и сколько достроек добавлять
+// под недостающие исходы, когда на шаге 1 не хватает времени (ход считается по одной достройке).
+export const EXACT_WARS_MIN_DETS = 4;
+const REDUCED_EXTRA = 2;
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 // Длина куска вычислений между паузами в асинхронном режиме.
@@ -41,12 +45,13 @@ export function params(settings) {
   const style = styleParams(settings);
   // характер сдвигает риск (Денис 11.11): Андрей тянет с конфликтом, Влад нападает охотнее
   const risk = clamp((settings.risk ?? 50) + (style.riskShift || 0), 0, 100);
+  // Сколько вариантов чужих рук и мешка проигрывать. Двух мало: случайно
+  // удачная пара делает шумный ход (сброс, рискованный конфликт) лучшим.
+  const dets = st < 0.2 ? 1 : st < 0.45 ? 2 : st < 0.7 ? 4 : 6;
   return {
     // settings.weights — веса поверх стиля (подбор весов в самоигре, sim/tune.js)
     weights: settings.weights ? { ...style.weights, ...settings.weights } : style.weights,
-    // Сколько вариантов чужих рук и мешка проигрывать. Двух мало: случайно
-    // удачная пара делает шумный ход (сброс, рискованный конфликт) лучшим.
-    dets: st < 0.2 ? 1 : st < 0.45 ? 2 : st < 0.7 ? 4 : 6,
+    dets,
     topK: Math.round(2 + 12 * st),
     // Шум оценки делает слабого бота слабее. Раньше (1 - st) * 0.9 давал 0,45
     // при силе 50: больше разницы между разумными ходами, и выбор был почти
@@ -93,6 +98,12 @@ export function params(settings) {
     relocPurpose: settings.relocPurpose ?? 0.25,
     // Сброс: самое слабое действие у сильных игроков (0,3-0,5 за партию).
     discard: settings.discardCost ?? style.discard,
+    // Точные веса исходов конфликта (13.11.2026): ход, начинающий войну или восстание, и порядок войн
+    // оцениваются по достройкам, взвешенным долями исходов (bot/belief.js stratifiedDets). Включено по
+    // умолчанию, выключается настройкой exactWars: false. Только при 4 достройках и больше (сила от 45):
+    // слабые ступени оценивают войну по одной-двум догадкам, это часть их слабости, и точные веса
+    // сделали бы их в конфликтах равными сильным (ревью 13.11).
+    exactWars: dets >= EXACT_WARS_MIN_DETS && ![false, 'false', 0, '0'].includes(settings.exactWars),
   };
 }
 
@@ -101,8 +112,17 @@ function gauss(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function aggregate(vals, rho) {
+/** Среднее по достройкам плюс rho разбросов. weights — веса достроек (сумма 1); без них доли равные. */
+export function aggregate(vals, rho, weights = null) {
   const n = vals.length;
+  if (weights) {
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += weights[i] * vals[i];
+    if (n < 2 || !rho) return mean;
+    let varW = 0;
+    for (let i = 0; i < n; i++) varW += weights[i] * (vals[i] - mean) ** 2;
+    return mean + rho * Math.sqrt(varW);
+  }
   const mean = vals.reduce((a, b) => a + b, 0) / n;
   if (n < 2 || !rho) return mean;
   const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
@@ -235,8 +255,9 @@ const fixedRng = () => 0.5;
  * защитник побеждает, если у него хватит тайлов на ничью. Руку защитника бот
  * не видит и берёт вероятность из своих представлений о мешке (belief).
  * Объединение может начать несколько войн: pWin — худшая из них, best —
- * лучшая, wars — все шансы. null, если ход конфликта не начинает или ходящий
- * в нём не атакует.
+ * лучшая, wars — все шансы (с защитником def и перевесом margin: защитник
+ * отобьётся, если у него в руке не меньше margin тайлов цвета). null, если ход
+ * конфликта не начинает или ходящий в нём не атакует.
  */
 export function conflictOdds(view, s, m) {
   if (m.type !== 'leader' && m.type !== 'tile') return null;
@@ -263,7 +284,7 @@ export function conflictOdds(view, s, m) {
     if (f.k.att !== me) continue;
     const margin = f.k.attBoard + f.st.players[me].hand[f.color] - f.k.defBoard;
     const pWin = margin <= 0 ? 0 : 1 - probAtLeast(view, view.handCounts[f.k.def], f.color, margin);
-    wars.push({ color: f.color, pWin });
+    wars.push({ color: f.color, pWin, def: f.k.def, margin });
     if (!worst || pWin < worst.pWin) worst = { kind: f.kind, color: f.color, pWin };
   }
   if (worst) {
@@ -271,6 +292,46 @@ export function conflictOdds(view, s, m) {
     worst.best = Math.max(...wars.map((w) => w.pWin));
   }
   return worst;
+}
+
+/**
+ * Признаки исхода для хода с конфликтом (bot/belief.js strataKey): войны и восстание, где исход зависит
+ * от руки защитника. Война, которую нельзя выиграть или нельзя проиграть, признака не даёт.
+ */
+export function conflictFeats(view, odd) {
+  if (!odd) return [];
+  return odd.wars
+    .filter((w) => w.margin > 0 && w.margin <= view.handCounts[w.def])
+    .map((w) => ({ def: w.def, color: w.color, margin: w.margin }));
+}
+
+/** То же для выбора порядка войн: войны, которые ещё впереди и где ходящий бот атакует. */
+export function warOrderFeats(view) {
+  const s = view.state;
+  const me = view.me;
+  const feats = [];
+  for (const color of s.ctx.warColors || []) {
+    const x = cloneState(s);
+    try {
+      applyMove(x, { type: 'warColor', color }, fixedRng);
+    } catch (e) {
+      continue;
+    }
+    const k = x.phase === 'warSupport' ? x.ctx.war : null;
+    if (!k || k.att !== me) continue;
+    const margin = k.attBoard + s.players[me].hand[color] - k.defBoard;
+    if (margin > 0 && margin <= view.handCounts[k.def]) feats.push({ def: k.def, color, margin });
+  }
+  return feats;
+}
+
+// Порядок войн выбирается из 2-3 вариантов и редко: достроек берётся больше, чем на обычный ход.
+export const WAR_ORDER_DETS = 24;
+
+/** Достройки и веса для выбора порядка войн: { dets, weights }. */
+export function warOrderSample(view, P, rng) {
+  const base = Array.from({ length: Math.max(P.dets, WAR_ORDER_DETS) }, () => determinize(view, rng));
+  return stratifiedDets(view, base, warOrderFeats(view), rng);
 }
 
 // Экономика восстания (Денис 12.11, партия с ботом: Универсальный на 3-м ходу восстал против жреца
@@ -570,6 +631,21 @@ function* decideAction(view, P, rng, clock) {
   const catInfo = new Map(); // катастрофа -> правило (защита или атака, кого выселяет)
   const cands = playableActions(view, s, P, odds, catInfo);
 
+  // Достройки кандидата: у хода с конфликтом свои веса исходов и, если какого-то исхода среди общих
+  // достроек нет, своя достройка под него. Ходы с одинаковыми войнами делят одну выборку.
+  const plain = { dets, weights: null };
+  const samples = new Map();
+  // base — общие достройки или одна первая (когда на шаге 1 кончилось время)
+  const sampleFor = (feats, base = dets) => {
+    if (!feats.length) return base === dets ? plain : { dets: base, weights: null };
+    const key = (base === dets ? '' : 'r|') + feats.map((f) => `${f.def}:${f.color}:${f.margin}`).join('|');
+    let e = samples.get(key);
+    if (!e) samples.set(key, e = stratifiedDets(view, base, feats, rng, base === dets ? {} : { maxExtra: REDUCED_EXTRA }));
+    return e;
+  };
+  const featsOf = (m) => (P.exactWars ? conflictFeats(view, odds.get(m)) : []);
+  const sampleOf = (m) => sampleFor(featsOf(m));
+
   let scored = [];
   let reduced = 0; // кандидаты, оценённые по одной достройке из-за нехватки времени
   let searched = 0; // сколько лучших кандидатов просмотрено на два действия вперёд
@@ -597,9 +673,10 @@ function* decideAction(view, P, rng, clock) {
     for (const m of cands) {
       const ds = busy(clock) > firstDeadline ? dets.slice(0, 1) : dets;
       if (ds.length < dets.length) reduced++;
+      const sm = ds === dets ? sampleOf(m) : sampleFor(featsOf(m), ds);
       const vals = [];
-      for (const d of ds) vals.push(valueAtTurnEnd(d, m, me, rng, P));
-      scored.push({ m, vals, v: aggregate(vals, P.rho) - moveCost(s, m, P) + P.noise * gauss(rng) });
+      for (const d of sm.dets) vals.push(valueAtTurnEnd(d, m, me, rng, P));
+      scored.push({ m, vals, v: aggregate(vals, P.rho, sm.weights) - moveCost(s, m, P) + P.noise * gauss(rng) });
       yield* pause(clock);
     }
     scored.sort((a, b) => b.v - a.v);
@@ -612,38 +689,79 @@ function* decideAction(view, P, rng, clock) {
         // Второе действие выбирается одно на все достройки, по средней ценности.
         // Если выбирать его в каждой достройке отдельно, бот как будто видит
         // чужие руки и мешок, и ходы «с выбором потом» (сброс) кажутся лучше.
+        const sm = sampleOf(c.m);
+        // Конфликт вторым действием: если первое действие само конфликта с неясным исходом не начинает,
+        // второе оценивается по весам своих исходов. Иначе война первым действием считалась бы точно, а
+        // «тихий ход, потом война» по сырым догадкам, и вторая линия казалась бы лучше (ревью 13.11).
+        const second = P.exactWars && !sm.weights;
         const ends = []; // достройки, где ход уже закончился: оценка готова
-        const byMove = new Map(); // ключ второго действия -> { m, sum, n }
+        const endW = []; // их веса (при точных весах исходов)
+        const liveW = []; // веса достроек, где ход продолжается
+        const byMove = new Map(); // ключ второго действия -> { m, sum, w, n }: sum и w с весами достроек
         let live = 0;
-        for (const d of dets) {
-          const s1 = cloneState(d);
+        for (let i = 0; i < sm.dets.length; i++) {
+          const wd = sm.weights ? sm.weights[i] : 1;
+          const s1 = cloneState(sm.dets[i]);
           applyMove(s1, c.m, rng);
           settle(s1, rng);
           if (s1.over || s1.cur !== me || s1.phase !== 'action') {
             ends.push(evaluate(s1, me, { weights: P.weights }));
+            endW.push(wd);
             continue;
           }
           live++;
-          for (const m2 of playableActions(view, s1, P)) {
+          liveW.push(wd);
+          const odds2 = second ? new Map() : undefined;
+          for (const m2 of playableActions(view, s1, P, odds2)) {
             const key = JSON.stringify(m2);
             const v = valueAfter(s1, [m2], me, rng, P) - moveCost(s1, m2, P);
-            const e = byMove.get(key) || { m: m2, sum: 0, n: 0 };
-            e.sum += v;
+            const e = byMove.get(key) || { m: m2, sum: 0, w: 0, n: 0 };
+            e.sum += wd * v;
+            e.w += wd;
             e.n++;
+            if (second) {
+              if (!e.vals) { e.vals = []; e.feats = conflictFeats(view, odds2.get(m2)); }
+              e.vals[i] = v;
+            }
             byMove.set(key, e);
             yield* pause(clock);
+          }
+        }
+        if (second && live === sm.dets.length) {
+          for (const e of byMove.values()) {
+            if (e.n < live || !e.feats.length) continue;
+            const st = sampleFor(e.feats);
+            let sum = 0;
+            let ok = true;
+            for (let i = 0; i < st.dets.length && ok; i++) {
+              let v = e.vals[i];
+              if (v === undefined) {
+                // достройка под недостающий исход: та же линия «первое действие, потом это второе»
+                const s1 = cloneState(st.dets[i]);
+                try {
+                  applyMove(s1, c.m, rng);
+                  settle(s1, rng);
+                  v = valueAfter(s1, [e.m], me, rng, P) - moveCost(s1, e.m, P);
+                } catch (err) {
+                  ok = false;
+                }
+                yield* pause(clock);
+              }
+              if (ok) sum += st.weights[i] * v;
+            }
+            if (ok) { e.sum = sum; e.w = 1; }
           }
         }
         let best = null;
         for (const e of byMove.values()) {
           if (e.n < live) continue; // ход возможен не во всех достройках (после сброса рука разная)
-          if (!best || e.sum / e.n > best.avg) best = { m: e.m, avg: e.sum / e.n };
+          if (!best || e.sum / e.w > best.avg) best = { m: e.m, avg: e.sum / e.w };
         }
-        if (!best) for (const e of byMove.values()) if (!best || e.sum / e.n > best.avg) best = { m: e.m, avg: e.sum / e.n };
+        if (!best) for (const e of byMove.values()) if (!best || e.sum / e.w > best.avg) best = { m: e.m, avg: e.sum / e.w };
         if (best) c.second = best.m;
         const vals = ends.slice();
         for (let i = 0; i < live; i++) vals.push(best ? best.avg : -Infinity);
-        c.v2 = aggregate(vals, P.rho) - moveCost(s, c.m, P) + P.noise * gauss(rng);
+        c.v2 = aggregate(vals, P.rho, sm.weights ? [...endW, ...liveW] : null) - moveCost(s, c.m, P) + P.noise * gauss(rng);
       }
       const deep = top.filter((c) => c.v2 !== undefined).sort((a, b) => b.v2 - a.v2);
       searched = deep.length;
@@ -658,9 +776,10 @@ function* decideAction(view, P, rng, clock) {
       const top = scored.slice(0, P.replyK);
       for (const c of top) {
         if (busy(clock) > deadline && c !== top[0]) break;
+        const sm = sampleOf(c.m);
         const vals = [];
-        for (const d of dets) vals.push(yield* valueAfterReply(d, c, me, rng, P, clock));
-        c.v3 = aggregate(vals, P.rho) - moveCost(s, c.m, P) + P.noise * gauss(rng);
+        for (const d of sm.dets) vals.push(yield* valueAfterReply(d, c, me, rng, P, clock));
+        c.v3 = aggregate(vals, P.rho, sm.weights) - moveCost(s, c.m, P) + P.noise * gauss(rng);
       }
       const checked = top.filter((c) => c.v3 !== undefined).sort((a, b) => b.v3 - a.v3);
       replied = checked.length;
@@ -819,7 +938,11 @@ function* decideByEval(view, P, rng, clock) {
   const me = view.me;
   const s = view.state;
   const moves = legalMoves(s);
-  const dets = Array.from({ length: P.dets }, () => determinize(view, rng));
+  // Порядок войн при точных весах: достроек больше, и они взвешены долями исходов оставшихся войн.
+  const order = P.exactWars && s.phase === 'warChoose';
+  const { dets, weights } = order
+    ? warOrderSample(view, P, rng)
+    : { dets: Array.from({ length: P.dets }, () => determinize(view, rng)), weights: null };
   // Монумент: оценка на конец хода (с очками за монумент, которые начисляются
   // в конце хода) и вкус стиля к монументам. Обучение учило готовить монумент
   // в расчёте, что его построят; без этой прибавки бот готовил и пасовал.
@@ -831,7 +954,7 @@ function* decideByEval(view, P, rng, clock) {
     // берем с того, что меньше прикрывает своих лидеров (bot/policy.js treasureExposure)
     if (m.type === 'treasure') bonus -= TREASURE_EXPOSE * treasureExposure(s, m.pos, me);
     const value = (d) => (monument ? valueAtTurnEnd(d, m, me, rng, P) : valueAfter(d, [m], me, rng, P));
-    const v = aggregate(dets.map(value), P.rho) + bonus + P.noise * 0.3 * gauss(rng);
+    const v = aggregate(dets.map(value), P.rho, weights) + bonus + P.noise * 0.3 * gauss(rng);
     if (!best || v > best.v) best = { m, v };
     yield* pause(clock);
   }
