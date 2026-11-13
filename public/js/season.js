@@ -43,10 +43,15 @@ export function cumulative(games, n = sizeOf(games)) {
 
 const norm = (name) => String(name || '').trim().toLowerCase();
 
-/** Турниры, чей состав совпал с людьми за столом: бот и пустые места не считаются. */
+/**
+ * Турниры, чей состав совпал с людьми за столом: бот и пустые места не считаются. Участник сверяется
+ * по номеру игрока (ids у турнира, uid у места), если оба известны, иначе по имени: имя можно сменить,
+ * и за столом, где человек сел раньше, оно прежнее (13.11).
+ */
 export function fitTours(tours, seats) {
-  const names = seats.filter((s) => s.kind === 'human' && s.taken).map((s) => norm(s.name));
-  return tours.filter((t) => t.players.length === names.length && t.players.every((p) => names.includes(norm(p))));
+  const people = seats.filter((s) => s.kind === 'human' && s.taken);
+  const sits = (t, p, k) => people.some((s) => (t.ids?.[k] && s.uid ? t.ids[k] === s.uid : norm(s.name) === norm(p)));
+  return tours.filter((t) => t.players.length === people.length && t.players.every((p, k) => sits(t, p, k)));
 }
 
 /** Турнир, в который пойдет партия; null, если организатор снял ее с зачета. */

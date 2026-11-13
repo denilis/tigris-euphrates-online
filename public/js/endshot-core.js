@@ -7,6 +7,8 @@ const inChat = (name) => CHAT_PEOPLE.includes(String(name).trim().toLowerCase())
 /** Кнопка «Отправить в чат ДВАК»: партия окончена, смотрит свой человек, за столом только свои. */
 export function canSendPhoto(view, myName) {
   if (view.status !== 'over' || !view.game?.result || view.me == null) return false;
+  // свой ли стол, решает сервер (view.chat, 13.11); сверка по именам осталась для вида без этого поля
+  if (typeof view.chat === 'boolean') return view.chat;
   return inChat(myName) && view.seats.filter((s) => s.kind === 'human' && s.taken).every((s) => inChat(s.name));
 }
 
@@ -34,7 +36,10 @@ export function tourLine(tours, view) {
   const rows = pictureRows(view);
   const pts = placePoints(rows.map((r) => r.place));
   const norm = (n) => String(n).trim().toLowerCase();
-  const parts = rows.flatMap((r, i) => (tour.players.some((p) => norm(p) === norm(r.name)) ? [`${r.name} +${pts[i]}`] : []));
+  // участник турнира по номеру игрока на месте, если он известен, иначе по имени (имя можно сменить, 13.11)
+  const uid = (r) => view.seats.find((s) => s.id === r.seatId)?.uid;
+  const inTour = (r) => tour.players.some((p, k) => (tour.ids?.[k] && uid(r) ? tour.ids[k] === uid(r) : norm(p) === norm(r.name)));
+  const parts = rows.flatMap((r, i) => (inTour(r) ? [`${r.name} +${pts[i]}`] : []));
   return `${tour.name}: ${parts.join(', ')}`;
 }
 

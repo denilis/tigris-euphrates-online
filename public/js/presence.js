@@ -5,6 +5,7 @@ import { esc, toast, faceBg } from './util.js';
 
 const TITLE = document.title;
 const HANDLED_KEY = 'tigris.letters'; // на какие письма уже отвечали на этом устройстве
+const NAME_HOLD_MS = 2 * 60 * 1000; // столько после смены имени в профиле пульс не переписывает его прежним
 
 function loadHandled() {
   try { return new Set(JSON.parse(localStorage.getItem(HANDLED_KEY)) || []); } catch { return new Set(); }
@@ -39,7 +40,10 @@ async function beat() {
 function apply({ me, online, inbox }) {
   // права могли поменять, пока человек на сайте: шапка увидит это на следующей странице
   const s = session.get();
-  if (s && JSON.stringify(s.user) !== JSON.stringify(me)) session.set({ ...s, user: me });
+  // имя только что сменили в профиле: другой экземпляр сервера до минуты помнит прежнее и вернул бы его
+  const keepName = s?.user && Date.now() - (s.nameAt || 0) < NAME_HOLD_MS;
+  const user = keepName ? { ...me, name: s.user.name } : me;
+  if (s && JSON.stringify(s.user) !== JSON.stringify(user)) session.set({ ...s, user });
   const fresh = arrivals(st.online, online);
   st.online = online;
   if (fresh.length && !st.busy) toast(`${fresh.map((p) => p.name).join(', ')}: теперь на сайте`);

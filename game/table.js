@@ -25,6 +25,14 @@ export const HEROES = ['lion', 'bull', 'bow', 'pot'];
 const BOT_HEROES = ['pot', 'bow', 'bull', 'lion']; // боту достаётся герой с конца, людям остаётся лев
 // постоянные герои компании (просьба Дениса 01.11): выбор по умолчанию, в лобби его можно сменить
 const OWN_HEROES = new Map([['денис', 'pot'], ['андрей', 'bow'], ['влад', 'lion']]);
+/**
+ * Под каким именем человека знает компания: первое из его имен (нынешнее и прежние), у которого есть
+ * постоянный герой, иначе null. Имя можно сменить (13.11), а герой и «бот берет героя, пока человека
+ * нет» остаются за человеком: сервер кладет этот ключ на место (seat.person).
+ */
+export const ownPerson = (names) => names.find((k) => OWN_HEROES.has(k)) || null;
+/** Имена компании, у которых есть постоянный герой. */
+export const OWN_PEOPLE = [...OWN_HEROES.keys()];
 // turnSeconds — время на ход, сверх него таймер уходит в минус (ход не отнимается);
 // confirmSeconds — окно после последнего действия: ход еще можно отменить или завершить кнопкой,
 // потом он завершается сам (0 — без окна). Решения Дениса 29.10; 11.11 по умолчанию 20 с вместо 10
@@ -100,7 +108,12 @@ function makeBot(t, id) {
   return { id, kind: 'bot', userId: null, name: null, hero: botHero(t), bot: { ...DEFAULT_BOT } };
 }
 
-const nameKey = (seat) => String(seat.name).trim().toLowerCase();
+const nameKey = (seat) => seat.person || String(seat.name).trim().toLowerCase();
+/** Освободить место: прежний человек уходит вместе со своим ключом. */
+function vacate(seat) {
+  Object.assign(seat, emptyHuman(seat.id));
+  delete seat.person;
+}
 
 /** Посадить человека с его героем: бот уступает и берет другого, героя другого человека не отбираем. */
 function giveOwnHero(t, seat) {
@@ -144,6 +157,7 @@ export function createTable({ code, title = null, host, now }) {
     hostUserId: host.userId, options: { ...DEFAULT_OPTIONS }, seats: [], game: null, next: null,
   };
   t.seats.push({ id: 0, kind: 'human', userId: host.userId, name: host.name, avatar: host.avatar || null, hero: null }, emptyHuman(1), emptyHuman(2));
+  if (host.person) t.seats[0].person = host.person;
   giveOwnHero(t, t.seats[0]);
   t.seats.push(makeBot(t, 3));
   nameBots(t);
@@ -161,6 +175,7 @@ export function sit(t, user, seatId, now) {
   seat.userId = user.userId;
   seat.name = user.name;
   seat.avatar = user.avatar || null;
+  if (user.person) seat.person = user.person;
   giveOwnHero(t, seat);
   touch(t, now);
 }
@@ -169,7 +184,7 @@ export function leave(t, userId, now) {
   needLobby(t);
   const seat = needSeated(t, userId);
   const person = nameKey(seat);
-  Object.assign(seat, emptyHuman(seat.id));
+  vacate(seat);
   afterLeave(t, person);
   // ушёл хост: стол переходит к следующему сидящему человеку
   if (userId === t.hostUserId) {
@@ -208,7 +223,7 @@ export function unseat(t, hostId, seatId, now) {
   if (seat.kind !== 'human' || !seat.userId) fail('seat-empty', 'На этом месте никого нет', 409);
   if (seat.userId === hostId) fail('is-host', 'Себя можно убрать кнопкой «Встать»', 409);
   const person = nameKey(seat);
-  Object.assign(seat, emptyHuman(seat.id));
+  vacate(seat);
   afterLeave(t, person);
   touch(t, now);
 }

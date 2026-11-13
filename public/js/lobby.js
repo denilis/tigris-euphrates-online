@@ -195,7 +195,7 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
   const o = view.options;
   const dis = host ? '' : 'disabled';
   const notReady = view.seats.some((s) => !s.taken) ? 'Не все места заняты.' : view.seats.some((s) => !s.hero) ? 'Не у всех выбран герой.'
-    : waiting.length ? `Ждем за столом: ${waiting.map((s) => s.name).join(', ')}.` : '';
+    : waiting.length ? `Ждем за столом: ${waiting.map((s) => esc(s.name)).join(', ')}.` : '';
   const made = tour ? null : madeLinks.get(madeKey(view.code));
   // сверху меню сайта, как на других страницах (просьба Дениса 03.11): раньше из лобби был
   // только путь через «Мои столы»

@@ -58,7 +58,8 @@ function setBackdrop(on) {
   backdropOn = on;
   const moving = !still && Boolean(SCENE.video);
   backdrop.hidden = !on || !moving;
-  bgToggle.hidden = !on || !SCENE.video;
+  // кнопка поверх страницы только у гостя: вошедший меняет фон в профиле, строка «Фон сайта» (13.11)
+  bgToggle.hidden = !on || !SCENE.video || Boolean(session.get()?.token);
   bgToggle.textContent = still ? 'Включить видео' : 'Остановить видео';
   document.body.classList.toggle('stillbg', on && !moving);
   if (!on || !moving) return backdrop.pause();
@@ -66,11 +67,13 @@ function setBackdrop(on) {
   backdrop.play().catch(() => {});
 }
 
-bgToggle.addEventListener('click', () => {
-  still = !still;
+/** Выбрать фон: неподвижная картинка (true) или ролик. Выбор запоминается на устройстве. */
+function setStill(v) {
+  still = Boolean(v);
   try { localStorage.setItem(STILL_KEY, still ? '1' : '0'); } catch { /* приватный режим: живем без памяти */ }
   setBackdrop(backdropOn);
-});
+}
+bgToggle.addEventListener('click', () => setStill(!still));
 
 const go = (hash) => { location.hash = hash; };
 
@@ -95,12 +98,14 @@ function topbar(active) {
 // шапка для тех, кто читает правила без входа
 const GUEST_BAR = `<header class="bar"><a class="brand" href="#/">Тигр и Евфрат</a><nav><a href="#/rules">Правила</a><a href="#/learn">Обучение</a><a href="#/">Войти</a></nav></header>`;
 
+function logout() {
+  if (!confirm('Выйти на этом устройстве? Потом понадобится код снова.')) return;
+  session.clear();
+  route();
+}
+
 function bindTopbar() {
-  app.querySelector('#logout')?.addEventListener('click', () => {
-    if (!confirm('Выйти на этом устройстве? Потом понадобится код снова.')) return;
-    session.clear();
-    route();
-  });
+  app.querySelector('#logout')?.addEventListener('click', logout);
 }
 
 // --- окно активации
@@ -476,7 +481,7 @@ async function renderAdmin() {
     const flag = u.main ? '' : iAmMain ? `<label class="chk"><input type="checkbox" data-admin="${esc(u.id)}" ${u.admin ? 'checked' : ''}> администратор</label>` : u.admin ? '<span class="muted">администратор</span>' : '';
     const may = !u.self && !u.main && (iAmMain || !u.admin);
     return `<tr class="${u.self ? 'me' : ''}${u.revoked ? ' off' : ''}">
-      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
+      <td data-l="Имя"><b>${esc(u.name)}</b>${u.self ? ' <span class="muted">(вы)</span>' : ''}${u.was?.length ? `<br><small class="muted">раньше: ${esc(u.was.join(', '))}</small>` : ''}</td>${admin ? `<td data-l="Пригласил">${esc(u.invitedBy || '-')}</td>` : ''}
       <td data-l="Добавлен">${dateText(u.createdAt)}</td>
       <td data-l="Партий">${u.games}</td>
       <td data-l="Последняя">${dayText(u.lastGameAt)}</td>
@@ -645,7 +650,7 @@ function route() {
   if (h === 'admin') return renderAdmin();
   if (h === 'stats') return renderStats(app, topbar('stats'), bindTopbar);
   if (h === 'stats/me') return renderPersonal(app, topbar('stats'), bindTopbar);
-  if (h === 'me') return renderProfile(app, topbar(''), bindTopbar);
+  if (h === 'me') return renderProfile(app, topbar(''), bindTopbar, { refresh: route, logout, bg: { still: () => still, set: setStill, hasVideo: Boolean(SCENE.video) } });
   return renderStart();
 }
 

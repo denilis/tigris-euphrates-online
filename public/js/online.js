@@ -24,10 +24,15 @@ export const pendingInvites = (inbox, handled) => inbox.filter((m) => m.kind ===
 export const CHAT_PEOPLE = ['денис', 'андрей', 'влад'];
 const inChat = (name) => CHAT_PEOPLE.includes(String(name).trim().toLowerCase());
 
-/** Кнопка «Позвать в чат»: зовет свой, за столом только свои и есть кого звать. */
+/**
+ * Кнопка «Позвать в чат»: зовет свой, за столом только свои и есть кого звать. Свой ли стол, решает
+ * сервер (view.chat, 13.11): имя можно сменить, и по именам за столом это уже не узнать. Сверка по
+ * именам осталась для вида без этого поля.
+ */
 export function chatAllowed(view, myName) {
   const people = view.seats.filter((s) => s.kind === 'human');
-  return inChat(myName) && people.every((s) => !s.taken || inChat(s.name)) && people.some((s) => s.id !== view.me);
+  const ours = typeof view.chat === 'boolean' ? view.chat : inChat(myName) && people.every((s) => !s.taken || inChat(s.name));
+  return ours && people.some((s) => s.id !== view.me);
 }
 
 /** Подсказка после приглашения: chat null значит, что этот стол к чату не относится. */

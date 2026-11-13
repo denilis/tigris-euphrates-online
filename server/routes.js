@@ -5,17 +5,20 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readSession, signSession, normalizeCode, codeHash, isPin, pinHash, newCode, newTableCode, newJoinToken, isJoinToken, joinHash } from './auth.js';
 import {
   createTable, sit, leave, seatPeople, unseat, setHero, setOptions, setSeatCount, setSeatKind, setBot, moveSeat,
-  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready,
+  start, submit, rematch, close, historyEntry, botDue, seatOfUser, TableError, undo, confirmDue, autoConfirm, tableDay, pause, ready, ownPerson, OWN_PEOPLE,
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { replayFrames } from '../game/frames.js';
 import { botStep } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
-import { SEASON, tourGames, publicTour, playerGames, tourOf } from './stats.js';
+import { SEASON, SEASON_PLAYERS, tourGames, publicTour, playerGames, tourOf, tourNames } from './stats.js';
+import { whoIs, namesOf, nameKey, normName } from './people.js';
+import { ratings, ratedGames, ratingOf } from './rating.js';
+import { profileSummary } from './profile.js';
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, inChat, invited, called, photoButton } from './telegram.js';
+import { telegram, inChat, invited, called, photoButton, CHAT_PEOPLE } from './telegram.js';
 import { parsePhoto, photoCaption } from './photo.js';
 import { cleanAnalysis, humanSeats } from './analysis.js';
 import { ENGINE } from '../game/vendor/version.js';
@@ -57,6 +60,18 @@ const TOUR_NAME_MAX = 40, TOURS_MAX = 50;
 const JOIN_MS = 7 * 24 * 3600 * 1000; // ссылка-приглашение действует неделю (Денис 06.11)
 const JOIN_ACTIVE_MAX = 10; // действующих ссылок у одного игрока
 const NEW_PLAYERS_DAY = 10; // новых игроков в сутки от игрока без прав администратора
+const NAME_MIN = 2, NAME_MAX = 30; // свое имя в профиле (13.11)
+const NAME_CHANGES_DAY = 5; // смен имени в сутки
+// Прежних имен у игрока не больше стольких. Старые имена из списка не вытесняются: по ним за человеком
+// держатся сезон BGA, герой и чат, и вытесненное имя мог бы забрать другой (ревью 13.11). Когда список
+// полон, новое имя взять нельзя, можно только вернуться к одному из прежних.
+const WAS_MAX = 10;
+// Имена компании: к ним привязаны сезон BGA, постоянные герои и чат. Занять такое имя может только тот,
+// кто его уже носил, или администратор, заводя игрока.
+const COMPANY = new Set([...SEASON_PLAYERS, ...OWN_PEOPLE, ...CHAT_PEOPLE].map(nameKey));
+// знаки разметки в имени не нужны, а попав на страницу без экранирования, они стали бы кодом
+const NAME_BAD = /[<>"&`]/;
+const mixedScripts = (name) => name.split(' ').some((w) => /\p{Script=Cyrillic}/u.test(w) && /\p{Script=Latin}/u.test(w));
 // метка стола для опроса: решает бот или ждет окно подтверждения (c<срок>), которое
 // завершит любой клиент через bot-tick, когда срок выйдет
 // b<срок>: бот уже решил и «думает» до срока (пауза 06.11), ход покажет первый bot-tick после
@@ -68,8 +83,6 @@ const DELETED = 'deleted'; // отметка удаленного стола д�
 const TABLE_LOG_MAX = 300; // журнал удалений хранит последние записи
 const publicUser = (u) => ({ id: u.id, name: u.name, admin: Boolean(u.admin), main: u.id === ADMIN_ID, avatar: u.avatar || null });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
-/** Имя без невидимых знаков (нулевой ширины и управляющих) и с одиночными пробелами (06.11). */
-const normName = (raw) => String(raw || '').normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/[\s\p{Cc}]+/gu, ' ').trim();
 const letterId = () => randomBytes(6).toString('hex');
 
 /**
@@ -159,16 +172,27 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { code, hash };
   }
 
-  const cleanName = (raw) => {
+  /**
+   * Имя в принятом виде или отказ: длина, без знаков разметки, без смеси русских и латинских букв в
+   * одном слове (так «Дeнис» с латинской e не выдать за «Денис»). Имена, заведенные раньше, не трогаем.
+   */
+  const cleanName = (raw, min = 1) => {
+    if (typeof raw !== 'string') http(400, 'bad-name', `Имя от ${min} до ${NAME_MAX} знаков`);
     const name = normName(raw);
-    if (!name || name.length > 30) http(400, 'bad-name', 'Имя от 1 до 30 знаков');
+    if (name.length < min || name.length > NAME_MAX) http(400, 'bad-name', `Имя от ${min} до ${NAME_MAX} знаков`);
+    if (NAME_BAD.test(name)) http(400, 'bad-name', 'В имени нельзя использовать знаки < > " & `');
+    if (mixedScripts(name)) http(400, 'bad-name', 'В одном слове не смешивайте русские и латинские буквы');
     return name;
   };
-  // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы (и с невидимым знаком тоже)
-  async function nameFree(name) {
-    const same = (await store.listUsers()).some((x) => normName(x.name).toLowerCase() === name.toLowerCase());
-    if (same) http(409, 'name-taken', 'Такое имя уже есть');
+  // имя это лицо человека в приглашениях и в зачете, два Андрея там неотличимы (и с невидимым знаком тоже).
+  // Прежние имена тоже заняты: по ним за человеком остаются сезон BGA, герой и старые партии (13.11).
+  const nameTaken = (users, name, exceptId = null) => users.some((x) => x.id !== exceptId && namesOf(x).includes(nameKey(name)));
+  /** company: имя компании разрешено (его заводит администратор). */
+  async function nameFree(name, { company = false } = {}) {
+    if (nameTaken(await store.listUsers(), name) || (!company && COMPANY.has(nameKey(name)))) http(409, 'name-taken', 'Такое имя уже есть');
   }
+  /** Человек для места за столом: с ключом компании, по которому за ним остается герой (game/table.js ownPerson). */
+  const seatUser = (x) => ({ userId: x.id, name: x.name, avatar: x.avatar, person: ownPerson(namesOf(x)) });
   // игрок без прав администратора заводит не больше 10 человек в сутки: кодом или ссылкой
   async function countNewPlayer(u) {
     if (!u.admin && (await store.hit(`newplayer:${u.id}`, 24 * 3600 * 1000)) > NEW_PLAYERS_DAY) http(429, 'too-many', 'Сегодня вы уже завели много игроков, попробуйте завтра');
@@ -190,13 +214,15 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
         ...publicUser(x), self: x.id === u.id, revoked: Boolean(x.revoked), createdAt: x.createdAt ?? null,
         invitedBy: x.invitedBy ? names.get(x.invitedBy) || null : null,
         games: played.get(x.id)?.n || 0, lastGameAt: played.get(x.id)?.last ?? null,
+        // прежние имена видит администратор: иначе не понять, кто такой «Vlad» (13.11)
+        ...(u.admin && x.was?.length ? { was: x.was } : {}),
       }));
     }
     if (method === 'POST' && !rest.length) {
       const name = cleanName(body.name);
       if (body.admin) needMain(u);
       await countNewPlayer(u);
-      await nameFree(name);
+      await nameFree(name, { company: Boolean(u.admin) });
       const id = 'u-' + randomBytes(6).toString('hex');
       const { code, hash } = await claimCode(body.code, id, u);
       const user = { id, name, admin: Boolean(body.admin), revoked: false, codeHash: hash, createdAt: now(), invitedBy: u.id };
@@ -329,10 +355,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * без него по имени, как в личной статистике.
    */
   function gamesOf(users, history) {
-    const byName = new Map(users.map((x) => [x.name.trim().toLowerCase(), x.id]));
+    const who = whoIs(users); // имя нынешнее или прежнее (13.11)
     const out = new Map();
     for (const e of history) {
-      const ids = new Set(e.seats.filter((s) => s.kind === 'human').map((s) => s.userId || byName.get(String(s.name || '').trim().toLowerCase())));
+      const ids = new Set(e.seats.filter((s) => s.kind === 'human').map((s) => who.owner(s)));
       for (const id of ids) {
         if (!id) continue;
         const r = out.get(id) || { n: 0, last: null };
@@ -387,13 +413,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   // кто что видит в статистике (Денис 04.11): игрок только свою личную статистику и турниры, где
   // он участник; администратор все
-  const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-  const inTour = (t, u) => t.players.some((p) => (p.id ? p.id === u.id : sameName(p.name, u.name)));
-  const myTours = async (u) => (await allTours()).filter((t) => u.admin || inTour(t, u));
+  // участник встроенного сезона записан именем: его находим по справочнику людей (нынешнее или прежнее имя)
+  const inTour = (t, u, who) => t.players.some((p) => (p.id || who.idOf(p.name)) === u.id);
+  const myTours = async (u, who) => (await allTours()).filter((t) => u.admin || inTour(t, u, who));
 
   async function toursInfo(u) {
     const users = (await store.listUsers()).filter((x) => !x.revoked);
-    return { tours: (await myTours(u)).map(publicTour), people: users.map((x) => ({ id: x.id, name: x.name })) };
+    const who = whoIs(users);
+    return { tours: (await myTours(u, who)).map((t) => publicTour(t, who)), people: users.map((x) => ({ id: x.id, name: x.name })) };
   }
 
   async function newTour(u, body) {
@@ -428,8 +455,65 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return {
       player: { id: player.id, name: player.name, avatar: player.avatar || null },
       players: seen.map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
-      games: playerGames(player, await store.listHistory(), await allTours()),
+      games: playerGames(player, await store.listHistory(), await allTours(), whoIs(users)),
     };
+  }
+
+  // --- профиль (13.11)
+
+  /**
+   * «Мой профиль»: сводка по тем же партиям, что личная статистика, и рейтинг (server/rating.js).
+   * Считается на лету: история небольшая.
+   */
+  async function profile(u) {
+    await keepFinishedOnce(store);
+    await detailsOnce(store);
+    const users = await store.listUsers();
+    const who = whoIs(users);
+    const me = users.find((x) => x.id === u.id) || u;
+    const history = await store.listHistory();
+    const games = playerGames(me, history, await allTours(), who);
+    return {
+      user: publicUser(me),
+      joinedAt: me.createdAt ?? null,
+      ...profileSummary(games, now()),
+      // в таблице мест только действующие игроки: отозванные места не занимают
+      rating: ratingOf(me.id, ratings(ratedGames(history, who)), (id) => who.byId.has(id) && !who.byId.get(id).revoked),
+    };
+  }
+
+  /**
+   * Свое имя. Прежнее имя остается за игроком (was): по нему находятся партии сезона BGA, герой и
+   * старые партии, а другой игрок взять его не может. К своему прежнему имени вернуться можно.
+   * Запись сверяется с базой, как у фото: одновременный отзыв кода или смена прав не должны потеряться.
+   */
+  async function setName(u, body) {
+    const name = cleanName(body.name, NAME_MIN);
+    const key = nameKey(name);
+    // отказы «имя занято» тоже считаются: занятые и прежние имена нельзя перебирать без счета
+    if ((await store.hit(`nametry:${u.id}`, ACTIVATE_WINDOW_MS)) > ACTIVATE_LIMIT) http(429, 'too-many', 'Слишком много попыток, подождите несколько минут');
+    for (let k = 0; k < 4; k++) {
+      const cur = await store.getUser(u.id);
+      if (!cur || cur.revoked) break;
+      if (cur.name === name) return { user: publicUser(cur) };
+      const own = namesOf(cur);
+      const taken = (users) => nameTaken(users, name, cur.id) || (COMPANY.has(key) && !own.includes(key));
+      if (taken(await store.listUsers())) http(409, 'name-taken', 'Такое имя уже есть у другого игрока');
+      const was = [...new Set(own)].filter((x) => x !== key);
+      if (was.length > WAS_MAX) http(409, 'too-many-names', `У вас уже ${WAS_MAX} прежних имен: новое взять нельзя, можно вернуться к одному из прежних`);
+      if (k === 0 && (await store.hit(`name:${u.id}`, 24 * 3600 * 1000)) > NAME_CHANGES_DAY) http(429, 'too-many', 'Имя сегодня уже меняли несколько раз, попробуйте завтра');
+      const user = { ...cur, name, was };
+      if (await store.casUser(cur, user)) {
+        // пока писали, то же имя мог взять другой игрок: тогда свое возвращаем и отказываем обоим
+        if (nameTaken(await store.listUsers(), name, cur.id)) {
+          await store.casUser(user, cur);
+          http(409, 'name-taken', 'Такое имя уже есть у другого игрока');
+        }
+        forgetPeople();
+        return { user: publicUser(user) };
+      }
+    }
+    http(409, 'stale', 'Не получилось сохранить имя, попробуйте еще раз');
   }
 
   async function stats(u, query) {
@@ -437,16 +521,25 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     await detailsOnce(store); // один раз после выкладки: подробности старых партий для статистики турнира
     const tours = await allTours();
     const tour = tours.find((t) => t.id === query.tour) || SEASON;
-    if (!u.admin && !inTour(tour, u)) http(403, 'not-member', 'Статистику турнира видят его участники и администраторы');
     const users = await store.listUsers();
-    const face = (p) => users.find((x) => (p.id ? x.id === p.id : x.name.trim().toLowerCase() === p.name.toLowerCase()))?.avatar || null;
-    return { tour: publicTour(tour), players: tour.players.map((p) => p.name), avatars: tour.players.map(face), games: tourGames(tour, tours, await store.listHistory()) };
+    const who = whoIs(users);
+    if (!u.admin && !inTour(tour, u, who)) http(403, 'not-member', 'Статистику турнира видят его участники и администраторы');
+    const face = (p) => who.byId.get(p.id || who.idOf(p.name))?.avatar || null;
+    return { tour: publicTour(tour, who), players: tourNames(tour, who), avatars: tour.players.map(face), games: tourGames(tour, tours, await store.listHistory(), who) };
   }
 
   // --- чат Telegram
 
   /** Стол для чата: и тот, кто действует, и все люди за столом из его компании. */
-  const chatTable = (t, u) => inChat(u.name) && t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.name));
+  // человек из компании узнается по любому своему имени, нынешнему или прежнему (13.11); место за столом
+  // по ключу компании (seat.person), у столов до смены имен по имени
+  const chatTable = (t, u) => namesOf(u).some(inChat) && t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.person || s.name));
+
+  /**
+   * Вид стола для игрока. chat: стол компании и смотрит свой. Браузер раньше решал это сам по именам
+   * за столом и после смены имени прятал кнопки чата, хотя сервер их разрешал (ревью 13.11).
+   */
+  const viewOf = (t, u, opts) => ({ ...viewFor(t, u.id, opts), chat: chatTable(t, u) });
 
   /** Позвать чат за стол. Замок снимается при сбое, чтобы отправку можно было сразу повторить. */
   async function callChat(u, body) {
@@ -507,7 +600,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const t = now(), busy = Boolean(body.busy);
     const mine = marks.find((m) => m?.id === u.id);
     const avatar = u.avatar || null;
-    if (!mine || mine.busy !== busy || mine.avatar !== avatar || t - mine.at >= MARK_EVERY_MS) {
+    if (!mine || mine.busy !== busy || mine.avatar !== avatar || mine.name !== u.name || t - mine.at >= MARK_EVERY_MS) {
       await store.setPresence(u.id, { id: u.id, name: u.name, avatar, busy, at: t }, MARK_TTL_MS);
     }
     return {
@@ -709,10 +802,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function newTable(u) {
     const title = await tableTitle();
     for (let k = 0; k < 5; k++) {
-      const t = createTable({ code: newTableCode(), title, host: { userId: u.id, name: u.name, avatar: u.avatar }, now: now() });
+      const t = createTable({ code: newTableCode(), title, host: seatUser(u), now: now() });
       if (await store.putTable(t, null, meta(t))) {
         await store.addMyTable(u.id, t.code);
-        return { code: t.code, view: viewFor(t, u.id, { now: now() }) };
+        return { code: t.code, view: viewOf(t, u, { now: now() }) };
       }
     }
     http(500, 'no-code', 'Не удалось подобрать код стола');
@@ -807,9 +900,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const codes = await store.myTables(u.id);
     const docs = await store.getTables(codes);
     const tours = await allTours();
+    const who = whoIs([...(await knownPeople()).values()]);
     return docs.filter((t) => t && t.status !== 'deleted').map((t) => {
       // турнир партии так же, как его считает статистика (фильтр «Моих столов», Денис 06.11)
-      const tour = tourOf({ tour: t.options?.tournament ?? 'auto', finishedAt: t.game?.result?.finishedAt ?? t.updatedAt, seats: t.seats }, tours);
+      const tour = tourOf({ tour: t.options?.tournament ?? 'auto', finishedAt: t.game?.result?.finishedAt ?? t.updatedAt, seats: t.seats }, tours, who);
       return {
         code: t.code, title: t.title || null, status: t.status, updatedAt: t.updatedAt, next: t.next || null,
         paused: Boolean(t.game?.paused),
@@ -827,12 +921,12 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   const ACTIONS = {
     pause: (t, u) => pause(t, u.id, now()),
     ready: (t, u) => ready(t, u.id, now()),
-    sit: (t, u, b) => sit(t, { userId: u.id, name: u.name, avatar: u.avatar }, b.seat, now()),
+    sit: (t, u, b) => sit(t, seatUser(u), b.seat, now()),
     leave: (t, u) => leave(t, u.id, now()),
     unseat: (t, u, b) => unseat(t, u.id, b.seat, now()),
     async invitePeople(t, u, b) {
       const chosen = await inviteesOf(b.ids, u);
-      const seated = chosen.map((p) => ({ userId: p.id, name: p.name, avatar: p.avatar, letter: letterId() }));
+      const seated = chosen.map((p) => ({ ...seatUser(p), letter: letterId() }));
       seatPeople(t, u.id, seated, now(), b.seat);
       return {
         commit: async () => {
@@ -878,6 +972,17 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       // отказ rematch не должен расходовать номер стола за день
       const title = t.status === 'over' && seatOfUser(t, u.id) ? await tableTitle() : null;
       const { created } = rematch(t, u.id, { code, title, now: now() });
+      // места реванша скопированы со старого стола: имя, фото и ключ компании берем нынешние (13.11)
+      const known = await knownPeople(true);
+      for (const s of created.seats) {
+        const x = s.kind === 'human' && s.userId ? known.get(s.userId) : null;
+        if (!x) continue;
+        const fresh = seatUser(x);
+        s.name = fresh.name;
+        s.avatar = fresh.avatar || null;
+        if (fresh.person) s.person = fresh.person;
+        else delete s.person;
+      }
       if (!(await store.putTable(created, null, meta(created)))) http(409, 'stale', 'Реванш уже создан, обновите');
       // в списки игроков новый стол попадает, только если старый записался по версии; кто проиграл
       // гонку (нажали несколько человек), убирает свой стол, и лишних партий в списках не остаётся
@@ -903,7 +1008,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const extra = await hooks?.commit?.(); // поля для ответа, например ушло ли сообщение в чат
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
-    return { ...viewFor(t, u.id, { now: now() }), ...extra };
+    return { ...viewOf(t, u, { now: now() }), ...extra };
   }
 
   /**
@@ -969,8 +1074,10 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'POST' && head === 'join' && rest.length === 1 && rest[0] === 'info') return joinInfo(body, ip);
     if (method === 'POST' && head === 'join' && !rest.length) return joinRegister(body, ip);
     const u = await auth(token);
-    if (method === 'GET' && head === 'me') return publicUser(u);
+    if (method === 'GET' && head === 'me' && !rest.length) return publicUser(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
+    if (method === 'GET' && head === 'me' && rest[0] === 'profile' && rest.length === 1) return profile(u);
+    if (method === 'POST' && head === 'me' && rest[0] === 'name' && rest.length === 1) return setName(u, body);
     if (method === 'POST' && head === 'invite' && rest[0] === 'chat') return callChat(u, body);
     if (method === 'POST' && head === 'invite') return invite(u, body);
     if (method === 'POST' && head === 'invites' && rest[0] === 'answer') return answer(u, body);
@@ -995,7 +1102,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       if (!op && method === 'GET') {
         const { doc, version } = await load(code);
         if (doc.status === 'over') await ensureHistory(doc, version);
-        return viewFor(doc, u.id, { logFrom: int(query.logFrom), now: now() });
+        return viewOf(doc, u, { logFrom: int(query.logFrom), now: now() });
       }
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
