@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds } from '../public/js/signals.js';
+import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds, sfxFiles, makePicker, previewSound, play, VOLUME_SAMPLE } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
 
@@ -76,12 +76,12 @@ test('звуки своего боя и конца партии из файло�
 });
 
 test('файлы звуков лежат на сайте: mp3 или wav, не тяжелые', () => {
-  for (const [name, url] of Object.entries(SFX)) {
+  for (const name of Object.keys(SFX)) for (const url of sfxFiles(name)) {
     const buf = readFileSync(new URL(`../public${url}`, import.meta.url));
-    assert.ok(buf.length > 5000 && buf.length < 250000, `${name}: ${buf.length} байт`);
+    assert.ok(buf.length > 5000 && buf.length < 250000, `${name} ${url}: ${buf.length} байт`);
     const mp3 = (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) || buf.slice(0, 3).toString() === 'ID3';
     const wav = buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WAVE';
-    assert.ok(url.endsWith('.wav') ? wav : mp3, `${name}: формат не тот`);
+    assert.ok(url.endsWith('.wav') ? wav : mp3, `${name} ${url}: формат не тот`);
   }
   assert.deepEqual(Object.keys(SFX).sort(), ['catastrophe', 'gameEnd', 'leader', 'monument', 'revoltLoss', 'revoltWin', 'tile', 'turnEnd', 'warLoss', 'warWin']);
 });
@@ -100,7 +100,8 @@ test('звуки хода (Денис 08.11): тайл, герой, монуме
 test('у каждого звука свое усиление, частые тише событий (Денис 08.11: «слишком громкие»)', () => {
   assert.deepEqual(Object.keys(SFX_GAIN).sort(), Object.keys(SFX).sort());
   for (const [name, g] of Object.entries(SFX_GAIN)) assert.ok(g > 0.05 && g < 4, `${name}: ${g}`);
-  // замер tools/sfx-loudness.browser.js: самое громкое место проигрыша в битве было на 7 дБ выше победы
+  // замер tools/sfx-loudness.browser.js 08.11: самое громкое место прежнего проигрыша в битве было на 7 дБ
+  // выше победы; 14.11 у поражения в битве и победы в восстании свои файлы, их усиления тоже по замеру
   assert.ok(SFX_GAIN.warLoss < SFX_GAIN.warWin && SFX_GAIN.revoltLoss < SFX_GAIN.revoltWin);
   assert.ok(SFX_GAIN.turnEnd < 0.2, 'конец хода звучит каждый ход: тихо');
 });
@@ -143,6 +144,83 @@ test('меню звуков (Денис 08.11): в перечне все зву�
   assert.equal(new Set(ids).size, ids.length, 'без повторов');
   assert.deepEqual([...ids].sort(), [...Object.keys(SFX), 'battle', 'treasure', 'chime', 'arrive'].sort());
   for (const s of SOUND_LIST) assert.ok(s.label && s.group, s.id);
+});
+
+// Победа в восстании (Денис 14.11): три своих куска из трека Gemini вместо чужого файла; каждый раз
+// звучит один, в случайном порядке, но все три по очереди и без повтора подряд.
+
+test('колода вариантов: в каждой тройке все варианты, подряд один и тот же не звучит', () => {
+  for (const n of [1, 2, 3, 5]) {
+    const next = makePicker(n);
+    const seq = Array.from({ length: n * 1000 }, () => next());
+    for (let i = 0; i < seq.length; i += n) assert.deepEqual(seq.slice(i, i + n).sort((a, b) => a - b), [...Array(n).keys()], `n ${n}, колода с ${i}`);
+    if (n > 1) for (let i = 1; i < seq.length; i++) assert.notEqual(seq[i], seq[i - 1], `n ${n}: повтор на ${i}`);
+    if (n > 2) { // при двух вариантах без повтора подряд они просто чередуются
+      const firsts = new Set(seq.filter((_, i) => i % n === 0));
+      assert.equal(firsts.size, n, `n ${n}: колода начинается с любого варианта, порядок случайный`);
+    }
+  }
+  // крайние значения случайного числа не выводят за колоду
+  for (const r of [0, 0.999999]) {
+    const next = makePicker(3, () => r);
+    const seq = Array.from({ length: 30 }, () => next());
+    assert.ok(seq.every((x) => [0, 1, 2].includes(x)), String(seq));
+  }
+});
+
+test('победа в восстании и монумент: по три своих файла, прежние чужие не используются', () => {
+  assert.deepEqual(sfxFiles('revoltWin'), ['/sfx/revolt-win-1.mp3', '/sfx/revolt-win-2.mp3', '/sfx/revolt-win-3.mp3']);
+  assert.deepEqual(sfxFiles('monument'), ['/sfx/monument-1.mp3', '/sfx/monument-2.mp3', '/sfx/monument-3.mp3']);
+  assert.deepEqual(sfxFiles('warLoss'), ['/sfx/war-loss-1.mp3'], 'поражение в битве: один свой файл');
+  assert.deepEqual(sfxFiles('warWin'), ['/sfx/war-win.mp3'], 'у прочих звуков по-прежнему один файл');
+  assert.deepEqual(sfxFiles('nope'), []);
+  const all = Object.keys(SFX).flatMap(sfxFiles);
+  for (const old of ['/sfx/revolt-win.mp3', '/sfx/monument.wav', '/sfx/war-loss.mp3']) assert.ok(!all.includes(old), old);
+});
+
+test('пример громкости: звук, который слышно и в динамике ноутбука', () => {
+  assert.equal(VOLUME_SAMPLE, 'warWin');
+  assert.equal(sfxFiles(VOLUME_SAMPLE).length, 1);
+});
+
+/** Браузерный звук на время теста: записывает, какие файлы начали играть. */
+async function withFakeAudio(fn) {
+  const started = [], fetched = [];
+  const had = { AudioContext: globalThis.AudioContext, fetch: globalThis.fetch };
+  globalThis.fetch = async (url) => { fetched.push(url); return { arrayBuffer: async () => ({ url }) }; };
+  globalThis.AudioContext = class {
+    state = 'running'; currentTime = 0; destination = {};
+    resume() { return Promise.resolve(); }
+    createGain() { return { gain: { value: 1 }, connect: (x) => x }; }
+    createBufferSource() {
+      const s = { connect: (x) => x, start: () => started.push(s.buffer.url), stop() {} };
+      return s;
+    }
+    async decodeAudioData(b) {
+      return { url: b.url, sampleRate: 1000, duration: 1, getChannelData: () => new Float32Array(1000).fill(0.5) };
+    }
+  };
+  try { await fn(); } finally {
+    globalThis.AudioContext = had.AudioContext;
+    globalThis.fetch = had.fetch;
+  }
+  return { started, fetched };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test('победа в восстании в игре и в меню звуков: каждый раз другой файл, все три по очереди', async () => {
+  const files = sfxFiles('revoltWin');
+  const { started, fetched } = await withFakeAudio(async () => {
+    for (let i = 0; i < 15; i++) { previewSound('revoltWin'); await tick(); } // кнопка «▶» в меню
+    for (let i = 0; i < 15; i++) { play({ events: ['revoltWin'] }); await tick(); } // событие партии
+  });
+  assert.equal(started.length, 30, 'каждый раз звучит ровно один файл');
+  assert.ok(started.every((u) => files.includes(u)), started.join(' '));
+  for (let i = 1; i < started.length; i++) assert.notEqual(started[i], started[i - 1], `повтор подряд на ${i}`);
+  for (let i = 0; i < 30; i += 3) assert.deepEqual(started.slice(i, i + 3).sort(), files, `тройка с ${i}`);
+  assert.equal(new Set(fetched.filter((u) => files.includes(u))).size, 3, 'каждый файл качается один раз');
+  assert.equal(fetched.filter((u) => files.includes(u)).length, 3);
 });
 
 test('выбор звуков запоминается на устройстве; мусор в памяти: все включены', () => {

@@ -197,12 +197,17 @@ function chimeAt(at) {
 
 // --- звуки из файлов Дениса (08.11): свой бой и восстание, конец партии; конец хода, монумент или чудо,
 // тайл, герой, катастрофа. Монумент и катастрофа были синтезированы, теперь файлы. Часы просрочки
-// Денис попросил убрать 08.11 (громко).
+// Денис попросил убрать 08.11 (громко). 14.11 Денис начал менять взятые файлы на свои: победа в
+// восстании и монумент теперь по три куска из треков, сделанных в Gemini (звучит один, по очереди в
+// случайном порядке). Монумент: удар камня со звоном, взяты дубли с низом 100 Гц, а не 70: на 70 Гц
+// выше 300 Гц было 4% звука, в динамике телефона удара почти не слышно. Поражение в битве: одна грустная
+// фраза из трека «The Fallen King» (Денис выбрал ее, а не вступление с барабаном: то почти все ниже 300 Гц).
+// У звука один файл или список вариантов; все варианты одного звука одной громкости (SFX_GAIN общий).
 
 export const SFX = {
-  warWin: '/sfx/war-win.mp3', revoltWin: '/sfx/revolt-win.mp3',
-  warLoss: '/sfx/war-loss.mp3', revoltLoss: '/sfx/revolt-loss.mp3', gameEnd: '/sfx/game-end.mp3',
-  turnEnd: '/sfx/turn-end.mp3', monument: '/sfx/monument.wav',
+  warWin: '/sfx/war-win.mp3', revoltWin: ['/sfx/revolt-win-1.mp3', '/sfx/revolt-win-2.mp3', '/sfx/revolt-win-3.mp3'],
+  warLoss: '/sfx/war-loss-1.mp3', revoltLoss: '/sfx/revolt-loss.mp3', gameEnd: '/sfx/game-end.mp3',
+  turnEnd: '/sfx/turn-end.mp3', monument: ['/sfx/monument-1.mp3', '/sfx/monument-2.mp3', '/sfx/monument-3.mp3'],
   tile: '/sfx/tile.mp3', leader: '/sfx/leader.mp3', catastrophe: '/sfx/catastrophe.wav',
 };
 // Громкость (Денис 08.11: «слишком громкие на некоторые события»): выровнена по самому громкому
@@ -211,34 +216,67 @@ export const SFX = {
 // Уровни: события (бой, восстание, катастрофа, монумент, конец партии) -21; «Ваш ход» -22; частые
 // (конец хода, тайл, герой, чужой бой, звонок в лобби) -26; сокровище -27.
 export const SFX_GAIN = {
-  warWin: 0.51, revoltWin: 0.5, warLoss: 0.36, revoltLoss: 0.28, gameEnd: 0.72,
-  turnEnd: 0.135, monument: 0.46, tile: 3.4, leader: 1.29, catastrophe: 0.28,
+  warWin: 0.51, revoltWin: 0.45, warLoss: 0.485, revoltLoss: 0.28, gameEnd: 0.72,
+  turnEnd: 0.135, monument: 0.22, tile: 3.4, leader: 1.29, catastrophe: 0.28,
 };
 // длительность слышимой части по тому же замеру: пока файл не загружен, по ней идет очередь звуков
-const SFX_SEC = { warWin: 2.1, revoltWin: 2.3, warLoss: 3.4, revoltLoss: 4.8, gameEnd: 6.5, turnEnd: 1.9, monument: 1.3, tile: 0.3, leader: 0.8, catastrophe: 4.9 };
-const sfx = new Map(); // имя -> { buf, from, to } или обещание загрузки
+const SFX_SEC = { warWin: 2.1, revoltWin: 2.4, warLoss: 2.25, revoltLoss: 4.8, gameEnd: 6.5, turnEnd: 1.9, monument: 2.2, tile: 0.3, leader: 0.8, catastrophe: 4.9 };
+const sfx = new Map(); // адрес файла -> { buf, from, to } или обещание загрузки
 
-function loadSfx(name) {
-  if (!ac || sfx.has(name)) return sfx.get(name);
-  const p = fetch(SFX[name]).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).then((buf) => {
+/** Файлы звука name: один или несколько вариантов. */
+export const sfxFiles = (name) => [].concat(SFX[name] || []);
+
+/**
+ * Выбор из n вариантов перемешанной колодой: за n раз прозвучат все, порядок случайный, и на стыке
+ * колод один и тот же вариант подряд не повторяется. Возвращает функцию, которая дает номер варианта.
+ */
+export function makePicker(n, rand = Math.random) {
+  let deck = [], last = -1;
+  return () => {
+    if (!deck.length) {
+      deck = [...Array(n).keys()];
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.min(i, Math.floor(rand() * (i + 1)));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      if (n > 1 && deck[0] === last) [deck[0], deck[n - 1]] = [deck[n - 1], deck[0]];
+    }
+    last = deck.shift();
+    return last;
+  };
+}
+
+const pickers = new Map(); // имя звука -> колода его вариантов
+
+/** Какой файл звука name играть сейчас. */
+function pickFile(name) {
+  const files = sfxFiles(name);
+  if (files.length < 2) return files[0];
+  if (!pickers.has(name)) pickers.set(name, makePicker(files.length));
+  return files[pickers.get(name)()];
+}
+
+function loadSfx(url) {
+  if (!ac || sfx.has(url)) return sfx.get(url);
+  const p = fetch(url).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).then((buf) => {
     // тишину в начале и в конце файла не играем (в «проигрыше в битве» 0,36 с тишины)
     const ch = buf.getChannelData(0);
     let a = 0, z = ch.length - 1;
     while (a < ch.length && Math.abs(ch[a]) < 0.01) a++;
     while (z > a && Math.abs(ch[z]) < 0.01) z--;
     const v = { buf, from: a / buf.sampleRate, to: Math.min(buf.duration, z / buf.sampleRate + 0.25) };
-    sfx.set(name, v);
+    sfx.set(url, v);
     return v;
   }).catch(() => {
-    sfx.delete(name); // сеть подвела: попробуем в следующий раз
+    sfx.delete(url); // сеть подвела: попробуем в следующий раз
     return null;
   });
-  sfx.set(name, p);
+  sfx.set(url, p);
   return p;
 }
 
 function preloadSfx() {
-  for (const name of Object.keys(SFX)) loadSfx(name);
+  for (const name of Object.keys(SFX)) for (const url of sfxFiles(name)) loadSfx(url);
 }
 
 /** Запустить загруженный файл v в момент t0 (время AudioContext); возвращает источник. */
@@ -254,14 +292,14 @@ function startSfx(name, v, t0) {
 
 /** Сыграть файл через at секунд; возвращает, сколько он звучит. Не загружен: сыграет, как загрузится. */
 function sfxAt(name, at) {
-  const t0 = ac.currentTime + at;
+  const t0 = ac.currentTime + at, url = pickFile(name);
   const start = (v) => startSfx(name, v, t0);
-  const v = sfx.get(name);
+  const v = sfx.get(url);
   if (v?.buf) {
     start(v);
     return v.to - v.from;
   }
-  Promise.resolve(v || loadSfx(name)).then(start);
+  Promise.resolve(v || loadSfx(url)).then(start);
   return SFX_SEC[name];
 }
 
@@ -302,8 +340,8 @@ export function previewSound(id) {
     previewSrc = null;
     if (id === 'chime') return chimeAt(0);
     if (SFX[id]) {
-      const t0 = ac.currentTime;
-      Promise.resolve(sfx.get(id) || loadSfx(id)).then((v) => { previewSrc = startSfx(id, v, t0); });
+      const t0 = ac.currentTime, url = pickFile(id);
+      Promise.resolve(sfx.get(url) || loadSfx(url)).then((v) => { previewSrc = startSfx(id, v, t0); });
       return;
     }
     EVENT[id]?.[1](0);
@@ -312,7 +350,12 @@ export function previewSound(id) {
   else ac.resume().then(go, () => { /* без звука */ });
 }
 
-/** Пример громкости после «тише» или «громче»: звук монумента (уровень событий, -21, 1,3 с). */
+/**
+ * Пример громкости после «тише» или «громче»: победа в битве (уровень событий -21, 2 с, почти половина
+ * звука выше 300 Гц). До 14.11 был монумент; новый монумент басовитый, в динамике ноутбука его тихо.
+ */
+export const VOLUME_SAMPLE = 'warWin';
+
 export function previewVolume() {
-  if (soundOn()) previewSound('monument');
+  if (soundOn()) previewSound(VOLUME_SAMPLE);
 }

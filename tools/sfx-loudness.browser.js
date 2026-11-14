@@ -37,7 +37,9 @@
   }
   const out = {};
   const dec = new OfflineAudioContext(1, 1, SR);
-  for (const [name, url] of Object.entries(SFX)) {
+  // у звука может быть несколько вариантов (победа в восстании, 14.11): меряется каждый, строка «имя #N»
+  const files = Object.entries(SFX).flatMap(([name, urls]) => [].concat(urls).map((url, i, all) => [name, url, all.length > 1 ? `${name} #${i + 1}` : name]));
+  for (const [name, url, row] of files) {
     const buf = await dec.decodeAudioData(await (await fetch(url + '?m=' + Date.now())).arrayBuffer());
     // слышимая часть, как в loadSfx
     const d0 = buf.getChannelData(0);
@@ -45,7 +47,7 @@
     while (s < d0.length && Math.abs(d0[s]) < 0.01) s++;
     while (z > s && Math.abs(d0[z]) < 0.01) z--;
     const from = s / buf.sampleRate, to = Math.min(buf.duration, z / buf.sampleRate + 0.25);
-    out[name] = {
+    out[row] = {
       gain: SFX_GAIN[name], sec: +(to - from).toFixed(2),
       ...(await measure((ctx, dst) => {
         const src = ctx.createBufferSource(), g = ctx.createGain();
