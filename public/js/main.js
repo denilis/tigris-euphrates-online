@@ -12,6 +12,7 @@ import { recentNews, newsHTML } from './news.js';
 import { renderRules } from './rules.js';
 import { renderLearn, openLesson } from './lesson.js';
 import { openTour } from './tour.js';
+import { backupHTML, bindBackup } from './backup-box.js';
 import { renderProfile, renderPlayer } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion, backFrom, NAV_PAGES, pageBack } from './online.js';
@@ -452,8 +453,10 @@ async function renderAdmin() {
     <h2>Журнал удалений</h2>
     <p class="muted">Все удаления и возвраты столов, новые сверху. Удаленный стол хранится 90 дней: за это время его можно вернуть.</p>
     <div id="delLog" class="tables"></div>` : ''}
+    ${session.get()?.user?.main ? backupHTML() : ''}
   </main></div>`;
   bindTopbar();
+  bindBackup(app); // копия базы (15.11): блок есть только у главного администратора
   const showCode = (name, code) => {
     app.querySelector('#newCode').innerHTML = `<div class="codebox"><span>Код для ${esc(name)}:</span><code>${esc(code)}</code><button class="btn sm" id="cpCode">Скопировать</button></div>`;
     app.querySelector('#cpCode').addEventListener('click', () => copy(code));
