@@ -19,7 +19,7 @@ export function memoryStore() {
       const keys = [];
       for (const k of [...kv.keys()]) {
         const v = alive(k);
-        if (v !== null && !/^(here:|lock:|rl:|presence:)/.test(k)) keys.push({ k, t: 'string', v: String(v) });
+        if (v !== null && !/^(here:|lock:|rl:|pres:)/.test(k)) keys.push({ k, t: 'string', v: String(v) });
       }
       for (const [k, l] of lists) {
         if (l instanceof Map) keys.push({ k, t: 'hash', v: Object.fromEntries([...l].map(([f, x]) => [f, typeof x === 'string' ? x : JSON.stringify(x)])) });

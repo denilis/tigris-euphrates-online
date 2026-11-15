@@ -23,6 +23,7 @@ async function filled() {
   await s.setAvatar('tok1', { type: 'image/webp', data: 'x'.repeat(5000) });
   await s.putTable({ code: 'ABCDEF', status: 'over', seats: [] }, null, 'meta');
   await s.touchHere('ABCDEF', 'u1', 1, 60_000); // присутствие: в копию не идет
+  await s.setPresence('u1', { at: 1 }, 60_000); // присутствие на сайте: тоже
   await f.exec(['SET', 'preview:user:zz', '{}']); // другое окружение: в копию не идет
   return { f, s };
 }
@@ -45,7 +46,7 @@ test('копия частями и восстановление в пустую 
   const file = backupFile(pages, { at: 0, site: 'test' });
   assert.equal(file.format, BACKUP_FORMAT);
   assert.ok(file.keys.every((r) => !r.k.startsWith(PREFIX)), 'ключи без приставки');
-  assert.ok(!file.keys.some((r) => r.k.startsWith('here:')), 'присутствие не копируется');
+  assert.ok(!file.keys.some((r) => r.k.startsWith('here:') || r.k.startsWith('pres:')), 'присутствие не копируется');
   assert.ok(!file.keys.some((r) => r.k.includes('zz')), 'чужое окружение не копируется');
   assert.equal(new Set(file.keys.map((r) => r.k)).size, file.keys.length, 'без повторов');
   assert.deepEqual(new Set(file.keys.map((r) => r.t)), new Set(['string', 'set', 'list', 'hash']));
