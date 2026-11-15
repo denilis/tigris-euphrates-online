@@ -2,6 +2,7 @@
 // последние партии и настройки (имя, фон сайта, выход).
 // Фото: после выбора файла открывается окно кадрирования (avatar-crop.js, 13.11): фото можно подвинуть
 // и увеличить. На сервер уходит квадрат на 10-20 КБ, а не исходный файл на несколько мегабайт.
+import { bindPush } from './push.js';
 import { api, session } from './api.js';
 import { esc, toast, faceBg } from './util.js';
 import { openCrop } from './avatar-crop.js';
@@ -48,9 +49,13 @@ export function renderProfile(app, top, bindTop, opts = {}) {
       <span class="seg" id="bgSeg"><button type="button" data-still="0">видео</button><button type="button" data-still="1">картинка</button></span>
     </div>
     <p class="muted small">Видео на фоне главной и других страниц можно заменить неподвижной картинкой. Выбор запоминается на этом устройстве.${opts.bg?.hasVideo === false ? ' У нынешней сцены ролика нет: выбор сработает, когда сцена сменится.' : ''}</p>
+    <div class="pfline"><span class="flab">Уведомления</span><span class="pfpush" id="pushBox"></span></div>
+    <p class="muted small">Сообщим, когда за столом ваш ход, а сайт закрыт или свернут. На iPhone работает, если сайт добавлен на главный экран.</p>
+    <p class="err" id="pushErr" role="status"></p>
     <div class="pfline"><button class="btn" id="pOut" type="button">Выйти на этом устройстве</button></div>
   </main></div>`;
   bindTop();
+  bindPush(app); // уведомления «Ваш ход» (15.11)
 
   const $ = (id) => app.querySelector('#' + id);
   const paint = () => {

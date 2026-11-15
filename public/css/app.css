@@ -1186,6 +1186,7 @@ html:has(.endwrap:not([hidden])){overflow:hidden}
 /* ссылки-приглашения (06.11): блок в «Кодах игроков», страница новичка, ссылка за стол в лобби */
 .jlinks{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin:4px 0 6px}
 .bklate{color:var(--gold)} /* копия базы давно не скачивалась (15.11) */
+.pfpush{display:inline-flex;flex-wrap:wrap;gap:6px 8px;align-items:center} /* уведомления в профиле (15.11) */
 .codebox code.jurl{flex:1 1 220px;min-width:0;font-size:13px;letter-spacing:0;word-break:break-all}
 .jlist{margin:2px 0 12px;padding-left:20px;font-size:13.5px;color:var(--muted)}
 .jlist li{margin:3px 0}

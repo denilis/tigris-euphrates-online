@@ -12,6 +12,7 @@ import { makeHandler } from '../api/index.js';
 import { memoryStore } from '../server/store-memory.js';
 import { redisStore } from '../server/store-redis.js';
 import { restoreCommands } from '../server/backup.js';
+import { vapidKeys } from '../server/webpush.js';
 import { fakeUpstash } from '../test/fake-upstash.js';
 import { botDue } from '../game/table.js';
 
@@ -26,6 +27,11 @@ const env = {
   SESSION_SECRET: 'dev-secret', CODE_PEPPER: 'dev-pepper', ADMIN_CODE: 'DEVA-DMNN-2345', ADMIN_NAME: 'Денис',
   ...process.env,
 };
+// ключи уведомлений для локальной проверки: свои на каждый запуск, подписки в памяти все равно пропадут
+if (!env.VAPID_PUBLIC) {
+  const k = vapidKeys();
+  Object.assign(env, { VAPID_PUBLIC: k.publicKey, VAPID_PRIVATE: k.privateKey, VAPID_SUBJECT: `http://localhost:${port}` });
+}
 const store = backupAt > 0 ? await fromBackup(process.argv[backupAt + 1]) : memoryStore();
 
 /** База из файла копии: Redis в памяти (тот же, что в тестах), записи с приставкой production:. */

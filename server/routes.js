@@ -23,6 +23,7 @@ import { telegram, inChat, invited, called, photoButton, CHAT_PEOPLE } from './t
 import { parsePhoto, photoCaption } from './photo.js';
 import { cleanAnalysis, humanSeats } from './analysis.js';
 import { ENGINE } from '../game/vendor/version.js';
+import { vapidFromEnv, cleanSubscription, sendPush } from './webpush.js';
 
 export class HttpError extends Error {
   constructor(status, code, message) {
@@ -95,7 +96,8 @@ const letterId = () => randomBytes(6).toString('hex');
  * второе до 10 с, за ходом можно проследить); null — бот ходит сразу (тесты с остановленными
  * часами). На сайте и локальном сервере пауза включена в api/index.js.
  */
-export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, botPace = null, tg = telegram(env) }) {
+export function createApp({ store, env = {}, now = () => Date.now(), botOptions = {}, botPace = null, tg = telegram(env), pushFetch = fetch }) {
+  const vapid = vapidFromEnv(env); // уведомления «Ваш ход» (15.11): без ключей выключены
   const secret = env.SESSION_SECRET, pepper = env.CODE_PEPPER;
   const adminCode = normalizeCode(env.ADMIN_CODE || '');
   const adminHash = adminCode && pepper ? Buffer.from(codeHash(adminCode, pepper)) : null;
@@ -1176,11 +1178,13 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     // действие только из своего списка: constructor, toString и прочее из прототипа не в счет
     const fn = typeof body.action === 'string' && Object.hasOwn(ACTIONS, body.action) ? ACTIONS[body.action] : null;
     if (!fn) http(400, 'bad-action', 'Неизвестное действие');
+    const was = turnMark(t);
     const hooks = await fn(t, u, body); // действие может вернуть { commit, rollback } для побочных записей
     if (!(await store.putTable(t, version, meta(t)))) {
       await hooks?.rollback?.();
       http(409, 'stale', 'Стол уже изменился, обновите');
     }
+    await notifyTurn(t, was);
     const extra = await hooks?.commit?.(); // поля для ответа, например ушло ли сообщение в чат
     if (body.action === 'sit') await store.addMyTable(u.id, code);
     if (t.status === 'over') await ensureHistory(t, t.version);
@@ -1208,6 +1212,62 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     return { moves };
   }
 
+  // --- уведомления «Ваш ход» (15.11, дорожная карта п.10)
+
+  /** Чей ход и какой по счету: смена метки значит, что решать теперь другому (или снова, в новом ходу). */
+  const turnMark = (t) => (t.status === 'playing' && !t.game?.paused && t.game?.toMove != null ? `${t.game.toMove}:${t.game.state?.turn}` : null);
+
+  /**
+   * Ход перешел к человеку: уведомление на все его устройства, один раз за ход. Открытая и видимая
+   * вкладка его не покажет (public/sw.js). Сбой отправки ход не роняет; забытые службой подписки удаляются.
+   */
+  async function notifyTurn(t, was) {
+    try {
+      const mark = turnMark(t);
+      if (!vapid || !mark || mark === was) return;
+      const seat = t.seats.find((s) => s.id === t.game.toMove);
+      if (seat?.kind !== 'human' || !seat.userId) return;
+      const subs = await store.getPush(seat.userId);
+      if (!subs.length || (await store.hit(`pushed:${t.code}:${mark}`, 6 * 3600_000)) !== 1) return;
+      const data = { title: 'Тигр и Евфрат: ваш ход', body: `Стол ${t.title || t.code}, круг ${roundNo(t)}`, url: `/#/t/${t.code}`, tag: `turn-${t.code}` };
+      await deliver(seat.userId, subs, data);
+    } catch (e) {
+      console.error('push', e.message);
+    }
+  }
+  const roundNo = (t) => Math.floor(((t.game.state?.turn || 1) - 1) / (t.game.order?.length || 1)) + 1;
+
+  async function deliver(userId, subs, data) {
+    const res = await Promise.all(subs.map((s) => sendPush(s, data, vapid, { fetchImpl: pushFetch, now: now() })));
+    const gone = new Set(subs.filter((_, i) => res[i].gone).map((s) => s.endpoint));
+    if (gone.size) await store.setPush(userId, subs.filter((s) => !gone.has(s.endpoint)));
+    return { sent: res.filter((r) => r.ok).length, gone: gone.size };
+  }
+
+  /** POST me/push { subscription }: включить на устройстве; off { endpoint }: выключить; test: проверка. */
+  async function pushRoute(u, rest, body) {
+    if (!vapid) http(501, 'no-push', 'Уведомления на сервере не настроены');
+    const subs = await store.getPush(u.id);
+    if (!rest.length) {
+      const sub = cleanSubscription(body?.subscription);
+      if (!sub) http(400, 'bad-subscription', 'Браузер прислал неверную подписку');
+      const list = [sub, ...subs.filter((s) => s.endpoint !== sub.endpoint)].slice(0, 5); // до пяти устройств
+      await store.setPush(u.id, list);
+      return { ok: true, devices: list.length };
+    }
+    if (rest[0] === 'off' && rest.length === 1) {
+      const list = subs.filter((s) => s.endpoint !== String(body?.endpoint || ''));
+      await store.setPush(u.id, list);
+      return { ok: true, devices: list.length };
+    }
+    if (rest[0] === 'test' && rest.length === 1) {
+      if (!subs.length) http(409, 'no-devices', 'Уведомления не включены ни на одном устройстве');
+      if ((await store.hit(`pushtest:${u.id}`, 60_000)) > 5) http(429, 'too-many', 'Проверок слишком много, подождите минуту');
+      return deliver(u.id, subs, { title: 'Тигр и Евфрат', body: 'Проверка: уведомления о вашем ходе работают.', url: '/#/me', tag: 'push-test' });
+    }
+    http(404, 'no-route', 'Нет такого адреса');
+  }
+
   async function botTick(code) {
     await load(code);
     const token = randomBytes(12).toString('hex');
@@ -1218,6 +1278,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       while (now() - t0 < botBudget) {
         const cur = await store.getTable(code);
         if (!cur) break;
+        const was = turnMark(cur.doc);
         let waiting = false;
         if (confirmDue(cur.doc, now())) autoConfirm(cur.doc, { now: now() });
         else if (botDue(cur.doc) !== null) {
@@ -1227,6 +1288,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
           waiting = Boolean(r?.waiting);
         } else break;
         if (!(await store.putTable(cur.doc, cur.version, meta(cur.doc)))) break;
+        await notifyTurn(cur.doc, was);
         if (waiting) break;
         moved++;
         if (cur.doc.status === 'over') await ensureHistory(cur.doc, cur.doc.version);
@@ -1248,6 +1310,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       return { ok: true, env: env.VERCEL_ENV || 'local', region: env.VERCEL_REGION || null, engine: ENGINE.hash.slice(0, 7), store: store.kind, chat: tg.on };
     }
     if (method === 'POST' && head === 'activate') return activate(body, ip);
+    if (method === 'GET' && head === 'push' && rest[0] === 'key') return vapid ? { key: vapid.publicKey } : http(501, 'no-push', 'Уведомления на сервере не настроены');
     if (method === 'GET' && head === 'avatar') return avatarFile(rest.join('/'));
     if (head === 'tables' && rest.length === 2 && rest[1] === 'poll' && method === 'GET') {
       const who = await auth(token, { light: true });
@@ -1283,6 +1346,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'GET' && head === 'stats') return stats(u, query);
     if (method === 'GET' && head === 'tournaments') return toursInfo(u);
     if (method === 'POST' && head === 'tournaments') return newTour(u, body);
+    if (head === 'me' && rest[0] === 'push' && method === 'POST') return pushRoute(u, rest.slice(1), body);
     if (method === 'GET' && head === 'prefs') return (await store.getPrefs(u.id)) || {};
     if (method === 'POST' && head === 'prefs') {
       await store.setPrefs(u.id, cleanPrefs(body));

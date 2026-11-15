@@ -196,6 +196,15 @@ export function memoryStore() {
     },
 
     /** Настройки экрана партии у игрока. */
+    async getPush(id) {
+      const v = alive(`push:${id}`);
+      return v === null ? [] : JSON.parse(v);
+    },
+    async setPush(id, list) {
+      if (list.length) set(`push:${id}`, JSON.stringify(list));
+      else kv.delete(`push:${id}`);
+    },
+
     async getPrefs(id) {
       const p = alive(`prefs:${id}`);
       return p ? JSON.parse(p) : null;

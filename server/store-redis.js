@@ -253,6 +253,15 @@ export function redisStore({ exec, prefix = '' }) {
       await exec(['DEL', k(`ava:${token}`)]);
     },
 
+    /** Подписки на уведомления «Ваш ход» (15.11): список по устройствам. */
+    async getPush(id) {
+      return parse(await exec(['GET', k(`push:${id}`)])) || [];
+    },
+    async setPush(id, list) {
+      if (list.length) await exec(['SET', k(`push:${id}`), JSON.stringify(list)]);
+      else await exec(['DEL', k(`push:${id}`)]);
+    },
+
     async getPrefs(id) {
       return parse(await exec(['GET', k(`prefs:${id}`)]));
     },
