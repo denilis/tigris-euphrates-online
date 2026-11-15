@@ -44,7 +44,7 @@ test('опрос: вопрос с именем, два ответа, имя эк
 test('путь: обучение, активный шаг с кнопкой «Играть», остальные закрыты', () => {
   const html = pathHTML(novice(0));
   assert.match(html, /<h2>Путь новичка<\/h2>/);
-  assert.match(html, /<b>Обучение<\/b><small>8 уроков с ботом-тренером<\/small>/);
+  assert.match(html, /<b>Обучение<\/b><small>9 уроков с ботом-тренером<\/small>/);
   assert.match(html, /<a class="btn sm" href="#\/learn">Пройти<\/a><button class="btn sm" type="button" data-npskip>Пропустить<\/button>/);
   assert.match(html, /<li class="npi np-now">[\s\S]*?<b>Партия с одним ботом<\/b><small>уровень «Учу правила»<\/small>[\s\S]*?<button class="btn primary" type="button" data-npplay>Играть<\/button>/);
   assert.match(html, /<li class="npi np-locked">[\s\S]*?<b>Партия с двумя ботами<\/b><small>уровень «Играю иногда»<\/small>[\s\S]*?закрыто/);
@@ -66,14 +66,14 @@ test('путь: сыгранные шаги отмечены, идущая па�
 });
 
 test('путь: строка обучения помнит пропуск и считает пройденные уроки', () => {
-  assert.equal(LESSONS, 8);
+  assert.equal(LESSONS, 9, 'урок 9 «Здания и чудо» с 15.11');
   const some = pathHTML(novice(0), 3);
-  assert.match(some, /8 уроков с ботом-тренером, пройдено 3 из 8/);
+  assert.match(some, /9 уроков с ботом-тренером, пройдено 3 из 9/);
   assert.match(some, /data-npskip/);
   const skipped = pathHTML(novice(0, { learn: 'skip' }), 3);
   assert.match(skipped, /<span class="npmark off">пропущено<\/span><a class="btn sm" href="#\/learn">Пройти<\/a>/);
   assert.doesNotMatch(skipped, /data-npskip/);
-  const all = pathHTML(novice(0, { learn: 'skip' }), 8);
+  const all = pathHTML(novice(0, { learn: 'skip' }), LESSONS);
   assert.match(all, /<li class="npi np-done">\s*<span class="npn" aria-hidden="true">У<\/span>[\s\S]*?<span class="npmark">пройдено<\/span>/);
   assert.doesNotMatch(all, /пропущено|data-npskip/);
 });

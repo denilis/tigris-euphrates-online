@@ -1,6 +1,6 @@
 // Логика урока без DOM: кадр шага, проверка хода ученика, надписи, память о пройденных уроках.
 
-export const LAST_LESSON = 8;
+export const LAST_LESSON = 9;
 const DONE_KEY = 'tigris.lessons';
 
 /** Вид стола на шаге k: общая часть урока и кадр шага. */

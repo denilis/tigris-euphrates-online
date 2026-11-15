@@ -7,5 +7,6 @@ import l5 from './5-war.js';
 import l6 from './6-monument.js';
 import l7 from './7-treasures.js';
 import l8 from './8-strategy.js';
+import l9 from './9-buildings-wonder.js';
 
-export const LESSONS = [l1, l2, l3, l4, l5, l6, l7, l8];
+export const LESSONS = [l1, l2, l3, l4, l5, l6, l7, l8, l9];

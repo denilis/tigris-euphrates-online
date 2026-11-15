@@ -628,8 +628,8 @@ async function renderAdmin() {
 
 // --- маршрутизация
 
-// #/learn/tour/i1..i4 экскурсии по сайту (05.11)
-const LEARN = /^learn(?:\/([1-8])\/(watch|play)|\/tour\/(i[1-4]))?$/;
+// #/learn/tour/i1..i4 экскурсии по сайту (05.11); уроков 9 с 15.11
+const LEARN = /^learn(?:\/([1-9])\/(watch|play)|\/tour\/(i[1-4]))?$/;
 
 function showLearn(m, bar) {
   if (m[1]) return openLesson(app, +m[1], m[2], { go });

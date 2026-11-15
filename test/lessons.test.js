@@ -17,12 +17,12 @@ test('файлы в public/lessons совпадают со сборкой', () =
     assert.equal(readFileSync(`public/lessons/${l.id}.json`, 'utf8'), JSON.stringify(l), `урок ${l.id}: запустите node tools/build-lessons.js`);
   }
   const index = JSON.parse(readFileSync('public/lessons/index.json', 'utf8'));
-  assert.deepEqual(index.map((x) => x.id), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(index.map((x) => x.id), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(index.map((x) => x.steps), BUILT.map((l) => l.steps.length));
 });
 
-test('уроков восемь, в каждом шаге есть заголовок и текст, урок заканчивается итогом', () => {
-  assert.equal(BUILT.length, 8);
+test('уроков девять, в каждом шаге есть заголовок и текст, урок заканчивается итогом', () => {
+  assert.equal(BUILT.length, 9);
   for (const l of BUILT) {
     assert.ok(l.title && l.goal && l.minutes >= 3 && l.minutes <= 5, `урок ${l.id}`);
     for (const s of l.steps) assert.ok(s.title && s.say, `урок ${l.id}: ${s.title}`);
@@ -194,7 +194,8 @@ test('надписи: режим и последний шаг', () => {
   assert.equal(nextLabel(l, last, 'watch'), 'Следующий урок');
   assert.equal(LAST_LESSON, BUILT.length);
   assert.equal(nextLabel(BUILT[6], BUILT[6].steps.length - 1, 'play'), 'Следующий урок');
-  assert.equal(nextLabel(BUILT[7], BUILT[7].steps.length - 1, 'play'), 'К списку уроков');
+  assert.equal(nextLabel(BUILT[7], BUILT[7].steps.length - 1, 'play'), 'Следующий урок');
+  assert.equal(nextLabel(BUILT[8], BUILT[8].steps.length - 1, 'play'), 'К списку уроков');
   assert.match(handHint(l.steps[me], 'watch'), /просмотр/i);
   assert.match(handHint(l.steps[me], 'play'), /подсвеч/i);
   assert.match(handHint(l.steps[0], 'play'), /Дальше/);
