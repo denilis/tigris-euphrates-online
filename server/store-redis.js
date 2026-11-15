@@ -1,6 +1,8 @@
 // Хранилище в Upstash Redis через его REST API обычным fetch: у проекта нет npm-зависимостей.
 // Ключи с префиксом окружения (production и preview не смешиваются). Запись стола —
 // Lua-скрипт «записать, если версия та же», одна команда Redis.
+import { dumpPage } from './backup.js';
+
 export const CAS_PUT = `local cur = redis.call('GET', KEYS[1])
 if cur == false then cur = '' end
 if cur ~= ARGV[1] then return 0 end
@@ -35,7 +37,29 @@ const ttlOf = (doc) => (doc.status === 'over' ? 0 : TABLE_TTL);
  * ошибочным статусом даёт ошибку с кодом HTTP.
  */
 export function upstash({ url, token, fetchImpl = fetch, timeoutMs = 8000 }) {
-  return async function exec(cmd) {
+  /** Пачка команд одним запросом (резервная копия, 15.11): ответы по порядку, ошибка любой падает. */
+  exec.pipeline = async (cmds) => {
+    if (!cmds.length) return [];
+    const r = await fetchImpl(url.replace(/\/$/, '') + '/pipeline', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmds.map((c) => c.map(String))),
+      signal: AbortSignal.timeout(timeoutMs * 2),
+    });
+    let d;
+    try {
+      d = await r.json();
+    } catch {
+      throw new Error(`Redis: ответ не разобрать (HTTP ${r.status})`);
+    }
+    if (r.ok === false || !Array.isArray(d)) throw new Error(`Redis: HTTP ${r.status}${d?.error ? ' ' + d.error : ''}`);
+    return d.map((x) => {
+      if (x?.error) throw new Error('Redis: ' + x.error);
+      return x.result;
+    });
+  };
+  return exec;
+  async function exec(cmd) {
     const r = await fetchImpl(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -66,8 +90,14 @@ export function redisStore({ exec, prefix = '' }) {
   const parse = (s) => (s === null || s === undefined ? null : JSON.parse(s));
   const lines = (s) => (s ? s.trim().split('\n').map((x) => JSON.parse(x)) : []);
 
+  const pipeline = exec.pipeline || ((cmds) => Promise.all(cmds.map((c) => exec(c))));
   return {
     kind: 'redis',
+
+    /** Часть резервной копии (server/backup.js): записи этого окружения без приставки. */
+    async dump(cursor = '0') {
+      return dumpPage({ exec, pipeline, prefix, cursor });
+    },
 
     async getTable(code) {
       const [doc, v] = await exec(['MGET', k(`t:${code}`), k(`v:${code}`)]);

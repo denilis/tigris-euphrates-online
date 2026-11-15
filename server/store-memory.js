@@ -14,6 +14,21 @@ export function memoryStore() {
   return {
     kind: 'memory',
 
+    /** Резервная копия локального сервера одной частью, в формате server/backup.js. */
+    async dump() {
+      const keys = [];
+      for (const k of [...kv.keys()]) {
+        const v = alive(k);
+        if (v !== null && !/^(here:|lock:|rl:|presence:)/.test(k)) keys.push({ k, t: 'string', v: String(v) });
+      }
+      for (const [k, l] of lists) {
+        if (l instanceof Map) keys.push({ k, t: 'hash', v: Object.fromEntries([...l].map(([f, x]) => [f, typeof x === 'string' ? x : JSON.stringify(x)])) });
+        else if (l instanceof Set) keys.push({ k, t: 'set', v: [...l].map(String) });
+        else if (Array.isArray(l)) keys.push({ k, t: 'list', v: l.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))) });
+      }
+      return { cursor: '0', done: true, keys };
+    },
+
     async getTable(code) {
       const doc = alive(`t:${code}`), v = alive(`v:${code}`);
       return doc === null ? null : { doc: JSON.parse(doc), version: Number(v) };

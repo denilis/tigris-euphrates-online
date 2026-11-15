@@ -24,21 +24,37 @@ export function fakeUpstash() {
       case 'HSET': { const h = hashes.get(a[0]) || new Map(); for (let i = 1; i < a.length; i += 2) h.set(a[i], a[i + 1]); hashes.set(a[0], h); return 1; }
       case 'HVALS': return [...(hashes.get(a[0])?.values() || [])];
       case 'HDEL': { const h = hashes.get(a[0]); return a.slice(1).reduce((n, f) => n + (h?.delete(f) ? 1 : 0), 0); }
-      case 'DEL': return a.reduce((n, key) => n + (kv.delete(key) ? 1 : 0), 0);
+      case 'DEL': return a.reduce((n, key) => n + ([kv, lists, sets, hashes].some((m) => m.delete(key)) ? 1 : 0), 0);
       case 'PERSIST': return expiry.delete(a[0]) ? 1 : 0;
       case 'SCAN': {
         // курсор отдаем порциями по COUNT, чтобы проверить обход в несколько запросов
         const re = new RegExp('^' + a[a.indexOf('MATCH') + 1].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
-        const all = [...kv.keys()].filter((key) => re.test(key));
+        const all = [...new Set([...kv.keys(), ...lists.keys(), ...sets.keys(), ...hashes.keys()])].filter((key) => re.test(key));
         const from = Number(a[0]), count = Number(a[a.indexOf('COUNT') + 1]);
         const next = from + count >= all.length ? '0' : String(from + count);
         return [next, all.slice(from, from + count)];
       }
       case 'APPEND': { kv.set(a[0], (kv.get(a[0]) ?? '') + a[1]); return kv.get(a[0]).length; }
-      case 'PEXPIRE': return kv.has(a[0]) ? 1 : 0;
-      case 'SADD': { const s = sets.get(a[0]) || new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
+      case 'PEXPIRE': { // срок помнится для PTTL (резервная копия), чтение его не проверяет, как и раньше
+        if (![kv, lists, sets, hashes].some((m) => m.has(a[0]))) return 0;
+        ttl.set(a[0], Date.now() + Number(a[1]));
+        return 1;
+      }
+      case 'SADD': { const s = sets.get(a[0]) || new Set(); const n = s.size; for (const x of a.slice(1)) s.add(x); sets.set(a[0], s); return s.size - n; }
+      // резервная копия (15.11): тип и срок ключа, весь хеш, запись списка с конца
+      case 'TYPE': return kv.has(a[0]) ? 'string' : lists.has(a[0]) ? 'list' : sets.has(a[0]) ? 'set' : hashes.has(a[0]) ? 'hash' : 'none';
+      case 'PTTL': {
+        if (![kv, lists, sets, hashes].some((m) => m.has(a[0]))) return -2;
+        if (ttl.has(a[0])) return Math.max(1, ttl.get(a[0]) - Date.now());
+        return expiry.has(a[0]) ? expiry.get(a[0]) * 1000 : -1;
+      }
+      case 'HGETALL': return [...(hashes.get(a[0]) || new Map())].flat();
+      case 'RPUSH': { lists.set(a[0], [...(lists.get(a[0]) || []), ...a.slice(1)]); return lists.get(a[0]).length; }
       case 'SMEMBERS': return [...(sets.get(a[0]) || [])];
-      case 'LRANGE': return (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1);
+      case 'LRANGE': { // как Redis: отрицательный конец считается с хвоста (LRANGE 0 -1 весь список)
+        const l = lists.get(a[0]) || [], end = Number(a[2]) < 0 ? l.length + Number(a[2]) : Number(a[2]);
+        return l.slice(Number(a[1]), end + 1);
+      }
       case 'LPUSH': { lists.set(a[0], [a[1], ...(lists.get(a[0]) || [])]); return lists.get(a[0]).length; }
       case 'LTRIM': { lists.set(a[0], (lists.get(a[0]) || []).slice(Number(a[1]), Number(a[2]) + 1)); return 'OK'; }
       case 'LREM': {
@@ -86,9 +102,14 @@ export function fakeUpstash() {
   };
   const fetchImpl = async (url, { body, headers }) => {
     assert.equal(headers.Authorization, 'Bearer tok');
+    if (url.endsWith('/pipeline')) { // пачка команд, как настоящий /pipeline Upstash
+      const cmds = JSON.parse(body);
+      for (const c of cmds) for (const x of c) assert.equal(typeof x, 'string', 'все аргументы строками');
+      return { ok: true, status: 200, json: async () => cmds.map((c) => ({ result: run(c) })) };
+    }
     const cmd = JSON.parse(body);
     for (const x of cmd) assert.equal(typeof x, 'string', 'все аргументы строками');
     return { ok: true, status: 200, json: async () => ({ result: run(cmd) }) };
   };
-  return { exec: upstash({ url: 'https://fake', token: 'tok', fetchImpl }), commands, expiry };
+  return { exec: upstash({ url: 'https://fake', token: 'tok', fetchImpl }), commands, expiry, kv, lists, sets, hashes };
 }

@@ -1273,6 +1273,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (head === 'admin' && rest[0] === 'users') return adminUsers(method, rest.slice(1), body, u);
     if (head === 'joinlinks') return joinLinks(method, rest, body, u);
     if (head === 'admin' && rest[0] === 'tables') return adminTables(method, rest.slice(1), u);
+    // резервная копия базы частями (15.11): только главный администратор, в копии хэши кодов всех
+    if (method === 'GET' && head === 'admin' && rest[0] === 'backup' && rest.length === 1) {
+      if (u.id !== ADMIN_ID) http(403, 'not-main-admin', 'Копию базы скачивает только главный администратор');
+      const c = String(query?.cursor ?? '0');
+      const cursor = /^\d{1,20}$/.test(c) ? c : http(400, 'bad-cursor', 'Неверная метка части');
+      if (!store.dump) http(501, 'no-dump', 'Это хранилище не умеет делать копию');
+      return { store: store.kind, ...(await store.dump(cursor)) };
+    }
     if (method === 'GET' && head === 'deletions' && !rest.length) return deletions(u);
     if (head === 'tables') {
       if (!rest.length && method === 'POST') return newTable(u);

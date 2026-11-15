@@ -2,17 +2,23 @@
 // что работает на Vercel (как rewrite из vercel.json). Хранилище в памяти: всё живёт,
 // пока работает сервер.
 //   node dev/server.js [порт]
+//   node dev/server.js [порт] --backup <файл копии> — сайт на копии базы с прода (15.11): проверка
+//   восстановления и разбор на настоящих данных. Вход кодом админа ниже, коды игроков не подойдут.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeHandler } from '../api/index.js';
 import { memoryStore } from '../server/store-memory.js';
+import { redisStore } from '../server/store-redis.js';
+import { restoreCommands } from '../server/backup.js';
+import { fakeUpstash } from '../test/fake-upstash.js';
 import { botDue } from '../game/table.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pub = path.join(root, 'public');
 const port = Number(process.argv[2] || process.env.PORT || 3000);
+const backupAt = process.argv.indexOf('--backup');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 
 // локальные значения, если не заданы снаружи (на Vercel задаются в настройках проекта)
@@ -20,7 +26,16 @@ const env = {
   SESSION_SECRET: 'dev-secret', CODE_PEPPER: 'dev-pepper', ADMIN_CODE: 'DEVA-DMNN-2345', ADMIN_NAME: 'Денис',
   ...process.env,
 };
-const store = memoryStore();
+const store = backupAt > 0 ? await fromBackup(process.argv[backupAt + 1]) : memoryStore();
+
+/** База из файла копии: Redis в памяти (тот же, что в тестах), записи с приставкой production:. */
+async function fromBackup(file) {
+  const dump = JSON.parse(await readFile(file, 'utf8'));
+  const f = fakeUpstash();
+  await f.exec.pipeline(restoreCommands(dump.keys, 'production:'));
+  console.log(`Копия от ${dump.at}: записей ${dump.total}`, dump.count);
+  return redisStore({ exec: f.exec, prefix: 'production:' });
+}
 const handler = makeHandler(env, store);
 
 createServer(async (req, res) => {
