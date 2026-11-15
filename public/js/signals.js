@@ -202,18 +202,19 @@ function chimeAt(at) {
 // случайном порядке). Монумент: удар камня со звоном, взяты дубли с низом 100 Гц, а не 70: на 70 Гц
 // выше 300 Гц было 4% звука, в динамике телефона удара почти не слышно. Поражение в битве: одна грустная
 // фраза из трека «The Fallen King» (Денис выбрал ее, а не вступление с барабаном: то почти все ниже 300 Гц).
-// 15.11 (Денис: «выбери сам») чужих файлов не осталось. Победа в битве: два высоких удара, финал
+// 15.11 (Денис: «выбери сам») заменены остальные. Победа в битве: два высоких удара, финал
 // «The First Move»; поражение в восстании: та же фраза «The Fallen King» с ударами перед ней; конец
 // партии: большой колокол целиком; катастрофа: звон тарелки из «The Architect's Stone» (3,2 с вместо 4,9);
-// герой: короткий «дзинь». Конец хода и тайл синтезированы (звуки/synth.py, варианты «а» и «б»): 0,3 и
-// 0,2 с вместо 1,9 и 0,5, звука выше 300 Гц 89% и 50% (в динамике телефона ниже почти не слышно).
+// конец хода синтезирован (звуки/synth.py, вариант «а»): 0,3 с вместо 1,9, звука выше 300 Гц 89%.
+// Тайл и герой 15.11 тоже были заменены (синтез 0,2 с и «дзинь»), но Денис вечером 15.11 вернул прежние
+// tile.mp3 и leader.mp3: «эти не подходят». Их громкость прежняя, по замеру 08.11.
 // У звука один файл или список вариантов; все варианты одного звука одной громкости (SFX_GAIN общий).
 
 export const SFX = {
   warWin: '/sfx/war-win-1.mp3', revoltWin: ['/sfx/revolt-win-1.mp3', '/sfx/revolt-win-2.mp3', '/sfx/revolt-win-3.mp3'],
   warLoss: '/sfx/war-loss-1.mp3', revoltLoss: '/sfx/revolt-loss-1.mp3', gameEnd: '/sfx/game-end-1.mp3',
   turnEnd: '/sfx/turn-end-1.mp3', monument: ['/sfx/monument-1.mp3', '/sfx/monument-2.mp3', '/sfx/monument-3.mp3'],
-  tile: '/sfx/tile-1.mp3', leader: '/sfx/leader-1.mp3', catastrophe: '/sfx/catastrophe-1.mp3',
+  tile: '/sfx/tile.mp3', leader: '/sfx/leader.mp3', catastrophe: '/sfx/catastrophe-1.mp3',
 };
 // Громкость (Денис 08.11: «слишком громкие на некоторые события»): выровнена по самому громкому
 // месту звука, окно 0,4 с с K-взвешиванием BS.1770 (tools/sfx-loudness.browser.js). Прежнее выравнивание
@@ -222,10 +223,10 @@ export const SFX = {
 // (конец хода, тайл, герой, чужой бой, звонок в лобби) -26; сокровище -27.
 export const SFX_GAIN = {
   warWin: 0.434, revoltWin: 0.45, warLoss: 0.485, revoltLoss: 0.271, gameEnd: 0.136,
-  turnEnd: 0.46, monument: 0.22, tile: 0.557, leader: 0.621, catastrophe: 0.328,
+  turnEnd: 0.46, monument: 0.22, tile: 3.4, leader: 1.29, catastrophe: 0.328,
 };
 // длительность слышимой части по тому же замеру: пока файл не загружен, по ней идет очередь звуков
-const SFX_SEC = { warWin: 2.2, revoltWin: 2.4, warLoss: 2.25, revoltLoss: 3.2, gameEnd: 3.7, turnEnd: 0.35, monument: 2.2, tile: 0.2, leader: 0.3, catastrophe: 3.2 };
+const SFX_SEC = { warWin: 2.2, revoltWin: 2.4, warLoss: 2.25, revoltLoss: 3.2, gameEnd: 3.7, turnEnd: 0.35, monument: 2.2, tile: 0.3, leader: 0.8, catastrophe: 3.2 };
 const sfx = new Map(); // адрес файла -> { buf, from, to } или обещание загрузки
 
 /** Файлы звука name: один или несколько вариантов. */

@@ -1,7 +1,7 @@
 // Сигналы «ваш ход»: когда звучит щелчок и звон, что пишется в заголовке вкладки.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { snapOf, soundsFor, titleFor, newEntries, eventSounds, SFX, SFX_GAIN, VOL, volume, nextVolume, setVolume, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds, sfxFiles, makePicker, previewSound, play, VOLUME_SAMPLE } from '../public/js/signals.js';
 
 const view = (turn, cur, legal = null, extra = {}) => ({ code: 'AAAAAA', game: { turn, cur, legal, over: false, stopped: false, ...extra } });
@@ -174,9 +174,13 @@ test('победа в восстании и монумент: по три сво
   assert.deepEqual(sfxFiles('nope'), []);
   const all = Object.keys(SFX).flatMap(sfxFiles);
   for (const old of ['/sfx/revolt-win.mp3', '/sfx/monument.wav', '/sfx/war-loss.mp3']) assert.ok(!all.includes(old), old);
-  // 15.11 чужих файлов не осталось: только свои куски с номером, и все они есть на диске
-  for (const old of ['war-win.mp3', 'revolt-loss.mp3', 'game-end.mp3', 'turn-end.mp3', 'tile.mp3', 'leader.mp3', 'catastrophe.wav']) assert.ok(!all.includes(`/sfx/${old}`), old);
-  for (const f of all) assert.match(f, /^\/sfx\/[a-z-]+-\d\.mp3$/, f);
+  // 15.11 остальные чужие файлы заменены своими кусками с номером. Тайл и герой Денис вечером 15.11
+  // вернул прежние: «эти не подходят»
+  for (const old of ['war-win.mp3', 'revolt-loss.mp3', 'game-end.mp3', 'turn-end.mp3', 'catastrophe.wav']) assert.ok(!all.includes(`/sfx/${old}`), old);
+  const kept = ['/sfx/tile.mp3', '/sfx/leader.mp3'];
+  assert.deepEqual([...sfxFiles('tile'), ...sfxFiles('leader')], kept);
+  for (const f of all.filter((x) => !kept.includes(x))) assert.match(f, /^\/sfx\/[a-z-]+-\d\.mp3$/, f);
+  for (const f of all) assert.ok(existsSync(new URL(`../public${f}`, import.meta.url)), `нет файла ${f}`);
 });
 
 test('пример громкости: звук, который слышно и в динамике ноутбука', () => {
