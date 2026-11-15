@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { TOURS, tourById, TOUR_GAME_FRAME } from '../public/js/tours-data.js';
 import { tourLobby } from '../lessons/tour.js';
+import { ANALYSIS_SHOWN } from '../public/js/util.js';
 
 test('четыре экскурсии, у каждого шага заголовок и текст, адреса i1-i4', () => {
   assert.deepEqual(TOURS.map((t) => t.id), ['i1', 'i2', 'i3', 'i4']);
@@ -13,11 +14,52 @@ test('четыре экскурсии, у каждого шага заголов
     assert.ok(t.title && t.goal && t.minutes > 0 && t.steps.length >= 5, t.id);
     for (const s of t.steps) {
       assert.ok(s.title && s.say, `${t.id}: ${s.title}`);
-      if (s.sel) assert.equal(typeof s.sel, 'string');
+      // строка или список строк: подсвечивается первый видимый (15.11)
+      if (s.sel) {
+        const list = [].concat(s.sel);
+        assert.ok(list.length && list.every((x) => typeof x === 'string' && x), `${t.id}: ${s.title}`);
+      }
     }
   }
   assert.equal(tourById('i3').screen, 'map');
   assert.equal(tourById('нет'), null);
+});
+
+test('экскурсии под интерфейс 15.11: нет старых кнопок, шапка в тесноте, разбор скрыт', () => {
+  const text = JSON.stringify(TOURS);
+  // «Метки» стали слоем «Тайлы», слоя «Монументы» нет (06.11); «Подробнее о ботах» стало «Досье бота»
+  assert.doesNotMatch(text, /«Метки»|«Монументы»: чей|Подробнее о ботах|Обычное или продвинутое поле/);
+  assert.match(text, /Большое поле/);
+  // слои и «Поле» на узком экране в «Вид ▾»: шаг подсвечивает меню, если кнопок не видно
+  const step = (id, title) => tourById(id).steps.find((s) => s.title === title);
+  assert.deepEqual(step('i2', 'Слои поля').sel, ['#gViewBtn', '#gLayers']);
+  assert.deepEqual(step('i2', 'Вид поля').sel, ['#gLook', '#gViewBtn']);
+  for (const sel of ['#gGameBtn', '#gHand .acts', '#gSideSet', '[data-fs]']) {
+    assert.ok(tourById('i2').steps.some((s) => s.sel === sel), sel);
+  }
+  assert.ok(tourById('i4').steps.some((s) => s.sel === '[data-botinfo]'), 'досье бота');
+  // разбор партии ботом скрыт (util.js ANALYSIS_SHOWN): ни шага, ни карточки на карте
+  const tourSrc = readFileSync('public/js/tour.js', 'utf8');
+  assert.equal(ANALYSIS_SHOWN, false);
+  assert.ok(!tourById('i3').steps.some((s) => s.sel === '#mapAnalysis'));
+  assert.match(tourSrc, /\.filter\(\(\[id\]\) => ANALYSIS_SHOWN \|\| id !== 'mapAnalysis'\)/);
+  // у каждого шага карты есть карточка
+  for (const s of tourById('i3').steps) {
+    const id = /^#(map\w+)$/.exec(s.sel)?.[1];
+    if (id) assert.match(tourSrc, new RegExp(`\\['${id}', `), id);
+  }
+});
+
+test('экскурсия по лобби не просит турниры: у гостя 401 зацикливал перерисовку (15.11)', () => {
+  const lobby = readFileSync('public/js/lobby.js', 'utf8');
+  assert.match(lobby, /if \(!tour && session\.get\(\)\?\.token\) mountTour\(/);
+  assert.equal((lobby.match(/mountTour\(root/g) || []).length, 1, 'другого вызова нет');
+});
+
+test('справка «Наш сайт» и урок 3 без старых кнопок', () => {
+  const rules = readFileSync('public/js/rules-text.js', 'utf8');
+  assert.doesNotMatch(rules, /Кнопка «Метки»|есть десять секунд/);
+  assert.doesNotMatch(readFileSync('lessons/3-points.js', 'utf8'), /Кнопка «Метки»/);
 });
 
 test('тексты экскурсий без длинного тире, многоточия и неразрывных пробелов', () => {

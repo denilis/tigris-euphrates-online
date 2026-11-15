@@ -282,7 +282,9 @@ export function renderLobby(root, view, { act, bar = '', bindBar, tour = false, 
     const b = root.querySelector('#lChat'); // пока шел запрос, лобби могло перерисоваться
     if (b) b.disabled = false;
   });
-  mountTour(root.querySelector('#lTour'), view, act);
+  // строка турнира только у вошедшего и не в экскурсии (15.11): у гостя запрос турниров давал 401,
+  // выход перерисовывал экскурсию, та снова просила турниры, и так без конца
+  if (!tour && session.get()?.token) mountTour(root.querySelector('#lTour'), view, act);
   // телефон: окошко вида, нажатого только что, видно еще PEEK_MS и после перерисовки
   if (peekAt && Date.now() < peekAt.until) {
     root.querySelector(peekAt.sel)?.classList.add('peeking');

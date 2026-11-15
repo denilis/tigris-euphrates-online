@@ -6,11 +6,12 @@ import { renderLobby } from './lobby.js';
 import { renderGame } from './game.js';
 import { stepView } from './lesson-core.js';
 import { tourById, TOUR_GAME_FRAME } from './tours-data.js';
-import { esc, toast } from './util.js';
+import { esc, toast, ANALYSIS_SHOWN } from './util.js';
 
 const DONE_KEY = 'tigris.tours';
 const QUIET = 'В экскурсии это только показ: на сервер ничего не уходит.';
 const QUIET_GAME = 'В экскурсии ходы не делаются. Сыграть можно в уроках «Как играть».';
+const POPUP = '.sfxmenu:not([hidden])'; // меню партии: #gTopMenu, #gSfxMenu, #gSideMenu
 
 export function toursDone() {
   try { return new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]')); } catch { return new Set(); }
@@ -27,20 +28,23 @@ async function getJSON(url) {
   return r.json();
 }
 
-// карта статистики: где что лежит; ссылки только тем, кто вошел
+// карта статистики: где что лежит; ссылки только тем, кто вошел. Разбор партии ботом скрыт
+// (Денис 08.11), его карточка вернется вместе с ним
 const MAP = [
+  ['mapProfile', 'Мой профиль', 'Ваше имя справа в шапке сайта.', 'Фото, рейтинг и место среди игроков, партии, победы и среднее место, три последние партии. Смена имени, фон сайта, выход.', '#/me'],
   ['mapEnd', 'Итог партии', 'Открывается сам в конце партии.', 'Места, очки по цветам и сокровища, статистика партии, «Картинка итога» для чата, кнопка «Еще партию».', null],
   ['mapReplay', 'Просмотр по ходам', 'Итог партии, кнопка «Просмотр по ходам». Или «Мои столы», кнопка «Просмотр».', 'Кадры партии с паузой и скоростью, метки боев и монументов, рост очков, бои и монументы на каждый момент.', null],
   ['mapAnalysis', 'Разбор партии ботом', 'Итог партии, кнопка «Разобрать партию».', 'Точность каждого человека, до пяти главных ошибок с лучшим ходом, переход на этот момент партии.', null],
   ['mapTours', 'Турниры', 'Меню «Статистика», вкладка «Турниры».', 'Таблица и пьедестал турнира, графики очков и мест, бои, откуда очки, рекорды и награды, все партии.', '#/stats'],
   ['mapMe', 'Личная статистика', 'Меню «Статистика», вкладка «Личная».', 'Ваши партии с людьми, с ботами и на BGA: победы и места, откуда очки, вы и соперники, динамика по месяцам, рекорды.', '#/stats/me'],
-  ['mapTables', 'Мои столы', 'Меню «Мои столы».', 'Все ваши столы: идущие, ждущие игроков и законченные. У законченных «Просмотр».', '#/tables'],
-];
+  ['mapTables', 'Мои столы', 'Меню «Мои столы».', 'Все ваши столы с фильтрами: идущие, ждущие игроков и законченные. У законченных «Просмотр».', '#/tables'],
+  ['mapNews', 'Что нового', 'Главная страница, под разделами.', 'Блок «Что нового за неделю»: что поменялось на сайте за последние дни.', '#/'],
+].filter(([id]) => ANALYSIS_SHOWN || id !== 'mapAnalysis');
 
 function mapHTML(bar, loggedIn) {
   return `<div class="page">${bar}<main class="pcard tourmap">
     <h1>Где статистика</h1>
-    <p class="muted">Карта разделов со статистикой и разбором партий. Экскурсия пройдет по ней по порядку.</p>
+    <p class="muted">Карта разделов со статистикой, профилем и итогами партий. Экскурсия пройдет по ней по порядку.</p>
     <div class="tmap">${MAP.map(([id, t, where, what, href]) => `<section class="tmcard" id="${id}">
       <h3>${t}</h3><p class="tmwhere"><b>Где:</b> ${where}</p><p>${what}</p>
       ${href && loggedIn ? `<a class="btn sm" href="${href}">Открыть</a>` : ''}
@@ -102,12 +106,20 @@ function mountLayer(tour, finish) {
   const last = tour.steps.length - 1;
   let k = 0;
 
+  // sel строкой или списком (15.11): первый элемент, который виден. На узком экране кнопки шапки
+  // уходят в меню «Вид ▾», и шаг подсвечивает меню вместо спрятанной кнопки. Открытое меню партии
+  // («Вид», «Партия», звуки, «Настроить») лежит внутри #app ниже затемнения: пока оно открыто,
+  // окно подсветки стоит на нем, иначе «Попробуйте» в меню не нажать
   const target = () => {
+    const pop = document.querySelector(POPUP);
+    if (pop?.getBoundingClientRect().width) return pop;
     const sel = tour.steps[k].sel;
-    const t = sel ? document.querySelector(sel) : null;
-    if (!t) return null;
-    const r = t.getBoundingClientRect();
-    return r.width || r.height ? t : null;
+    for (const one of sel ? [].concat(sel) : []) {
+      const t = document.querySelector(one);
+      const r = t?.getBoundingClientRect();
+      if (r && (r.width || r.height)) return t;
+    }
+    return null;
   };
   const place = () => {
     if (!el.isConnected) return;
@@ -158,7 +170,12 @@ function mountLayer(tour, finish) {
   };
   let frame = 0;
   const later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(place); };
+  // меню открылось или закрылось (атрибут hidden): окно подсветки переезжает. Свое окно подсветки
+  // (.tspot hidden) не в счет, иначе place будил бы сам себя каждый кадр
+  const menus = new MutationObserver((rs) => { if (rs.some((r) => !el.contains(r.target))) later(); });
+  menus.observe(document.body, { subtree: true, attributeFilter: ['hidden'] });
   const close = () => {
+    menus.disconnect();
     removeEventListener('hashchange', close);
     removeEventListener('resize', later);
     removeEventListener('scroll', later, true);
