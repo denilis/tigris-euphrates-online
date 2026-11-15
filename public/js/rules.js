@@ -12,6 +12,11 @@ function block(b, query) {
   if (b.h) return `<h3>${marked(b.h, query)}</h3>`;
   if (b.fig) return figureHTML(b.fig, marked(b.cap, query));
   if (b.links) return `<p class="rlinks">${b.links.map((l) => `<a href="${esc(l.href)}" target="_blank" rel="noopener">${marked(l.text, query)}</a>`).join('')}</p>`;
+  // снимок экрана сайта (справка «Наш сайт», 15.11): размер в тексте, чтобы страница не прыгала при загрузке
+  if (b.shot) {
+    const src = `/img/help/${b.shot}.webp`;
+    return `<figure class="rshot"><a href="${src}" target="_blank" rel="noopener" title="Открыть крупно"><img src="${src}" alt="${esc(b.alt)}" width="${b.size[0]}" height="${b.size[1]}" loading="lazy" decoding="async"></a><figcaption>${marked(b.cap, query)}</figcaption></figure>`;
+  }
   const tag = b.ordered ? 'ol' : 'ul';
   return `<${tag}>${b.list.map((x) => `<li>${marked(x, query)}</li>`).join('')}</${tag}>`;
 }

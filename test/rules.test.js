@@ -1,6 +1,7 @@
 // Раздел «Правила»: текст и поиск по нему.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import { RULES } from '../public/js/rules-text.js';
 import { searchRules, stem, markParts, blockText } from '../public/js/rules-search.js';
 
@@ -34,6 +35,29 @@ test('текст без следов машинной верстки', () => {
     assert.ok(!text.includes(ch), name);
   }
   assert.ok(!/ {2}/.test(text), 'двойной пробел');
+});
+
+/** Размер WebP из заголовка VP8X (так пишет Chrome): ширина и высота минус один, по 3 байта. */
+function webpSize(file) {
+  const b = readFileSync(file);
+  assert.equal(b.toString('ascii', 12, 16), 'VP8X', String(file));
+  return [1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)];
+}
+
+test('снимки экрана в «Наш сайт» (15.11): файлы на месте, размер как у файла, подпись с номерами', () => {
+  const shots = RULES.flatMap((s) => s.body).filter((b) => b.shot);
+  assert.deepEqual(shots.map((b) => b.shot), ['lobby', 'header', 'party', 'panel', 'end'], 'снимает tools/help-shots.mjs');
+  for (const b of shots) {
+    const file = new URL(`../public/img/help/${b.shot}.webp`, import.meta.url);
+    assert.ok(existsSync(file), b.shot);
+    assert.deepEqual(webpSize(file), b.size, `${b.shot}: размер в тексте, иначе страница прыгает при загрузке`);
+    assert.ok(b.cap.length > 20 && b.alt.length > 10, b.shot);
+    assert.match(b.cap, /①/, 'номера в подписи совпадают с рамками на снимке');
+  }
+  assert.ok(titles('сдаться').includes('Наш сайт'));
+  const page = readFileSync(new URL('../public/js/rules.js', import.meta.url), 'utf8');
+  assert.match(page, /if \(b\.shot\) \{/);
+  assert.match(page, /width="\$\{b\.size\[0\]\}" height="\$\{b\.size\[1\]\}" loading="lazy"/);
 });
 
 test('основа слова отбрасывает окончание, короткие слова не калечит', () => {

@@ -175,6 +175,11 @@ label.oitem{cursor:pointer}
 .rfig:not(.two) svg{flex:none}
 .rarrow{flex:none;width:0;height:0;border:9px solid transparent;border-left:14px solid var(--gold)}
 .rfig figcaption{font-size:13px;line-height:1.45;color:var(--muted);margin-top:7px}
+/* снимки экрана в «Наш сайт» (15.11): по ширине текста, рамка в цвет золота, нажатие открывает крупно */
+.rshot{margin:10px 0 16px}
+.rshot a{display:block;border-radius:8px}
+.rshot img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid rgba(201,163,92,.45);background:#14100b}
+.rshot figcaption{font-size:13px;line-height:1.45;color:var(--muted);margin-top:7px}
 @media (max-width:760px){
   .rpanels{flex-direction:column;align-items:stretch}
   .rfig svg{flex:none;max-width:none}
