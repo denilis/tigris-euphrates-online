@@ -270,8 +270,11 @@ test('страница профиля: в подписях нет длинног
 test('страница профиля: кнопка фона поверх сайта остается только гостю, выход и фон есть в настройках', () => {
   const main = readFileSync(new URL('../public/js/main.js', import.meta.url), 'utf8');
   assert.ok(main.includes("bgToggle.hidden = !on || !SCENE.video || Boolean(session.get()?.token)"));
-  assert.match(main, /renderProfile\(app, topbar\(''\), bindTopbar, \{ refresh: route, logout, bg: \{ still: \(\) => still, set: setStill, hasVideo: /);
+  // 15.11 роликов нет: строку «Фон сайта» профиль рисует, только когда main.js передает bg
+  assert.match(main, /renderProfile\(app, topbar\(''\), bindTopbar, \{ refresh: route, logout, bg: ANY_VIDEO \? \{ still: \(\) => still, set: setStill, hasVideo: [^}]+\} : null \}\);/);
   const page = readFileSync(new URL('../public/js/profile.js', import.meta.url), 'utf8');
+  assert.match(page, /\$\{opts\.bg \? `<div class="pfline">\s*<span class="flab">Фон сайта<\/span>/);
+  assert.match(page, /if \(opts\.bg\) \{\s*const paintBg/);
   for (const id of ['id="nName"', 'id="bgSeg"', 'id="pOut"', 'id="pNums"', "api('POST', 'me/name'", "api('GET', 'me/profile')"]) assert.ok(page.includes(id), id);
 });
 

@@ -1,7 +1,8 @@
 // Стартовая картинка по очереди (04.11): летняя и зимняя сцены сменяют друг друга при загрузке.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SCENES, pickScene } from '../public/js/scene.js';
+import { existsSync } from 'node:fs';
+import { SCENES, ANY_VIDEO, pickScene } from '../public/js/scene.js';
 
 const memory = () => {
   const m = new Map();
@@ -19,8 +20,10 @@ test('без памяти браузера (приватный режим) сц�
   assert.equal(pickScene(null), 'winter');
 });
 
-test('у летней сцены ролик, у зимней только картинка', () => {
-  assert.equal(SCENES.summer.video, '/media/zastavka.mp4');
+test('15.11 обе сцены фото без ролика (Денис: «Фото без видео»), выбора «видео / картинка» нет', () => {
+  assert.equal(SCENES.summer.video, null, 'прежний летний ролик сделан с картины и к фото не подходит');
   assert.equal(SCENES.winter.video, null);
+  assert.equal(ANY_VIDEO, false);
   assert.match(SCENES.winter.img, /winter/);
+  for (const s of Object.values(SCENES)) assert.ok(existsSync(new URL(`../public${s.img}`, import.meta.url)), s.img);
 });

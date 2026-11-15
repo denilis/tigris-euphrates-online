@@ -17,7 +17,7 @@ import { renderProfile, renderPlayer } from './profile.js';
 import { startPresence, stopPresence, setBusy, takeAccepted, mountOnline } from './presence.js';
 import { freeSeat, deleteQuestion, backFrom, NAV_PAGES, pageBack } from './online.js';
 import { deletionsHTML, bindRestore } from './deletions.js';
-import { SCENES, pickScene } from './scene.js';
+import { SCENES, ANY_VIDEO, pickScene } from './scene.js';
 import { esc, toast, copy, faceBg, botFace } from './util.js';
 import { USER_SORTS, defaultDir, pickUsers, inviters, dayText, dateText, userActions } from './admin-list.js';
 import { openBotGuide } from './bots-info.js';
@@ -708,7 +708,8 @@ function route() {
   if (pm) return pm[1] === s.user?.id ? go('#/me') : renderPlayer(app, topbar('admin'), bindTopbar, pm[1]);
   const sp = h.match(/^stats\/p\/([a-z0-9-]{1,40})$/);
   if (sp) return renderPersonal(app, topbar('stats'), bindTopbar, sp[1]);
-  if (h === 'me') return renderProfile(app, topbar(''), bindTopbar, { refresh: route, logout, bg: { still: () => still, set: setStill, hasVideo: Boolean(SCENE.video) } });
+  // без роликов (15.11 обе сцены фото) строки «Фон сайта» в профиле нет: bg не передается
+  if (h === 'me') return renderProfile(app, topbar(''), bindTopbar, { refresh: route, logout, bg: ANY_VIDEO ? { still: () => still, set: setStill, hasVideo: Boolean(SCENE.video) } : null });
   return renderStart();
 }
 

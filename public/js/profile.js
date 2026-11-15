@@ -13,7 +13,7 @@ const NAME_MAX = 30;
 /**
  * Нарисовать страницу в app. top и bindTop — шапка сайта и привязка ее кнопок.
  * opts: refresh() перерисовать страницу (после смены имени шапка показывает новое), logout() выйти,
- * bg: { still(), set(v) } — фон сайта: неподвижная картинка вместо ролика.
+ * bg: { still(), set(v), hasVideo } — фон сайта: неподвижная картинка вместо ролика; null, когда роликов нет.
  */
 export function renderProfile(app, top, bindTop, opts = {}) {
   const user = () => session.get()?.user || {};
@@ -44,11 +44,11 @@ export function renderProfile(app, top, bindTop, opts = {}) {
     </form>
     <p class="muted small" id="nHint">От 2 до ${NAME_MAX} знаков. Имя видят другие игроки. В новых столах, реваншах и статистике оно появится сразу. За столом, где вы уже сидите, и в сыгранных партиях останется прежнее.</p>
     <p class="err" id="nErr" role="alert"></p>
-    <div class="pfline">
+    ${opts.bg ? `<div class="pfline">
       <span class="flab">Фон сайта</span>
       <span class="seg" id="bgSeg"><button type="button" data-still="0">видео</button><button type="button" data-still="1">картинка</button></span>
     </div>
-    <p class="muted small">Видео на фоне главной и других страниц можно заменить неподвижной картинкой. Выбор запоминается на этом устройстве.${opts.bg?.hasVideo === false ? ' У нынешней сцены ролика нет: выбор сработает, когда сцена сменится.' : ''}</p>
+    <p class="muted small">Видео на фоне главной и других страниц можно заменить неподвижной картинкой. Выбор запоминается на этом устройстве.${opts.bg.hasVideo === false ? ' У нынешней сцены ролика нет: выбор сработает, когда сцена сменится.' : ''}</p>` : ''}
     <div class="pfline"><span class="flab">Уведомления</span><span class="pfpush" id="pushBox"></span></div>
     <p class="muted small">Сообщим, когда за столом ваш ход, а сайт закрыт или свернут. На iPhone работает, если сайт добавлен на главный экран.</p>
     <p class="err" id="pushErr" role="status"></p>
@@ -123,18 +123,20 @@ export function renderProfile(app, top, bindTop, opts = {}) {
     if ($('nSave')) $('nSave').disabled = false;
   });
 
-  // фон сайта
-  const paintBg = () => {
-    const still = Boolean(opts.bg?.still());
-    $('bgSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b.dataset.still === '1') === still));
-  };
-  $('bgSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b || !opts.bg) return;
-    opts.bg.set(b.dataset.still === '1');
+  // фон сайта: строка есть, только когда у сцен есть ролик (opts.bg)
+  if (opts.bg) {
+    const paintBg = () => {
+      const still = Boolean(opts.bg.still());
+      $('bgSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b.dataset.still === '1') === still));
+    };
+    $('bgSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      opts.bg.set(b.dataset.still === '1');
+      paintBg();
+    });
     paintBg();
-  });
-  paintBg();
+  }
 
   $('pOut').addEventListener('click', () => opts.logout?.());
 }
