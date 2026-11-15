@@ -441,6 +441,13 @@ html{touch-action:manipulation}
 .trail-from{fill:#ffe08a;stroke:#1b1309;stroke-width:1.5}
 .trail-no circle{fill:#ffd23f;stroke:#1b1309;stroke-width:1.6}
 .trail-no text{fill:#1b1309;font-size:14px;font-weight:800}
+/* подсказка бота (15.11): пунктир и темный номер, след соперника сплошной с желтым номером */
+.hint-mark,.hint-no{pointer-events:none}
+.hint-mark{fill:none;stroke:#ffd23f;stroke-width:3;stroke-dasharray:8 5}
+.hint-no circle{fill:#1b1309;stroke:#ffd23f;stroke-width:2}
+.hint-no text{fill:#ffd23f;font-size:14px;font-weight:800}
+.hintline{margin:6px 0 0}
+.hinterr{margin:6px 0 0;color:var(--gold)}
 /* тайл или лидер соперника проявляется, опускается на клетку и чуть пружинит (04.11) */
 .arrive{transform-box:fill-box;transform-origin:center;animation:arrive 1.5s cubic-bezier(.2,.75,.3,1) both}
 @keyframes trailPulse{50%{stroke-width:7;stroke-opacity:.6}}

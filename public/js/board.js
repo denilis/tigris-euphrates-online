@@ -129,6 +129,17 @@ export function arrowPath(from, to) {
  * Перерисовка не сбивает анимацию: отрицательная задержка равна возрасту отметки.
  * numbers — слой «Ходы»: без него рамка и стрелка остаются, номера нет.
  */
+/** Подсказка бота (15.11): золотая пунктирная рамка и номер хода в темном круге, чтобы не путать со следом соперника. */
+export function hintSVG(marks) {
+  let s = '';
+  for (const m of marks) {
+    const x = cx(m.pos), y = cy(m.pos);
+    s += `<rect class="hint-mark" x="${x + 3}" y="${y + 3}" width="${C - 6}" height="${C - 6}" rx="7"/>`;
+    s += `<g class="hint-no" transform="translate(${x + 13},${y + 13})"><circle r="11"/><text y="5" text-anchor="middle">${m.n}</text></g>`;
+  }
+  return s;
+}
+
 export function trailSVG(marks, numbers = true) {
   let s = '';
   for (const m of marks) {
@@ -431,6 +442,7 @@ export function renderBoard(svg, g, heroOf, opts = {}, look = 'relief') {
   }
   if (up >= 0) s += uniteMark(cx(up), cy(up));
   s += trailSVG(opts.trail || [], L.moves);
+  s += hintSVG(opts.hint || []);
   s += fxSVG(fx);
 
   // в выборе места для здания и сокровища цели мигают ярче (просьба Дениса 04.11), у сокровища

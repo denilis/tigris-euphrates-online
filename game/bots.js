@@ -104,3 +104,39 @@ async function think(t, seatId, { botRng, timeCap, decide }) {
     return { move: safeMove(stateFromJSON(t.game.state)), text: 'безопасный ход', ms: 0, fallback: true };
   }
 }
+
+// --- подсказка «Что бы сделал бот?» (15.11, дорожная карта п.11, схема одобрена Денисом)
+
+/** Бот подсказки: самый сильный, без нарочных ошибок, считает вышедшие тайлы (это знает и человек). */
+export const HINT_BOT = { style: 'universal', strength: 100, errors: 0, counting: 'exact', risk: 50 };
+
+/** Подсказка без зачета: за столом меньше двух людей (ни турнира, ни рейтинга) или снята галочка зачета. */
+export const hintAllowed = (t) => t.seats.filter((s) => s.kind === 'human').length < 2 || t.options?.tournament === 'none';
+
+/**
+ * Что сыграл бы бот на месте seatId: список из одного хода, а в начале хода из двух (второй
+ * считается на копии стола после первого, стол не меняется). Бот видит только то, что видит
+ * игрок (botView). Не его решение: null.
+ */
+export async function botHint(t, seatId, { botRng = Math.random, rng = cryptoRng(), timeCap = 2500, decide = decideAsync, now = Date.now() } = {}) {
+  const s = stateFromJSON(t.game.state);
+  if (t.status !== 'playing' || t.game.order[s.toMove] !== seatId) return null;
+  const settings = { ...HINT_BOT, timeMs: timeCap };
+  const ask = async (table) => (await decide(botView(table, seatId, HINT_BOT.counting, botRng), settings, botRng, (f) => setImmediate(f))).move;
+  const first = await ask(t);
+  const moves = [first];
+  // второе действие только когда после первого снова обычное действие того же игрока: сброс тянет
+  // новые тайлы из мешка, а бой или монумент сначала требуют решений
+  if (s.phase === 'action' && s.actionNo === 1 && first.type !== 'discard') {
+    try {
+      const copy = structuredClone(t);
+      submitSeat(copy, seatId, first, { rng, now });
+      const s2 = stateFromJSON(copy.game.state);
+      if (s2.phase === 'action' && s2.actionNo === 2 && copy.game.order[s2.toMove] === seatId) moves.push(await ask(copy));
+    } catch {
+      // первый ход на копии не прошел: подскажем один
+    }
+  }
+  return moves;
+}
+

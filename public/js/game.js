@@ -18,6 +18,7 @@ import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newE
 import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import { mountZoom } from './board-zoom.js';
+import { hintText, hintMarks } from './hint-core.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
   unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName, roundOf, turnLabel,
@@ -388,6 +389,7 @@ function boardOpts() {
   const { g, me, myP, legal, decides } = D();
   ui.fx = ageFx(ui.fx || [], [], Date.now());
   const o = { flash: ui.flash, layers: layersOf(), unite: unitePos(g), trail: ui.trail, lesson: ctl.lesson?.cells, monument: monOf(current), building: bldOf(current), fx: ui.fx };
+  if (ui.hint?.moves && ui.hint.key === hintKey(g)) o.hint = hintMarks(ui.hint.moves); // подсказка бота (15.11)
   const k = g.ctx?.war || g.ctx?.revolt;
   if (k && (g.phase === 'warSupport' || g.phase === 'revoltSupport')) {
     o.conflict = { k, kind: g.ctx.war ? 'war' : 'revolt', myExtra: ui.chosen.size, me };
@@ -963,6 +965,14 @@ function drawNow(d) {
     body = '<p>Выберите цвет, в который получите очко.</p>';
     buttons = legal.map((m, i) => `<button class="btn colorbtn" data-idx="${i}" style="border-color:${RING[m.color]}"><i style="background:${HEX[m.color]}"></i>${COLNAME[m.color]}</button>`).join('');
   }
+  // «Что бы сделал бот?» (15.11, схема одобрена Денисом): в свой ход вне зачета, ходы рамками на поле
+  if (view.hintOk && decides && !ctl.lesson && !ctl.tour && !g.over && !g.stopped && !g.paused && !warActive(view) && g.phase !== 'confirm') {
+    const h = ui.hint?.key === hintKey(g) ? ui.hint : null;
+    if (h?.loading) body += '<p class="wait">Бот думает<i></i><i></i><i></i></p>';
+    else if (h?.error) body += `<p class="hinterr">${esc(h.error)}</p>`;
+    else if (h?.moves) body += `<p class="hintline"><b>Бот сыграл бы:</b> ${h.moves.map((m, k) => `${h.moves.length > 1 ? `${'①②'[k] || k + 1} ` : ''}${esc(hintText(m))}`).join(', ')}.</p>`;
+    else buttons += btn('hint', 'Что бы сделал бот?', 'sm');
+  }
   // прошлый ход другого игрока списком (08.11): те же номера, что на поле
   const calm = !decides || (g.phase === 'action' && !ui.sel && !ui.discard && !ui.confirmPass);
   if (view.me != null && !ctl.lesson && !g.over && !g.stopped && calm && ui.trail.length) {
@@ -984,6 +994,7 @@ function onNow(a) {
   else if (a === 'withdraw') move(legal.findIndex((m) => m.type === 'withdraw' && m.color === ui.sel.color));
   else if (a === 'confirm') move(legal.findIndex((m) => m.type === 'confirm'));
   else if (a === 'undo') undoMove();
+  else if (a === 'hint') return askHint();
   else if (a === 'discardYes') {
     const counts = [0, 0, 0, 0];
     for (const k of ui.discard) counts[handColors(view)[k]]++;
@@ -993,6 +1004,23 @@ function onNow(a) {
 }
 
 const handColors = (view) => view.game.hand.flatMap((n, c) => Array(n).fill(c));
+
+/** Подсказка относится к этому решению: после любого хода гаснет сама. */
+const hintKey = (g) => `${g.turn}:${g.phase}:${g.actionNo}:${g.logTotal ?? g.log?.length ?? 0}`;
+
+/** Спросить сервер, что сыграл бы бот (15.11). Пока думает, в «Сейчас» «Бот думает». */
+async function askHint() {
+  const view = current, key = hintKey(view.game);
+  ui.hint = { key, loading: true };
+  draw();
+  try {
+    const r = await api('POST', `tables/${view.code}/hint`);
+    if (ui.hint?.key === key) ui.hint = { key, moves: r.moves };
+  } catch (e) {
+    if (ui.hint?.key === key) ui.hint = { key, error: e.message || 'Подсказка не пришла, попробуйте еще раз.' };
+  }
+  if (current === view || hintKey(current.game) === key) draw();
+}
 
 /**
  * Кнопки хода внизу (Денис 06.11 и 08.11; раньше были на панели «Сейчас»):

@@ -9,7 +9,7 @@ import {
 } from '../game/table.js';
 import { viewFor } from '../game/view.js';
 import { replayFrames } from '../game/frames.js';
-import { botStep } from '../game/bots.js';
+import { botStep, botHint, hintAllowed } from '../game/bots.js';
 import { companyKey } from '../game/order.js';
 import { SEASON, SEASON_PLAYERS, tourGames, publicTour, playerGames, tourOf, tourNames } from './stats.js';
 import { whoIs, namesOf, nameKey, normName } from './people.js';
@@ -683,6 +683,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function viewOf(t, u, opts) {
     const v = { ...viewFor(t, u.id, opts), chat: chatTable(t, u) };
     if (t.step?.userId === u.id) v.step = t.step.n;
+    if (t.status === 'playing' && hintAllowed(t)) v.hintOk = true; // подсказка бота вне зачета (15.11)
     if (t.status === 'lobby' && (await novicesAt(t))) v.novice = true;
     return v;
   }
@@ -1190,6 +1191,23 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * Ходы ботов, пока решает бот и есть время, и завершение хода, у которого вышло окно
    * подтверждения; замок не даёт двум вызовам думать за одного бота.
    */
+  /**
+   * «Что бы сделал бот?» (15.11): только игроку за этим столом, в его ход, вне турнира и рейтинга.
+   * Не чаще 30 раз за 10 минут: на Hobby у Vercel 4 часа процессора в месяц, подсказка до 5 с.
+   */
+  async function hint(code, u) {
+    const { doc } = await load(code);
+    if (doc.status !== 'playing' || doc.game.paused) http(409, 'not-now', 'Подсказка бывает только во время партии');
+    const seat = doc.seats.find((s) => s.kind === 'human' && s.userId === u.id);
+    if (!seat) http(403, 'not-seated', 'Подсказка только игроку за этим столом');
+    if (!hintAllowed(doc)) http(403, 'rated', 'Партия идет в зачет: подсказки выключены');
+    if (doc.game.toMove !== seat.id) http(409, 'not-your-move', 'Подсказка бывает только в ваш ход');
+    if ((await store.hit(`hint:${u.id}`, 10 * 60_000)) > 30) http(429, 'too-many', 'Подсказок слишком много подряд, подождите несколько минут');
+    const moves = await botHint(doc, seat.id, { now: now(), timeCap: Math.min(2500, botOptions.timeCap ?? 2500), ...(botOptions.hintDecide ? { decide: botOptions.hintDecide } : {}) });
+    if (!moves) http(409, 'not-your-move', 'Подсказка бывает только в ваш ход');
+    return { moves };
+  }
+
   async function botTick(code) {
     await load(code);
     const token = randomBytes(12).toString('hex');
@@ -1293,6 +1311,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
       }
       if (!op && method === 'POST') return act(code, u, body);
       if (op === 'bot-tick' && method === 'POST') return botTick(code);
+      if (op === 'hint' && method === 'POST' && rest.length === 2) return hint(code, u);
       if (op === 'replay' && method === 'GET') return replayOf(code);
       if (op === 'delete' && method === 'POST' && rest.length === 2) return deleteTable(code, u);
       if (op === 'restore' && method === 'POST' && rest.length === 2) return restoreTable(code, u);
