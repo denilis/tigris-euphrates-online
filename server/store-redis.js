@@ -232,6 +232,13 @@ export function redisStore({ exec, prefix = '' }) {
     async dropJoin(hash) {
       await exec(['DEL', k(`join:${hash}`)]);
     },
+    /** Код подключения чата турнира (15.11): забор одной командой GETDEL, код срабатывает один раз. */
+    async putChatCode(code, value, ttlMs) {
+      await exec(['SET', k(`tgcode:${code}`), JSON.stringify(value), 'PX', String(ttlMs)]);
+    },
+    async takeChatCode(code) {
+      return parse(await exec(['GETDEL', k(`tgcode:${code}`)]));
+    },
     /** Список ссылок игрока хешем: поле на ссылку, одновременные записи друг друга не затирают. */
     async addJoinItem(userId, item) {
       await exec(['HSET', k(`joins:${userId}`), item.id, JSON.stringify(item)]);

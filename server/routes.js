@@ -19,7 +19,7 @@ import { STEPS, locked, publicPath, surveyPath, stepPath, pathView } from './nov
 import { keepFinishedOnce, detailsOnce } from './keep.js';
 import { cleanPrefs } from './prefs.js';
 import { parseAvatar } from './avatar.js';
-import { telegram, inChat, invited, called, photoButton, CHAT_PEOPLE } from './telegram.js';
+import { telegram, invited, called, photoButton, CHAT_PEOPLE, inChat, SEASON_CHAT, hookEvent, HOOK_TEXT, CHAT_CODE, CHAT_CODE_MS } from './telegram.js';
 import { parsePhoto, photoCaption } from './photo.js';
 import { cleanAnalysis, humanSeats } from './analysis.js';
 import { ENGINE } from '../game/vendor/version.js';
@@ -90,6 +90,9 @@ const publicUser = (u) => ({
 });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : 0);
 const letterId = () => randomBytes(6).toString('hex');
+// код подключения чата турнира: 8 знаков без похожих 0/O и 1/I (его переписывают в Telegram руками)
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const chatCode = () => [...randomBytes(8)].map((b) => CODE_ABC[b % CODE_ABC.length]).join('');
 
 /**
  * botPace — пауза «бот думает» в мс { min, max } (Денис 06.11: первое действие бота до 5 с,
@@ -548,10 +551,18 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   const inTour = (t, u, who) => t.players.some((p) => (p.id || who.idOf(p.name)) === u.id);
   const myTours = async (u, who) => (await allTours()).filter((t) => u.admin || inTour(t, u, who));
 
+  // чат турнира для «Статистики» (15.11): у сезона чат из настроек сайта, его не меняют; у остальных
+  // название группы, если подключена. chatReady: бот работает, подключать можно
+  const tourChatInfo = (t) => (t.builtin ? (tg.on ? { title: SEASON_CHAT, fixed: true } : null) : t.chat ? { title: t.chat.title } : null);
+
   async function toursInfo(u) {
     const users = (await store.listUsers()).filter((x) => !x.revoked);
     const who = whoIs(users);
-    return { tours: (await myTours(u, who)).map((t) => publicTour(t, who)), people: users.map((x) => ({ id: x.id, name: x.name })) };
+    return {
+      tours: (await myTours(u, who)).map((t) => ({ ...publicTour(t, who), chat: tourChatInfo(t) })),
+      people: users.map((x) => ({ id: x.id, name: x.name })),
+      chatReady: botOn(),
+    };
   }
 
   async function newTour(u, body) {
@@ -572,7 +583,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (fresh.length) http(400, 'bad-players', `В турниры берут после трех партий пути новичка. Пока его не прошли: ${fresh.join(', ')}`);
     const t = { id: 't-' + randomBytes(5).toString('hex'), name, ownerId: u.id, players: users.map((x) => ({ id: x.id, name: x.name })), createdAt: now() };
     await store.putTour(t);
-    return publicTour(t);
+    return { ...publicTour(t), chat: null };
   }
 
   /**
@@ -671,19 +682,69 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   // --- чат Telegram
 
-  /** Стол для чата: и тот, кто действует, и все люди за столом из его компании. */
-  // человек из компании узнается по любому своему имени, нынешнему или прежнему (13.11); место за столом
-  // по ключу компании (seat.person), у столов до смены имен по имени
-  const chatTable = (t, u) => namesOf(u).some(inChat) && t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.person || s.name));
+  /**
+   * Чат стола (15.11, «Чат турнира»): чат сезона (чат компании из настроек сайта) или чат турнира.
+   * Сезон как раньше: и тот, кто действует, и все люди за столом из компании, по нынешнему или
+   * прежнему имени (13.11), выбор турнира в лобби не важен. Чат другого турнира только у стола,
+   * который идет в этот турнир: турнир выбран в лобби, или выбрано «авто» и число мест людей как
+   * у турнира, а турнир первый подходящий по составу (как tourOf); «вне турниров» его не зовет.
+   * Иначе турнир, заведенный без согласия других, уводил бы их приглашения в свою группу (ревью 15.11).
+   * Участник турнира узнается по учетной записи. { to: номер чата (у сезона undefined), name, tour } или null.
+   */
+  async function chatOf(t, u) {
+    // справочник людей нужен только чатам турниров: сезон узнает своих по именам
+    let who = null;
+    const whoNow = async () => {
+      const seated = t.seats.filter((s) => s.kind === 'human' && s.userId).map((s) => s.userId);
+      let known = await knownPeople();
+      // только что заведенного на другом экземпляре в списке еще нет: перечитываем (как novicesAt)
+      if ([u.id, ...seated].some((id) => !known.has(id))) known = await knownPeople(true);
+      return whoIs([...known.values()]);
+    };
+    const pick = t.options?.tournament ?? 'auto';
+    const humans = t.seats.filter((s) => s.kind === 'human').length;
+    let first = null, autoFound = false;
+    for (const tour of await allTours()) {
+      if (tour.builtin) {
+        // сезон, как и раньше: человек компании по любому своему имени, место по ключу компании
+        // (seat.person), у столов до смены имен по имени. Чат компании не задан: сезону писать некуда
+        if (!tg.on || !namesOf(u).some(inChat) || !t.seats.every((s) => s.kind !== 'human' || !s.userId || inChat(s.person || s.name))) continue;
+        const ch = { to: undefined, name: SEASON_CHAT, tour: null };
+        if (pick === tour.id) return ch;
+        first ??= ch;
+        continue;
+      }
+      // «авто» берет первый турнир по составу, даже без чата: чат следующего турнира тут ни при чем
+      if (pick !== tour.id && (pick !== 'auto' || autoFound)) continue;
+      who ??= await whoNow();
+      const ids = new Set(tour.players.map((p) => p.id || who.idOf(p.name)).filter(Boolean));
+      if (!ids.has(u.id) || !t.seats.every((s) => s.kind !== 'human' || !s.userId || ids.has(who.owner(s)))) continue;
+      if (pick === 'auto') {
+        if (humans !== tour.players.length) continue;
+        autoFound = true;
+      }
+      if (!tour.chat) continue;
+      const ch = { to: tour.chat.id, name: tour.chat.title, tour: tour.name };
+      if (pick === tour.id) return ch;
+      first ??= ch;
+    }
+    return first;
+  }
+  // отправить можно: в чат сезона, если он задан в настройках; в чат турнира, если бот работает
+  const botOn = () => Boolean(tg.ready ?? tg.on);
+  const chatUp = (ch) => Boolean(ch.to === undefined ? tg.on : botOn());
 
   /**
-   * Вид стола для игрока. chat: стол компании и смотрит свой. Браузер раньше решал это сам по именам
-   * за столом и после смены имени прятал кнопки чата, хотя сервер их разрешал (ревью 13.11).
+   * Вид стола для игрока. chat: у стола есть чат (сезона или турнира), chatName: как его назвать.
+   * Браузер раньше решал это сам по именам за столом и после смены имени прятал кнопки чата, хотя
+   * сервер их разрешал (ревью 13.11). Кнопки чата только в лобби и в итоге: в партии не считаем.
    */
   // step: номер шага пути новичка, только хозяину такой партии (окно итога зовет дальше по пути).
   // novice: в лобби сидит игрок, не прошедший путь: партия пойдет вне турниров (13.11).
   async function viewOf(t, u, opts) {
-    const v = { ...viewFor(t, u.id, opts), chat: chatTable(t, u) };
+    const ch = t.status === 'lobby' || t.status === 'over' ? await chatOf(t, u) : null;
+    const v = { ...viewFor(t, u.id, opts), chat: Boolean(ch) };
+    if (ch) v.chatName = ch.name;
     if (t.step?.userId === u.id) v.step = t.step.n;
     if (t.status === 'playing' && hintAllowed(t)) v.hintOk = true; // подсказка бота вне зачета (15.11)
     if (t.status === 'lobby' && (await novicesAt(t))) v.novice = true;
@@ -702,11 +763,13 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   /** Позвать чат за стол. Замок снимается при сбое, чтобы отправку можно было сразу повторить. */
   async function callChat(u, body) {
-    if (!tg.on) http(503, 'no-chat', 'Чат Telegram не подключён');
+    if (!botOn()) http(503, 'no-chat', 'Чат Telegram не подключён');
     const { doc: t } = await load(String(body.code));
     if (t.status !== 'lobby') http(409, 'not-lobby', 'Партия уже началась');
     if (t.hostUserId !== u.id && !seatOfUser(t, u.id)) http(403, 'not-seated', 'Позвать может только тот, кто за столом');
-    if (!chatTable(t, u)) http(403, 'not-chat', 'Чат только для Дениса, Андрея и Влада');
+    const ch = await chatOf(t, u);
+    if (!ch) http(403, 'not-chat', 'У этого стола нет чата: подключите чат турнира в «Статистике»');
+    if (!chatUp(ch)) http(503, 'no-chat', 'Чат Telegram не подключён');
     const humans = t.seats.filter((s) => s.kind === 'human');
     const free = humans.filter((s) => !s.userId).length;
     const others = humans.filter((s) => s.userId && s.userId !== u.id).map((s) => s.name);
@@ -715,7 +778,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     const key = `tg:${t.code}`, token = letterId();
     if (!(await store.lock(key, token, CHAT_CALL_MS))) http(429, 'too-many', 'Уже позвали, подождите пару минут');
     // стол полон: мест не предлагаем, а зовем тех, кого за него посадили
-    if (!(await tg.say(free ? invited(u.name, t, free) : called(u.name, t, others)))) {
+    if (!(await tg.say(free ? invited(u.name, t, free, ch.tour) : called(u.name, t, others, ch.tour), ch.to))) {
       await store.unlock(key, token);
       http(502, 'chat-failed', 'Не удалось отправить в чат, попробуйте позже');
     }
@@ -724,14 +787,96 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   /** Сообщение о посаженных за стол: null, если чат здесь ни при чем. Люди уже сидят, поэтому сбой только возвращает false. */
   async function chatPeople(u, t, names) {
-    if (!chatTable(t, u)) return null;
-    if (!tg.on) return false;
     try {
+      const ch = await chatOf(t, u);
+      if (!ch) return null;
+      if (!chatUp(ch)) return false;
       if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) return false;
-      return await tg.say(called(u.name, t, names));
+      return await tg.say(called(u.name, t, names, ch.tour), ch.to);
     } catch (e) {
       console.error('telegram', e.message);
       return false;
+    }
+  }
+
+  // --- чат турнира (15.11): подключение кодом из «Статистики», команды бота через webhook
+
+  /** Турнир, чат которого меняет u: свой (участник) или любой у администратора; сезон не меняется. */
+  async function chatTour(u, id) {
+    const tour = (await store.listTours()).find((x) => x.id === id);
+    if (!tour) http(404, 'no-tour', 'Нет такого турнира');
+    if (!u.admin && !inTour(tour, u, whoIs([...(await knownPeople()).values()]))) http(403, 'not-member', 'Чат меняют участники турнира');
+    return tour;
+  }
+
+  /** Код подключения чата: подключить может любой участник турнира (решение Дениса 15.11). */
+  async function tourChatCode(u, id) {
+    if (id === SEASON.id) http(400, 'season', 'Чат сезона задан в настройках сайта');
+    const tour = await chatTour(u, id);
+    if (!botOn()) http(503, 'no-chat', 'Чат Telegram подключается только на основном сайте');
+    if ((await store.hit(`tg:code:${u.id}`, CHAT_CALL_MS * 3)) > 10) http(429, 'too-many', 'Слишком часто, подождите несколько минут');
+    const bot = await tg.me();
+    if (!bot) http(502, 'chat-failed', 'Telegram не ответил, попробуйте позже');
+    // адрес для команд сообщаем Telegram при каждом подключении: подключают редко, а если адрес
+    // где-то потерялся, следующее подключение его вернет
+    if (!(await tg.setHook())) http(502, 'chat-failed', 'Telegram не ответил, попробуйте позже');
+    const code = chatCode();
+    await store.putChatCode(code, { tourId: tour.id, by: u.id }, CHAT_CODE_MS);
+    return { code, bot, link: `https://t.me/${bot}?startgroup=${code}`, command: `/connect@${bot} ${code}`, minutes: CHAT_CODE_MS / 60000 };
+  }
+
+  async function tourChatOff(u, id) {
+    if (id === SEASON.id) http(400, 'season', 'Чат сезона задан в настройках сайта');
+    const tour = await chatTour(u, id);
+    const was = tour.chat;
+    if (!was) return { ok: true };
+    delete tour.chat;
+    await store.putTour(tour);
+    await tg.say({ text: HOOK_TEXT.off(tour.name) }, was.id); // сбой не мешает: чат уже отключен
+    return { ok: true };
+  }
+
+  /** Команды бота от Telegram. Отвечаем 200 всегда: на ошибку Telegram повторял бы то же сообщение. */
+  async function tgHook(update, secret) {
+    if (!tg.ready || !tg.fromTelegram?.(secret)) http(403, 'forbidden', 'Нет доступа');
+    try {
+      const ev = hookEvent(update);
+      if (ev) await onHook(ev);
+    } catch (e) {
+      console.error('tg hook', e.message);
+    }
+    return { ok: true };
+  }
+
+  async function onHook(ev) {
+    if (ev.kind === 'help') return tg.say({ text: HOOK_TEXT.help }, ev.chat.id);
+    if (ev.kind === 'connect') {
+      // в личке код не тратим: подключается только группа
+      if (ev.chat.type !== 'group' && ev.chat.type !== 'supergroup') return tg.say({ text: HOOK_TEXT.private }, ev.chat.id);
+      const rec = CHAT_CODE.test(ev.code) ? await store.takeChatCode(ev.code) : null;
+      const tour = rec && (await store.listTours()).find((x) => x.id === rec.tourId);
+      if (!tour) return tg.say({ text: HOOK_TEXT.bad }, ev.chat.id);
+      tour.chat = { id: ev.chat.id, title: ev.chat.title || 'чат турнира', at: now(), by: rec.by };
+      try {
+        await store.putTour(tour);
+      } catch (e) {
+        // код уже забран: возвращаем его, иначе он пропал бы молча, а Telegram не повторит (ревью 15.11)
+        await store.putChatCode(ev.code, rec, CHAT_CODE_MS).catch(() => {});
+        await tg.say({ text: HOOK_TEXT.retry }, ev.chat.id);
+        throw e;
+      }
+      return tg.say({ text: HOOK_TEXT.done(tour.name) }, ev.chat.id);
+    }
+    // бота убрали из группы или группа сменила номер: правим все турниры с этим чатом
+    for (const tour of await store.listTours()) {
+      if (ev.kind === 'left' && tour.chat?.id === ev.chat) {
+        delete tour.chat;
+        await store.putTour(tour);
+      }
+      if (ev.kind === 'migrate' && tour.chat?.id === ev.from) {
+        tour.chat.id = ev.to;
+        await store.putTour(tour);
+      }
     }
   }
 
@@ -986,16 +1131,18 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
    * за столом, не чаще раза в минуту на стол. Картинку рисует браузер, здесь проверка и отправка.
    */
   async function sendPhoto(code, u, body) {
-    if (!tg.on) http(503, 'no-chat', 'Чат Telegram подключен только на основном сайте');
+    if (!botOn()) http(503, 'no-chat', 'Чат Telegram подключен только на основном сайте');
     const { doc: t } = await load(code);
     if (t.status !== 'over' || !t.game?.result) http(409, 'not-over', 'Картинка итога есть только у законченной партии');
-    if (!chatTable(t, u)) http(403, 'not-chat', 'Чат только для Дениса, Андрея и Влада');
+    const ch = await chatOf(t, u);
+    if (!ch) http(403, 'not-chat', 'У этого стола нет чата: подключите чат турнира в «Статистике»');
+    if (!chatUp(ch)) http(503, 'no-chat', 'Чат Telegram подключен только на основном сайте');
     const pic = parsePhoto(body.image);
     if (!pic) http(400, 'bad-image', 'Картинка не подошла: нужен jpeg или png до 2,5 МБ');
     if ((await store.hit(`tg:call:${u.id}`, CHAT_CALL_MS)) > CHAT_CALLS) http(429, 'too-many', 'Слишком часто, подождите пару минут');
     const key = `tg:photo:${t.code}`, token = letterId();
     if (!(await store.lock(key, token, PHOTO_MS))) http(429, 'too-many', 'Картинку этой партии только что отправили, подождите минуту');
-    if (!(await tg.photo({ ...pic, caption: photoCaption(t, u.name), ...photoButton(t) }))) {
+    if (!(await tg.photo({ ...pic, caption: photoCaption(t, u.name), ...photoButton(t) }, ch.to))) {
       await store.unlock(key, token);
       http(502, 'chat-failed', 'Не удалось отправить в чат, попробуйте позже');
     }
@@ -1303,7 +1450,7 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
 
   // --- маршрутизация
 
-  async function dispatch({ method, path, query, body, token, ip }) {
+  async function dispatch({ method, path, query, body, token, ip, hook }) {
     const seg = String(path || '').split('/').filter(Boolean);
     const [head, ...rest] = seg;
     if (method === 'GET' && head === 'ping') {
@@ -1329,6 +1476,8 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     // ссылка-приглашение: без входа, токен ссылки телом запроса, не в адресе (журналы его не видят)
     if (method === 'POST' && head === 'join' && rest.length === 1 && rest[0] === 'info') return joinInfo(body, ip);
     if (method === 'POST' && head === 'join' && !rest.length) return joinRegister(body, ip);
+    // команды бота Telegram (чат турнира, 15.11): без входа, подлинность по секрету в заголовке
+    if (method === 'POST' && head === 'tg' && rest[0] === 'hook' && rest.length === 1) return tgHook(body, hook);
     const u = await auth(token);
     if (method === 'GET' && head === 'me' && !rest.length) return publicUser(u);
     if (method === 'POST' && head === 'me' && rest[0] === 'avatar') return setAvatar(u, body);
@@ -1345,7 +1494,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     if (method === 'GET' && head === 'stats' && rest[0] === 'player' && rest.length === 1) return playerStats(u, query);
     if (method === 'GET' && head === 'stats') return stats(u, query);
     if (method === 'GET' && head === 'tournaments') return toursInfo(u);
-    if (method === 'POST' && head === 'tournaments') return newTour(u, body);
+    if (method === 'POST' && head === 'tournaments' && rest[1] === 'chat' && rest.length === 2) return tourChatCode(u, rest[0]);
+    if (method === 'POST' && head === 'tournaments' && rest[1] === 'chat' && rest[2] === 'off' && rest.length === 3) return tourChatOff(u, rest[0]);
+    if (method === 'POST' && head === 'tournaments' && !rest.length) return newTour(u, body);
     if (head === 'me' && rest[0] === 'push' && method === 'POST') return pushRoute(u, rest.slice(1), body);
     if (method === 'GET' && head === 'prefs') return (await store.getPrefs(u.id)) || {};
     if (method === 'POST' && head === 'prefs') {
@@ -1387,9 +1538,9 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
     http(404, 'no-route', 'Нет такого адреса');
   }
 
-  async function call({ method = 'GET', path = '', query = {}, body = {}, token = null, ip = '' } = {}) {
+  async function call({ method = 'GET', path = '', query = {}, body = {}, token = null, ip = '', hook = null } = {}) {
     try {
-      return { status: 200, body: await dispatch({ method, path, query: query || {}, body: body || {}, token, ip }) };
+      return { status: 200, body: await dispatch({ method, path, query: query || {}, body: body || {}, token, ip, hook }) };
     } catch (e) {
       if (e instanceof HttpError || e instanceof TableError) return { status: e.status, body: { error: e.code, message: e.message } };
       console.error(e);

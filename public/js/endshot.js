@@ -154,7 +154,10 @@ const blobUrl = (blob) => new Promise((ok) => {
   fr.readAsDataURL(blob);
 });
 
-/** Окно «Картинка итога» поверх экрана итога: картинка, «Скачать», «Отправить в чат ДВАК». */
+// как назвать чат на кнопке: чат сезона «ДВАК», чат турнира в кавычках (15.11)
+const chatTitle = (view) => (!view.chatName || view.chatName === 'ДВАК' ? 'ДВАК' : `«${view.chatName}»`);
+
+/** Окно «Картинка итога» поверх экрана итога: картинка, «Скачать», «Отправить в чат ДВАК» или турнира. */
 export async function openPicture(view, svg) {
   const myName = view.seats.find((s) => s.id === view.me)?.name || '';
   const chat = canSendPhoto(view, myName);
@@ -165,7 +168,7 @@ export async function openPicture(view, svg) {
     <div class="shotimg"><p class="muted">Рисую картинку...</p></div>
     <div class="mfoot">
       <a class="btn" id="shDown" aria-disabled="true">Скачать картинку</a>
-      ${chat ? '<button class="btn primary" id="shSend" disabled>Отправить в чат ДВАК</button>' : ''}
+      ${chat ? `<button class="btn primary" id="shSend" disabled>Отправить в чат ${esc(chatTitle(view))}</button>` : ''}
       <button class="btn" id="shClose">Закрыть</button>
     </div>
     <p class="mnote" id="shNote">${chat ? 'В чат картинка уйдет только по нажатию кнопки.' : ''}</p>
@@ -201,7 +204,7 @@ export async function openPicture(view, svg) {
     note.textContent = 'Отправляю...';
     try {
       await api('POST', `tables/${view.code}/photo`, { image: await blobUrl(blob) });
-      note.textContent = 'Отправлено в чат ДВАК.';
+      note.textContent = `Отправлено в чат ${chatTitle(view)}.`;
       send.textContent = 'Отправлено';
     } catch (e) {
       note.textContent = e.message;

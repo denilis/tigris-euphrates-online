@@ -4,6 +4,7 @@ import { api, session } from './api.js';
 import { esc, toast, faceBg, HEX, COLNAME, SCORE_ORDER } from './util.js';
 import { totals, cumulative, inRange, ranking, slotCount, dashboard, winShare, SOURCES } from './season.js';
 import { statsTabs } from './personal.js';
+import { mountTourChat } from './tour-chat.js';
 
 const COLS = ['#e0b65a', '#c98a56', '#8fb0c7', '#9dbb86']; // в порядке участников турнира
 const SEG = ['#e0b65a', '#b8903e', '#7a6a4f', '#4a3b2b', '#352a1e']; // первое, ничья, второе, третье, четвертое
@@ -234,6 +235,7 @@ export async function renderStats(app, top, bindTop) {
       <label>Турнир <select id="sTour"></select></label>
       <button class="btn sm" id="sNew" type="button">Новый турнир</button>
     </div>
+    <div class="tchat" id="sChat" hidden></div>
     <form class="tform" id="tForm" hidden>
       <label>Название <input id="tName" maxlength="40" placeholder="Например, Кубок осени" autocomplete="off"></label>
       <div class="tpeople" id="tPeople" aria-label="Участники"></div>
@@ -342,9 +344,12 @@ export async function renderStats(app, top, bindTop) {
   };
   const start = info.tours.some((t) => t.id === lastTour()) ? lastTour() : info.tours[0]?.id;
   fill(start);
+  // чат турнира (15.11): строка под выбором турнира, своя у каждого турнира
+  const paintChat = mountTourChat($('sChat'), info, () => pick.value);
   pick.addEventListener('change', () => {
     rememberTour(pick.value);
     show(pick.value);
+    paintChat();
   });
   from.addEventListener('input', update);
   to.addEventListener('input', update);
@@ -373,6 +378,7 @@ export async function renderStats(app, top, bindTop) {
       app.querySelector('.stats .dates').hidden = false;
       app.querySelector('.stats .charts').hidden = false;
       fill(t.id);
+      paintChat();
       rememberTour(t.id);
       $('tForm').hidden = true;
       $('tName').value = '';

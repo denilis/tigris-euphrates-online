@@ -196,6 +196,16 @@ mark{background:var(--gold);color:#1b1713;border-radius:2px;padding:0 1px}
 .tourbar select,.opts select{flex:1;min-width:0;max-width:100%;background:#14110e;border:1px solid var(--line);border-radius:8px;padding:0 8px;min-height:36px}
 .tform{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
 .tform[hidden]{display:none}
+/* чат турнира (15.11): строка под выбором турнира, при подключении шаги с кодом */
+.tchat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.tchat[hidden]{display:none}
+.tcline{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.tcline .flab{color:var(--muted);font-size:13px}
+.tcname{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.tcline .btn{margin-left:auto}
+.tcsteps{margin:10px 0 8px;padding-left:20px;display:flex;flex-direction:column;gap:10px;line-height:1.5}
+.tcsteps .btn{margin-left:8px;vertical-align:middle}
+.tcsteps code{background:#14110e;border:1px solid var(--line);border-radius:6px;padding:2px 6px;overflow-wrap:anywhere}
 .tform>label{display:flex;gap:8px;align-items:center;color:var(--muted)}
 .tform input:not([type=checkbox]){flex:1;min-width:0;background:#14110e;border:1px solid var(--line);border-radius:8px;padding:0 10px;min-height:38px}
 .tpeople{display:flex;flex-wrap:wrap;gap:6px 16px}

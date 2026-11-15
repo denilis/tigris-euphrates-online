@@ -84,7 +84,9 @@ export function makeHandler(env, store) {
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     // Vercel сам ставит адрес клиента в эти заголовки; первый в списке — клиент
     const ip = ipKey(String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim());
-    const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token, ip });
+    // секрет, с которым Telegram присылает команды бота (чат турнира, 15.11)
+    const hook = req.headers['x-telegram-bot-api-secret-token'] || null;
+    const r = await app.call({ method: req.method, path: route, query: Object.fromEntries(url.searchParams), body, token, ip, hook });
     if (r.body?.file) {
       // <img> не шлет токен, поэтому фото открывается без входа, по случайному номеру.
       // Номер меняется с каждым новым фото, так что картинка может лежать в браузере вечно

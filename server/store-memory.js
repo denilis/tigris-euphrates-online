@@ -169,6 +169,15 @@ export function memoryStore() {
     async dropJoin(hash) {
       kv.delete(`join:${hash}`);
     },
+    /** Код подключения чата турнира (15.11): живет ttlMs, забрать можно один раз. */
+    async putChatCode(code, value, ttlMs) {
+      set(`tgcode:${code}`, JSON.stringify(value), ttlMs);
+    },
+    async takeChatCode(code) {
+      const v = alive(`tgcode:${code}`);
+      kv.delete(`tgcode:${code}`);
+      return v ? JSON.parse(v) : null;
+    },
     /** Ссылки игрока для списка в «Кодах игроков»: по полю на ссылку, записи друг друга не затирают. */
     async addJoinItem(userId, item) {
       const m = lists.get(`joins:${userId}`) || new Map();
