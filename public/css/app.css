@@ -407,6 +407,16 @@ html{touch-action:manipulation}
 @media (prefers-reduced-motion:reduce){.hand .nudge,.hint.late .latehint,.app.myturn-start .boardwrap{animation:none}}
 .boardwrap{grid-area:board;min-height:0;min-width:0;padding:10px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#2a2016 0%,#16120e 75%)}
 #board{width:100%;height:100%;display:block}
+/* увеличение поля (15.11): кнопки только на сенсорных экранах и в узких окнах; щипок двумя пальцами
+   ловит board-zoom.js, браузер поле не масштабирует (touch-action), прокрутка страницы одним пальцем остается */
+.boardwrap{position:relative}
+#board{touch-action:pan-x pan-y}
+.zoomctl{display:none;position:absolute;right:12px;bottom:12px;gap:6px;z-index:3}
+@media (pointer:coarse),(max-width:900px){.zoomctl{display:flex}}
+.zbtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--gold2);background:rgba(28,23,18,.72);color:var(--gold);display:grid;place-items:center;padding:0;cursor:pointer}
+.zbtn:disabled{opacity:.35;cursor:default}
+.zoomctl.on .zbtn{background:rgba(28,23,18,.88)}
+.app.locked .zoomctl{pointer-events:auto}
 .cell-hit{fill:transparent}
 .cell-hit.on{cursor:pointer}
 .cell-hit.on:hover{fill:rgba(255,236,190,.18)}

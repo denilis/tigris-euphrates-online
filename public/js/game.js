@@ -17,6 +17,7 @@ import { LAYERS, ALL_ON, cleanLayers } from './layers.js';
 import { snapOf, soundsFor, titleFor, play, soundOn, setSound, unlockAudio, newEntries, eventSounds, volume, nextVolume, setVolume, previewVolume, VOL, SOUND_LIST, soundEnabled, setSoundEnabled, setAllSounds, previewSound } from './signals.js';
 import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
+import { mountZoom } from './board-zoom.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
   unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName, roundOf, turnLabel,
@@ -113,6 +114,8 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
   if (!root.querySelector('#game')) {
     root.innerHTML = SKELETON;
     initPanels(root);
+    // увеличение поля двумя пальцами и кнопками «−» «+» (15.11, телефон и планшет)
+    root._zoom = mountZoom(root.querySelector('#board'), root.querySelector('.boardwrap'));
     root.querySelector('#board').addEventListener('click', (e) => {
       const r = e.target.closest('.cell-hit');
       if (r) onCell(+r.dataset.i);
@@ -547,6 +550,7 @@ function draw() {
   const look = lookOf(view);
   root.querySelector('#gLook').textContent = look === 'relief' ? 'Поле: рельеф' : 'Поле: клетки';
   renderBoard(root.querySelector('#board'), g, d.heroOf, boardOpts(), look);
+  root._zoom?.(); // увеличенный вид поверх полного viewBox поля
   drawPlayers(d);
   drawStock(d);
   showStock(d);
