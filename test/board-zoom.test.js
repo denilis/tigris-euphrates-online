@@ -42,7 +42,7 @@ test('щипок: точка поля под серединой пальцев �
 test('подключено к экрану партии, один палец не перехвачен', () => {
   const game = readFileSync('public/js/game.js', 'utf8'), zoom = readFileSync('public/js/board-zoom.js', 'utf8');
   assert.match(game, /root\._zoom = mountZoom\(root\.querySelector\('#board'\), root\.querySelector\('\.boardwrap'\)\)/);
-  assert.match(game, /renderBoard\([^\n]*\);\n {2}root\._zoom\?\.\(\);/);
+  assert.match(game, /renderBoard\([^\r\n]*\);\r?\n {2}root\._zoom\?\.\(\);/);
   assert.match(zoom, /if \(e\.touches\.length !== 2 \|\| !readBase\(\)\) return;/, 'одно касание идет дальше без preventDefault');
   assert.match(readFileSync('public/css/app.css', 'utf8'), /@media \(pointer:coarse\),\(max-width:900px\)\{\.zoomctl\{display:flex\}\}/);
 });
