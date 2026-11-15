@@ -100,10 +100,8 @@ test('звуки хода (Денис 08.11): тайл, герой, монуме
 test('у каждого звука свое усиление, частые тише событий (Денис 08.11: «слишком громкие»)', () => {
   assert.deepEqual(Object.keys(SFX_GAIN).sort(), Object.keys(SFX).sort());
   for (const [name, g] of Object.entries(SFX_GAIN)) assert.ok(g > 0.05 && g < 4, `${name}: ${g}`);
-  // замер tools/sfx-loudness.browser.js 08.11: самое громкое место прежнего проигрыша в битве было на 7 дБ
-  // выше победы; 14.11 у поражения в битве и победы в восстании свои файлы, их усиления тоже по замеру
-  assert.ok(SFX_GAIN.warLoss < SFX_GAIN.warWin && SFX_GAIN.revoltLoss < SFX_GAIN.revoltWin);
-  assert.ok(SFX_GAIN.turnEnd < 0.2, 'конец хода звучит каждый ход: тихо');
+  // усиления по замеру tools/sfx-loudness.browser.js: у каждого файла свое, сравнивать их между собой
+  // нельзя (15.11 все чужие файлы заменены своими, прежние «проигрыш тише победы» больше не верны)
 });
 
 /** Память браузера на время теста. */
@@ -172,10 +170,13 @@ test('победа в восстании и монумент: по три сво
   assert.deepEqual(sfxFiles('revoltWin'), ['/sfx/revolt-win-1.mp3', '/sfx/revolt-win-2.mp3', '/sfx/revolt-win-3.mp3']);
   assert.deepEqual(sfxFiles('monument'), ['/sfx/monument-1.mp3', '/sfx/monument-2.mp3', '/sfx/monument-3.mp3']);
   assert.deepEqual(sfxFiles('warLoss'), ['/sfx/war-loss-1.mp3'], 'поражение в битве: один свой файл');
-  assert.deepEqual(sfxFiles('warWin'), ['/sfx/war-win.mp3'], 'у прочих звуков по-прежнему один файл');
+  assert.deepEqual(sfxFiles('warWin'), ['/sfx/war-win-1.mp3'], 'у прочих звуков один свой файл');
   assert.deepEqual(sfxFiles('nope'), []);
   const all = Object.keys(SFX).flatMap(sfxFiles);
   for (const old of ['/sfx/revolt-win.mp3', '/sfx/monument.wav', '/sfx/war-loss.mp3']) assert.ok(!all.includes(old), old);
+  // 15.11 чужих файлов не осталось: только свои куски с номером, и все они есть на диске
+  for (const old of ['war-win.mp3', 'revolt-loss.mp3', 'game-end.mp3', 'turn-end.mp3', 'tile.mp3', 'leader.mp3', 'catastrophe.wav']) assert.ok(!all.includes(`/sfx/${old}`), old);
+  for (const f of all) assert.match(f, /^\/sfx\/[a-z-]+-\d\.mp3$/, f);
 });
 
 test('пример громкости: звук, который слышно и в динамике ноутбука', () => {
