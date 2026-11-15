@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "tigris-dev", "runtimeExecutable": "node", "runtimeArgs": ["dev/server.js", "3017"], "port": 3017 }
+  ]
+}
