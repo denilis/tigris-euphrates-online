@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { TOURS, tourById, TOUR_GAME_FRAME } from '../public/js/tours-data.js';
+import { TOURS, tourById, TOUR_GAME_FRAME, shownSteps } from '../public/js/tours-data.js';
 import { tourLobby } from '../lessons/tour.js';
 import { ANALYSIS_SHOWN } from '../public/js/util.js';
 
@@ -54,6 +54,17 @@ test('экскурсия по лобби не просит турниры: у г
   const lobby = readFileSync('public/js/lobby.js', 'utf8');
   assert.match(lobby, /if \(!tour && session\.get\(\)\?\.token\) mountTour\(/);
   assert.equal((lobby.match(/mountTour\(root/g) || []).length, 1, 'другого вызова нет');
+});
+
+test('на телефоне шаги без элемента на экране пропускаются, шаг с keep остается', () => {
+  const phoneHides = new Set(['#gBadges', '#gSide .sidefoot']);
+  const i2 = shownSteps(tourById('i2'), (sel) => [].concat(sel).some((x) => !phoneHides.has(x)));
+  assert.equal(i2.steps.length, tourById('i2').steps.length - 2);
+  assert.ok(!i2.steps.some((s) => s.title === 'Правила стола' || s.title === 'Раскладка экрана'));
+  assert.ok(i2.steps.some((s) => !s.sel), 'шаги без подсветки остаются');
+  const guest = shownSteps(tourById('i3'), (sel) => sel !== '.bar a[href="#/stats"]');
+  assert.equal(guest.steps[0].title, 'Статистика в меню', 'гостю шаг про меню нужен как карточка');
+  assert.match(readFileSync('public/js/tour.js', 'utf8'), /mountLayer\(shownSteps\(tour, visible\)/);
 });
 
 test('справка «Наш сайт» и урок 3 без старых кнопок', () => {

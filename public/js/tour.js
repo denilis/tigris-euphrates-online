@@ -5,7 +5,7 @@
 import { renderLobby } from './lobby.js';
 import { renderGame } from './game.js';
 import { stepView } from './lesson-core.js';
-import { tourById, TOUR_GAME_FRAME } from './tours-data.js';
+import { tourById, TOUR_GAME_FRAME, shownSteps } from './tours-data.js';
 import { esc, toast, ANALYSIS_SHOWN } from './util.js';
 
 const DONE_KEY = 'tigris.tours';
@@ -90,8 +90,13 @@ export async function openTour(app, id, { go, bar, bindTop, loggedIn = false }) 
     if (location.hash === hash) app.innerHTML = '<div class="page"><main class="pcard"><h1>Экскурсия не загрузилась</h1><p>Проверьте связь и обновите страницу.</p><a class="btn" href="#/learn">К обучению</a></main></div>';
     return;
   }
-  layer = mountLayer(tour, () => { markDone(tour.id); go('#/learn'); });
+  layer = mountLayer(shownSteps(tour, visible), () => { markDone(tour.id); go('#/learn'); });
 }
+
+const visible = (sel) => [].concat(sel).some((one) => {
+  const r = document.querySelector(one)?.getBoundingClientRect();
+  return Boolean(r && (r.width || r.height));
+});
 
 /** Затемнение и карточка шага. finish: последний шаг пройден. */
 function mountLayer(tour, finish) {
