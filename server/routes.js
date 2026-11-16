@@ -744,6 +744,14 @@ export function createApp({ store, env = {}, now = () => Date.now(), botOptions 
   async function viewOf(t, u, opts) {
     const ch = t.status === 'lobby' || t.status === 'over' ? await chatOf(t, u) : null;
     const v = { ...viewFor(t, u.id, opts), chat: Boolean(ch) };
+    // фото людей берем из профиля, а не с места (Денис 16.11): место помнит фото с посадки, и после
+    // замены фото за начатым столом браузер показывал прежнее из кэша (адрес фото хранится год).
+    // Список людей в кэше экземпляра до минуты, на другом экземпляре новое фото появится за это время
+    const known = await knownPeople();
+    for (const s of v.seats) {
+      const x = s.uid ? known.get(s.uid) : null;
+      if (x) s.avatar = x.avatar || null;
+    }
     if (ch) v.chatName = ch.name;
     if (t.step?.userId === u.id) v.step = t.step.n;
     if (t.status === 'playing' && hintAllowed(t)) v.hintOk = true; // подсказка бота вне зачета (15.11)

@@ -17,7 +17,7 @@ const WEBP = `data:image/webp;base64,${b64([...Buffer.from('RIFF'), 9, 9, 9, 9, 
 function setup(store = memoryStore()) {
   let clock = 1_800_000_000_000;
   const app = createApp({ store, env: ENV, now: () => clock++ });
-  const req = (method, path, { body, token } = {}) => app.call({ method, path, body, token });
+  const req = (method, path, { body, token, query } = {}) => app.call({ method, path, body, token, query });
   return { req, store };
 }
 
@@ -94,6 +94,36 @@ test('фото видно за столом, в списке на сайте и 
   const app = await s.req('GET', 'stats', { token: P.denis.token });
   assert.equal(app.status, 200);
   assert.ok(cup.id);
+});
+
+test('за начатым столом видно нынешнее фото из профиля, а не запомненное при посадке', async () => {
+  const s = setup();
+  const P = await two(s);
+  const old = (await s.req('POST', 'me/avatar', { body: { image: JPEG }, token: P.petya.token })).body.user.avatar;
+  const { body: { code } } = await s.req('POST', 'tables', { token: P.denis.token });
+  await s.req('POST', `tables/${code}`, { body: { action: 'sit', seat: 1 }, token: P.petya.token });
+  await s.req('POST', `tables/${code}`, { body: { action: 'seatKind', seat: 2, kind: 'bot' }, token: P.denis.token });
+  await s.req('POST', `tables/${code}`, { body: { action: 'hero', seat: 0, hero: 'lion' }, token: P.denis.token });
+  await s.req('POST', `tables/${code}`, { body: { action: 'hero', seat: 1, hero: 'pot' }, token: P.petya.token });
+  await s.req('GET', `tables/${code}/poll`, { token: P.petya.token, query: { here: '1' } }); // начинают, когда все за столом
+  const go = await s.req('POST', `tables/${code}`, { body: { action: 'start' }, token: P.denis.token });
+  assert.equal(go.status, 200, JSON.stringify(go.body));
+  const before = (await s.req('GET', `tables/${code}`, { token: P.denis.token })).body;
+  assert.equal(before.status, 'playing');
+  assert.equal(before.seats[1].avatar, old);
+
+  // фото Пете ставит администратор, как Владу 16.11; место за столом хранит прежний ключ
+  const set = await s.req('POST', `admin/users/${P.petya.user.id}/avatar`, { body: { image: WEBP }, token: P.denis.token });
+  assert.equal(set.status, 200, JSON.stringify(set.body));
+  const fresh = set.body.user.avatar;
+  assert.notEqual(fresh, old);
+  const after = (await s.req('GET', `tables/${code}`, { token: P.denis.token })).body;
+  assert.equal(after.seats[1].avatar, fresh, 'стол показывает новое фото');
+  assert.equal(after.seats[0].avatar, null, 'у организатора фото нет, ничего не придумано');
+
+  await s.req('POST', 'me/avatar', { body: { image: null }, token: P.petya.token });
+  const gone = (await s.req('GET', `tables/${code}`, { token: P.petya.token })).body;
+  assert.equal(gone.seats[1].avatar, null, 'убрал фото: за столом жетон героя, а не старый адрес');
 });
 
 test('загрузка не отменяет отзыв кода, случившийся одновременно', async () => {
