@@ -29,12 +29,12 @@ test('окно: заголовок с именем игрока экраниро
   assert.match(html, /<h2>Фото игрока &lt;b&gt;Вася&lt;\/b&gt; &amp; Ко<\/h2>/);
 });
 
-test('на сервер уходит тот же квадрат 160 на 160, что и раньше', () => {
-  assert.equal(SIDE, 160);
+test('на сервер уходит квадрат 400 на 400: фото смотрят крупно (Денис 16.11)', () => {
+  assert.equal(SIDE, 400);
   const src = read('public/js/avatar-crop.js');
   assert.match(src, /c\.width = c\.height = SIDE;/);
-  assert.match(src, /const MAX_CHARS = 28000;/, 'запас до серверных 30000 знаков');
-  assert.match(read('server/avatar.js'), /const MAX_CHARS = 30000;/);
+  assert.match(src, /const MAX_CHARS = 110000;/, 'запас до серверных 120000 знаков');
+  assert.match(read('server/avatar.js'), /const MAX_CHARS = 120000;/);
 });
 
 test('подключено: в профиле у каждого игрока и у администратора в «Кодах игроков»', () => {

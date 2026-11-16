@@ -525,7 +525,14 @@ html{touch-action:manipulation}
 .pc{background:var(--card);border:1px solid transparent;border-radius:8px;padding:9px 11px;display:grid;grid-template-columns:46px 1fr auto;gap:5px 10px;align-items:center}
 .pc.active{border-color:var(--gold2)}
 .pc.deciding{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset,0 0 14px rgba(224,182,90,.25)}
-.pc .av{grid-row:span 3;align-self:start;width:46px;height:46px;border-radius:50%;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.pc .av{grid-row:span 3;align-self:start;width:46px;height:46px;border-radius:50%;background-size:cover;box-shadow:0 1px 3px rgba(0,0,0,.6);cursor:zoom-in}
+/* крупное фото игрока (16.11): квадрат со скругленными углами, на телефоне 70% ширины */
+.picker.facezoom{width:fit-content;max-width:calc(100vw - 32px)} /* auto у окна поверх страницы растягивает его на всю ширину */
+.facezoom .fzin{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:46px 18px 16px}
+.facezoom .fzpic{width:min(280px,70vw);aspect-ratio:1;border-radius:14px;background-size:cover;background-position:center;box-shadow:0 2px 12px rgba(0,0,0,.6)}
+.facezoom .lclose{position:absolute;top:8px;right:8px;min-width:34px;padding:0 10px;font-size:18px;line-height:1}
+.facezoom p{margin:0;text-align:center;max-width:min(280px,70vw)}
+.facezoom .fzname{margin-top:6px;font-size:16px;font-weight:600;color:var(--gold)}
 .pc .nm{font-weight:600;font-size:16px;display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
 .pc .nm small{font-weight:400;font-size:13px;color:var(--muted)}
 .tag{font-size:11px;border-radius:4px;padding:0 5px;background:#4a3b2b;color:var(--text);font-weight:500}

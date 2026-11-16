@@ -40,6 +40,11 @@ test('принимаем только настоящие jpeg и webp небол
     `data:image/jpeg;base64,${b64([1, 2, 3, 4])}`, 'data:image/webp;base64,AAAA', `data:image/jpeg;base64,${'A'.repeat(31000)}`,
     `${JPEG}<script>`];
   for (const x of bad) assert.equal(parseAvatar(x), null, String(x).slice(0, 40));
+  // фото 400 на 400 (16.11): до 120000 знаков проходит, больше нет
+  const big = (n) => `data:image/webp;base64,${b64([...Buffer.from('RIFF'), 9, 9, 9, 9, ...Buffer.from('WEBPVP8 '), 0, 0])}${'A'.repeat(n)}`; // 18 байт: base64 без «=» на конце
+  const head = big(0).length;
+  assert.equal(parseAvatar(big(120000 - head)).type, 'image/webp', 'ровно 120000 знаков');
+  assert.equal(parseAvatar(big(120000 - head + 4)), null, 'больше 120000');
 });
 
 for (const [name, make] of [['память', memoryStore], ['Redis', () => redisStore({ exec: fakeUpstash().exec, prefix: 't:' })]]) {

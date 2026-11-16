@@ -19,6 +19,7 @@ import { logLines, lineHTML } from './logview.js';
 import { fsButton } from './fullscreen.js';
 import { mountZoom } from './board-zoom.js';
 import { hintText, hintMarks } from './hint-core.js';
+import { openFaceZoom } from './face-zoom.js';
 import {
   HEX, RING, COLNAME, SCORE_ORDER, TILE, LEADER, LEADERACC, HERONAME, STYLES, tileImg, setTileStyle, catImg, tokenImg, faceBg, esc, plural, copy, cells,
   unitePos, toast, momentKey, treasureEnd, useBoard, treasuresOn, treasureLow, cellName, roundOf, turnLabel,
@@ -138,6 +139,21 @@ export function renderGame(root, view, { act, go, lesson = null, tour = false })
       ui.flash = +li.dataset.cell;
       draw();
       setTimeout(() => { ui.flash = null; draw(); }, 1300);
+    });
+    // крупное фото игрока по нажатию на аватар в карточке (Денис 16.11); карточки перерисовываются
+    // каждый опрос, поэтому слушаем весь список, а место ищем в нынешнем виде стола
+    const faceAt = (e) => {
+      const f = e.target.closest('[data-face]');
+      if (!f || !current) return;
+      const id = +f.dataset.face;
+      const s = current.seats.find((x) => x.id === id);
+      if (s) openFaceZoom(s, { mine: id === current.me, color: id === current.me ? 0 : 3 });
+    };
+    root.querySelector('#gPlayers').addEventListener('click', faceAt);
+    root.querySelector('#gPlayers').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target.closest('[data-face]')) e.preventDefault();
+      faceAt(e);
     });
     root.querySelector('#gCode').addEventListener('click', () => copy(location.origin + location.pathname + location.search + '#/t/' + current.code));
     setInterval(updateClocks, 250);
@@ -790,7 +806,7 @@ function drawPlayers({ view, g, me, seat }) {
       : '<span class="sc hid" title="закрытый счет: очки соперников не видны">счет скрыт</span>';
     const bot = s.kind === 'bot' ? `<span class="tag" title="${esc(STYLES[s.bot?.style] || '')}, сила ${s.bot?.strength ?? ''}">бот</span>` : '';
     return `<div class="pc${deciding ? ' deciding' : active ? ' active' : ''}" data-seat="${pl.seat}">
-      <div class="av" style="background-image:${faceBg(s, pl.seat === me ? 0 : 3)}"></div>
+      <div class="av" data-face="${pl.seat}" role="button" tabindex="0" title="Фото крупно" aria-label="${esc(`Фото крупно: ${s.name || 'Бот'}`)}" style="background-image:${faceBg(s, pl.seat === me ? 0 : 3)}"></div>
       <div class="nm">${esc(s.name || 'Бот')}${pl.seat === me ? ' <small>(вы)</small>' : ''} <small>${HERONAME[s.hero] || ''}</small> ${bot} ${tag}</div>
       <span class="tm">${pl.handCount} в руке</span>
       <div class="leaders">${group('на поле', true)}${group('в руке', false)}</div>

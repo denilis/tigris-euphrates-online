@@ -17,7 +17,10 @@ const MAX_BODY = 32 * 1024;
 // сам сервер пропускает до 2,5 МБ картинки (server/photo.js), Vercel принимает до 4,5 МБ
 const MAX_PHOTO_BODY = 3600 * 1024;
 const PHOTO_ROUTE = /^tables\/[A-Za-z0-9]{6}\/photo$/;
-export const bodyLimit = (route) => (PHOTO_ROUTE.test(route) ? MAX_PHOTO_BODY : MAX_BODY);
+// фото игрока 400 на 400 (16.11): до 120000 знаков картинки (server/avatar.js), свое и от администратора
+const MAX_AVATAR_BODY = 128 * 1024;
+const AVATAR_ROUTE = /^(me|admin\/users\/[\w-]+)\/avatar$/;
+export const bodyLimit = (route) => (PHOTO_ROUTE.test(route) ? MAX_PHOTO_BODY : AVATAR_ROUTE.test(route) ? MAX_AVATAR_BODY : MAX_BODY);
 class TooBig extends Error {}
 
 async function readBody(req, limit) {

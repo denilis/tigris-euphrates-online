@@ -106,7 +106,13 @@ test('картинка в браузере: кнопка чата только �
 test('предел тела: большая картинка проходит только на адрес картинки', async () => {
   assert.equal(bodyLimit('tables/ABC123/photo'), 3600 * 1024);
   assert.equal(bodyLimit('tables/ABC123'), 32 * 1024);
-  assert.equal(bodyLimit('me/avatar'), 32 * 1024);
+  // фото игрока 400 на 400 (16.11): до 120000 знаков картинки, свое и от администратора
+  assert.equal(bodyLimit('me/avatar'), 128 * 1024);
+  assert.equal(bodyLimit('admin/users/u-1656c403e8c9/avatar'), 128 * 1024);
+  assert.equal(bodyLimit('admin/users/u-admin/avatar'), 128 * 1024);
+  assert.equal(bodyLimit('admin/users/u-1656c403e8c9/admin'), 32 * 1024, 'остальным адресам игрока как раньше');
+  assert.equal(bodyLimit('admin/users/a/b/avatar'), 32 * 1024);
+  assert.equal(bodyLimit('me'), 32 * 1024);
   const h = makeHandler(ENV, memoryStore());
   const call = async (route, body) => {
     const req = Readable.from([Buffer.from(body)]);
