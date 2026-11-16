@@ -48,7 +48,7 @@ test('окно: вкладки всех стилей, кнопки только 
   assert.match(h, /data-pickstyle="andrey"/);
   assert.equal((h.match(/data-pickstep=/g) || []).length, STRENGTH_GUIDE.length);
   assert.doesNotMatch(guideHTML('andrey'), /data-pick/, 'гость и не хозяин только читают');
-  assert.match(guideHTML('нет такого'), /data-pickstyle|Универсальный/);
+  assert.match(guideHTML('нет такого'), /data-pickstyle|Неистовый/);
   for (const g of STRENGTH_GUIDE) {
     assert.ok(g.set.strength >= 0 && g.set.strength <= 100 && g.set.strength % 5 === 0);
     assert.ok(g.set.errors >= 0 && g.set.errors <= 30);

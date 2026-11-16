@@ -91,7 +91,7 @@ function botHero(t) {
   return BOT_HEROES.find((h) => !t.seats.some((s) => s.hero === h)) || null;
 }
 // бот называется своим стилем (просьба Дениса 30.10), люди с большой буквы, стили с маленькой
-const BOT_NAMES = { universal: 'универсальный', base: 'базовый', top: 'топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
+const BOT_NAMES = { universal: 'неистовый', base: 'базовый', top: 'топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
 
 /** Имена ботов по стилям; второй бот того же стиля за столом получает номер. */
 function nameBots(t) {

@@ -25,7 +25,7 @@ export const LEADER = ['жрец', 'фермер', 'торговец', 'царь
 export const LEADERACC = ['жреца', 'фермера', 'торговца', 'царя'];
 export const HEROES = ['lion', 'bull', 'bow', 'pot'];
 export const HERONAME = { lion: 'лев', bull: 'бык', bow: 'лук', pot: 'кувшин' };
-export const STYLES = { universal: 'Универсальный', base: 'Базовый', top: 'Топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
+export const STYLES = { universal: 'Неистовый', base: 'Базовый', top: 'Топ-мастера', denis: 'Денис', andrey: 'Андрей', vlad: 'Влад' };
 export const FACEDOWN = 4, WONDER = 5, CATASTROPHE = 6;
 
 // вид тайлов стола (Денис 04.11): plate — плитки в кирпичной рамке (лист Дениса 04.11, сначала был

@@ -257,7 +257,7 @@ for (const [kind, make] of [['память', () => memoryStore()], ['Upstash', (
       ['delete', lobby.code, 'Денис', 'lobby', true],
       ['delete', bots, 'Андрей', 'playing', true],
     ]);
-    assert.deepEqual(all[1].seats, ['Андрей', 'Бот универсальный', 'Бот универсальный 2', 'Бот универсальный 3']);
+    assert.deepEqual(all[1].seats, ['Андрей', 'Бот неистовый', 'Бот неистовый 2', 'Бот неистовый 3']);
     assert.ok(all[0].at > 0);
     assert.deepEqual((await log(P['Андрей'])).map((e) => e.code), [bots], 'игрок видит только свои удаления');
     assert.deepEqual(await log(P['Влад']), []);

@@ -15,13 +15,13 @@ test('день стола считается по Москве', () => {
   assert.equal(tableDay(Date.UTC(2026, 0, 5, 12, 0)), '05.01.2026', 'день и месяц с нулем');
 });
 
-test('бот по умолчанию называется универсальным', () => {
-  assert.equal(table().seats[3].name, 'Бот универсальный');
+test('бот по умолчанию называется неистовым', () => {
+  assert.equal(table().seats[3].name, 'Бот неистовый');
 });
 
 test('имя бота идет за выбранным стилем, другие настройки его не трогают', () => {
   const t = table();
-  const names = { universal: 'Бот универсальный', base: 'Бот базовый', top: 'Бот топ-мастера', denis: 'Бот Денис', andrey: 'Бот Андрей', vlad: 'Бот Влад' };
+  const names = { universal: 'Бот неистовый', base: 'Бот базовый', top: 'Бот топ-мастера', denis: 'Бот Денис', andrey: 'Бот Андрей', vlad: 'Бот Влад' };
   for (const style of Object.keys(STYLE_LABELS).filter((k) => k !== 'mix')) {
     setBot(t, 'a', 3, { style }, 0);
     assert.equal(t.seats[3].name, names[style], style);
@@ -33,9 +33,9 @@ test('имя бота идет за выбранным стилем, други�
 test('два бота одного стиля различаются номером, а если стиль сменили, номер уходит', () => {
   const t = table();
   setSeatKind(t, 'a', 2, 'bot', 0);
-  assert.deepEqual(t.seats.slice(2).map((s) => s.name), ['Бот универсальный', 'Бот универсальный 2']);
+  assert.deepEqual(t.seats.slice(2).map((s) => s.name), ['Бот неистовый', 'Бот неистовый 2']);
   setBot(t, 'a', 2, { style: 'vlad' }, 0);
-  assert.deepEqual(t.seats.slice(2).map((s) => s.name), ['Бот Влад', 'Бот универсальный']);
+  assert.deepEqual(t.seats.slice(2).map((s) => s.name), ['Бот Влад', 'Бот неистовый']);
   setBot(t, 'a', 3, { style: 'vlad' }, 0);
   assert.deepEqual(t.seats.slice(2).map((s) => s.name), ['Бот Влад', 'Бот Влад 2']);
   setSeatKind(t, 'a', 2, 'human', 0);
